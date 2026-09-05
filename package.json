@@ -2,7 +2,7 @@
   "name": "server",
   "version": "1.0.0",
   "description": "This document defines the architecture and technical foundation for a scalable, reliable, and maintainable e-commerce backend.",
-  "main": "index.js",
+  "main": "dist/server.js",
   "keywords": [],
   "author": "",
   "license": "ISC",
