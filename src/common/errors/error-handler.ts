@@ -3,6 +3,7 @@ import { AppError } from "./app-error.js";
 import { Prisma } from "@/generated/prisma/client.js";
 import { sendError } from "../utils/response.js";
 
+type ValidationError = NonNullable<FastifyError["validation"]>[number];
 
 export const errorHandler = (
     error: FastifyError | AppError | Prisma.PrismaClientKnownRequestError,
@@ -47,7 +48,7 @@ export const errorHandler = (
         return reply.status(400).send({
             success: false,
             message: "Validation failed",
-            errors: error.validation.map((item) => ({
+            errors: error.validation.map((item: ValidationError) => ({
                 field: item.instancePath,
                 message: item.message,
             })),
