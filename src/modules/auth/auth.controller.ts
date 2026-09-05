@@ -44,7 +44,7 @@ class AuthController {
         // Store refresh token in HTTP-only cookie
         reply.setCookie("refreshToken", result.refreshToken, refreshTokenCookieOptions,);
 
-        // Never return refresh token in response body for browser
+        // Keep the cookie for browser clients and expose the token for clients that manage tokens explicitly.
         return sendOk({
             reply,
             message: "Login successful",
@@ -52,6 +52,7 @@ class AuthController {
             data: {
                 user: result.user,
                 accessToken: result.accessToken,
+                refreshToken: result.refreshToken,
             },
         });
     }
@@ -114,6 +115,7 @@ class AuthController {
             message: "Token refreshed successfully",
             data: {
                 accessToken: result.accessToken,
+                refreshToken: result.refreshToken,
             },
         });
     }

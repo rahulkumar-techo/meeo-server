@@ -97,6 +97,14 @@ export const authSchemas = {
     },
 };
 
+export const tokenResponse = {
+    type: "object",
+    properties: {
+        accessToken: { type: "string" },
+        refreshToken: { type: "string" },
+    },
+};
+
 export const userSchemas = {
     profileBody: {
         type: "object",
