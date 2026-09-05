@@ -44,6 +44,14 @@ export const errorResponse = {
     },
 };
 
+// Development/test flows return the generated OTP until an email/SMS provider is connected.
+export const tempOtpResponse = {
+    type: "object",
+    properties: {
+        tempOtp: { type: "string", pattern: "^[0-9]{4}$", description: "Temporary verification OTP" },
+    },
+};
+
 export const authSchemas = {
     registerBody: {
         type: "object",

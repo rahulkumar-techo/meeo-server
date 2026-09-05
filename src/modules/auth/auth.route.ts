@@ -1,15 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import { authController } from "./auth.controller.js";
-import { authSchemas, errorResponse, successResponse, userSchema } from "@/common/docs/swagger.js";
+import { authSchemas, errorResponse, successResponse, tempOtpResponse, userSchema } from "@/common/docs/swagger.js";
 
 const jsonBody = (schema: object) => ({ body: schema });
 const commonErrors = { 400: errorResponse, 401: errorResponse, 422: errorResponse };
 
 const publicAuthRoutes = (app: FastifyInstance) => {
-    app.post('/register', { schema: { tags: ["Auth"], summary: "Register a user", ...jsonBody(authSchemas.registerBody), response: { 201: successResponse({ type: "object", properties: { user: userSchema } }), ...commonErrors } } }, authController.authRegister.bind(authController));
+    app.post('/register', { schema: { tags: ["Auth"], summary: "Register a user", ...jsonBody(authSchemas.registerBody), response: { 201: successResponse({ type: "object", properties: { user: userSchema, tempOtp: tempOtpResponse.properties.tempOtp } }), ...commonErrors } } }, authController.authRegister.bind(authController));
     app.post('/verify-otp', { schema: { tags: ["Auth"], summary: "Verify an email OTP", ...jsonBody(authSchemas.emailOtpBody), response: { 200: successResponse(), ...commonErrors } } }, authController.verifyOtp.bind(authController));
-    app.post('/resend-otp', { schema: { tags: ["Auth"], summary: "Resend an email OTP", ...jsonBody(authSchemas.emailBody), response: { 200: successResponse(), ...commonErrors } } }, authController.resendOtp.bind(authController));
-    app.post('/forgot-password', { schema: { tags: ["Auth"], summary: "Request a password reset", ...jsonBody(authSchemas.emailBody), response: { 200: successResponse(), ...commonErrors } } }, authController.forgotPassword.bind(authController));
+    app.post('/resend-otp', { schema: { tags: ["Auth"], summary: "Resend an email OTP", ...jsonBody(authSchemas.emailBody), response: { 200: successResponse(tempOtpResponse), ...commonErrors } } }, authController.resendOtp.bind(authController));
+    app.post('/forgot-password', { schema: { tags: ["Auth"], summary: "Request a password reset", ...jsonBody(authSchemas.emailBody), response: { 200: successResponse(tempOtpResponse), ...commonErrors } } }, authController.forgotPassword.bind(authController));
     app.post('/reset-password', { schema: { tags: ["Auth"], summary: "Reset a password", ...jsonBody(authSchemas.resetPasswordBody), response: { 200: successResponse(), ...commonErrors } } }, authController.resetPassword.bind(authController));
     app.post('/login', { schema: { tags: ["Auth"], summary: "Log in", ...jsonBody(authSchemas.loginBody), response: { 200: successResponse({ type: "object", properties: { user: userSchema, accessToken: { type: "string" } } }), ...commonErrors } } }, authController.login.bind(authController));
     app.post('/refresh', { schema: { tags: ["Auth"], summary: "Refresh an access token", security: [{ refreshCookie: [] }], response: { 200: successResponse({ type: "object", properties: { accessToken: { type: "string" } } }), 401: errorResponse } } }, authController.refresh.bind(authController));

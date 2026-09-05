@@ -13,6 +13,7 @@ import { graphqlSchema } from "./graphql/schema.js";
 import { preetyLogger } from "./const/logger.config.js";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
+import cors from "@fastify/cors"
 
 export async function buildApp(): Promise<FastifyInstance> {
     const app = Fastify(preetyLogger);
@@ -47,6 +48,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     });
     await app.register(swaggerUi, { routePrefix: "/docs" });
 
+    app.register(cors, { 
+  origin: true 
+});
     await appRateLimit(app);
     await app.register(cookie);
     await app.register(authPlugin);
