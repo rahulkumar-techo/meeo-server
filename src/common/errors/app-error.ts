@@ -11,6 +11,7 @@ export class AppError extends Error {
   ) {
     super(message);
 
+    Object.setPrototypeOf(this, new.target.prototype);
     this.statusCode = statusCode;
     this.isOperational = isOperational;
 

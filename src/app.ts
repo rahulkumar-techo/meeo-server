@@ -10,9 +10,40 @@ import authPlugin from "./plugins/auth.plugin.js";
 import { createYoga } from "graphql-yoga";
 import { graphqlSchema } from "./graphql/schema.js";
 import { preetyLogger } from "./const/logger.config.js";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 
 export async function buildApp(): Promise<FastifyInstance> {
     const app = Fastify(preetyLogger);
+
+    await app.register(swagger, {
+        openapi: {
+            info: {
+                title: "E-Commerce API",
+                description: "Authentication and user account API",
+                version: "1.0.0",
+            },
+            tags: [
+                { name: "Auth", description: "Authentication and account recovery" },
+                { name: "User", description: "Authenticated user profile management" },
+            ],
+            components: {
+                securitySchemes: {
+                    bearerAuth: {
+                        type: "http",
+                        scheme: "bearer",
+                        bearerFormat: "JWT",
+                    },
+                    refreshCookie: {
+                        type: "apiKey",
+                        in: "cookie",
+                        name: "refreshToken",
+                    },
+                },
+            },
+        },
+    });
+    await app.register(swaggerUi, { routePrefix: "/docs" });
 
     await appRateLimit(app);
     await app.register(cookie);

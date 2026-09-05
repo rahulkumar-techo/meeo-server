@@ -1,21 +1,30 @@
 import type { FastifyInstance } from "fastify";
 import { userController } from "./controller/user.controller.js";
+import { addressSchema, errorResponse, successResponse, userSchemas } from "@/common/docs/swagger.js";
+
+const authenticated = (summary: string, body?: object) => ({
+    tags: ["User"],
+    summary,
+    security: [{ bearerAuth: [] }],
+    ...(body ? { body } : {}),
+});
+const commonErrors = { 400: errorResponse, 401: errorResponse, 404: errorResponse, 422: errorResponse };
 
 const userRouter = (app: FastifyInstance) => {
     // Every user route requires a valid access token.
     app.addHook("preHandler", app.authenticate);
 
     // Profile management
-    app.patch("/profile", userController.updateProfile.bind(userController));
+    app.patch("/profile", { schema: { ...authenticated("Update the current profile", userSchemas.profileBody), response: { 200: successResponse(), ...commonErrors } } }, userController.updateProfile.bind(userController));
 
     // Address management
-    app.post("/addresses", userController.createAddress.bind(userController));
-    app.patch("/addresses/:addressId", userController.updateAddress.bind(userController));
-    app.delete("/addresses/:addressId", userController.deleteAddress.bind(userController));
+    app.post("/addresses", { schema: { ...authenticated("Create an address", addressSchema), response: { 201: successResponse(), ...commonErrors } } }, userController.createAddress.bind(userController));
+    app.patch("/addresses/:addressId", { schema: { ...authenticated("Update an address", addressSchema), params: { type: "object", required: ["addressId"], properties: { addressId: { type: "string" } } }, response: { 200: successResponse(), ...commonErrors } } }, userController.updateAddress.bind(userController));
+    app.delete("/addresses/:addressId", { schema: { ...authenticated("Delete an address"), params: { type: "object", required: ["addressId"], properties: { addressId: { type: "string" } } }, response: { 200: successResponse(), ...commonErrors } } }, userController.deleteAddress.bind(userController));
 
     // Phone verification and updates
-    app.post("/phone/request-otp", userController.requestPhoneOtp.bind(userController));
-    app.put("/phone", userController.verifyPhone.bind(userController));
+    app.post("/phone/request-otp", { schema: { ...authenticated("Request a phone verification OTP", userSchemas.phoneOtpBody), response: { 200: successResponse(), ...commonErrors } } }, userController.requestPhoneOtp.bind(userController));
+    app.put("/phone", { schema: { ...authenticated("Verify a phone number", userSchemas.phoneVerificationBody), response: { 200: successResponse(), ...commonErrors } } }, userController.verifyPhone.bind(userController));
 };
 
 export default userRouter;
