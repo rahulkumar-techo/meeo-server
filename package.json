@@ -62,6 +62,7 @@
     "format:check": "prettier --check .",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
+    "prepare": "husky",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+
+# Catch type and behavior regressions before a commit is created.
+npm run typecheck
+npm test -- --run
