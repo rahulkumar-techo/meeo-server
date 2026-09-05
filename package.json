@@ -63,7 +63,7 @@
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
     "ci:verify": "npm run prisma:generate && npm run typecheck && npm test -- --run && npm run build",
-    "prepare": "husky",
+    "prepare": "node scripts/prepare-husky.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

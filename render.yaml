@@ -3,7 +3,7 @@ services:
     name: meeo-server
     runtime: node
     # Run the same generation, typecheck, test, and build checks used by CI.
-    buildCommand: npm ci && npm run ci:verify
+    buildCommand: npm ci --include=dev && npm run ci:verify
     startCommand: npm start
     healthCheckPath: /health
     envVars:
