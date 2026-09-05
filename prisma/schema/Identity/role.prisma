@@ -1,0 +1,32 @@
+// Represents a role such as ADMIN, CUSTOMER, MANAGER, or SUPPORT.
+model Role {
+  id String @id @default(uuid()) @db.Uuid
+
+  name String @unique
+
+  description String?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  users UserRole[]
+
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+// Creates the many-to-many relationship between users and roles.
+model UserRole {
+  userId String @db.Uuid
+
+  roleId String @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}

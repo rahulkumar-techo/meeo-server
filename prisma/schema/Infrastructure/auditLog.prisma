@@ -1,0 +1,26 @@
+// Stores a history of important system actions and changes for auditing purposes.
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+
+  actorId String? @db.Uuid
+
+  action String
+
+  entityType String
+  entityId   String?
+
+  oldValue Json?
+  newValue Json?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

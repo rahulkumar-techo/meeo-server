@@ -1,0 +1,29 @@
+// Represents an individual attempt to complete a payment.
+model PaymentAttempt {
+  id String @id @default(uuid()) @db.Uuid
+
+  paymentId String @db.Uuid
+
+  attemptNumber Int
+
+  providerPaymentId String?
+
+  status PaymentAttemptStatus @default(PENDING)
+
+  amount Decimal @db.Decimal(12, 2)
+
+  failureCode    String?
+  failureMessage String?
+
+  initiatedAt DateTime @default(now())
+
+  completedAt DateTime?
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  transactions PaymentTransaction[]
+
+  @@unique([paymentId, attemptNumber])
+  @@index([paymentId])
+  @@map("payment_attempts")
+}

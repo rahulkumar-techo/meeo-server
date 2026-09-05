@@ -1,0 +1,29 @@
+// Represents a refund request and its lifecycle for a completed payment.
+model Refund {
+  id String @id @default(uuid()) @db.Uuid
+
+  paymentId String @db.Uuid
+
+  amount Decimal @db.Decimal(12, 2)
+
+  currency String @db.Char(3)
+
+  reason String?
+
+  status RefundStatus @default(PENDING)
+
+  providerRefundId String?
+
+  requestedBy String? @db.Uuid
+
+  requestedAt DateTime @default(now())
+
+  completedAt DateTime?
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  requestedByUser User? @relation("RefundRequestedBy", fields: [requestedBy], references: [id])
+
+  @@index([paymentId])
+  @@map("refunds")
+}

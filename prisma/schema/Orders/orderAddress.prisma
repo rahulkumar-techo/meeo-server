@@ -1,0 +1,28 @@
+// Stores an immutable delivery or billing address snapshot for an order.
+model OrderAddress {
+  id String @id @default(uuid()) @db.Uuid
+
+  orderId String @unique @db.Uuid
+
+  recipientName String
+
+  phone String?
+
+  addressLine1 String
+  addressLine2 String?
+
+  city  String
+  state String
+
+  postalCode String
+  country    String
+
+  latitude  Decimal? @db.Decimal(10, 7)
+  longitude Decimal? @db.Decimal(10, 7)
+
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_addresses")
+}

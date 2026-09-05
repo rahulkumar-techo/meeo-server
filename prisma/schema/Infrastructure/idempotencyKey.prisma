@@ -1,0 +1,25 @@
+// Stores API idempotency keys and cached responses to prevent duplicate operations.
+model IdempotencyKey {
+  id String @id @default(uuid()) @db.Uuid
+
+  key String @unique
+
+  userId String? @db.Uuid
+
+  requestHash String?
+
+  status IdempotencyStatus @default(PROCESSING)
+
+  responseStatus Int?
+
+  responseBody Json?
+
+  expiresAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}

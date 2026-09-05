@@ -1,0 +1,28 @@
+// Represents a specific permission that controls access to system features.
+model Permission {
+  id String @id @default(uuid()) @db.Uuid
+
+  name String @unique
+
+  description String?
+
+  createdAt DateTime @default(now())
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+// Creates the many-to-many relationship between roles and permissions.
+model RolePermission {
+  roleId String @db.Uuid
+
+  permissionId String @db.Uuid
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}

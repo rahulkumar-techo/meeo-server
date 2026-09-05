@@ -1,0 +1,129 @@
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BLOCKED
+  PENDING_VERIFICATION
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum InventoryTransactionType {
+  STOCK_ADDED
+  STOCK_REMOVED
+  ORDER_RESERVED
+  ORDER_CONFIRMED
+  ORDER_CANCELLED
+  RETURNED
+  MANUAL_ADJUSTMENT
+}
+
+enum InventoryReservationStatus {
+  ACTIVE
+  CONFIRMED
+  RELEASED
+  EXPIRED
+}
+
+enum OrderStatus {
+  PENDING
+  PAYMENT_PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  EXPIRED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  REQUIRES_ACTION
+  SUCCESS
+  FAILED
+  CANCELLED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum PaymentAttemptStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum PaymentTransactionType {
+  AUTHORIZE
+  CAPTURE
+  CHARGE
+  VOID
+  REFUND
+  REVERSAL
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  FAILED
+}
+
+enum ProcessedEventStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum WebhookProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FREE_SHIPPING
+}
+
+enum CouponStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum IdempotencyStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}

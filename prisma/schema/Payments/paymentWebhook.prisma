@@ -1,0 +1,26 @@
+// Stores incoming payment provider webhook events and their processing state.
+model PaymentWebhook {
+  id String @id @default(uuid()) @db.Uuid
+
+  provider String
+
+  providerEventId String
+
+  eventType String
+
+  payload Json
+
+  signatureVerified Boolean @default(false)
+
+  processingStatus WebhookProcessingStatus @default(PENDING)
+
+  errorMessage String?
+
+  receivedAt DateTime @default(now())
+
+  processedAt DateTime?
+
+  @@unique([provider, providerEventId])
+  @@index([processingStatus])
+  @@map("payment_webhooks")
+}

@@ -1,0 +1,24 @@
+// Stores an immutable history of all inventory changes and stock movements.
+// Stores an immutable history of all inventory changes and stock movements.
+model InventoryTransaction {
+  id String @id @default(uuid()) @db.Uuid
+
+  variantId String @db.Uuid
+
+  type InventoryTransactionType
+
+  quantity Int
+
+  referenceType String?
+  referenceId   String?
+
+  note String?
+
+  createdAt DateTime @default(now())
+
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@index([variantId])
+  @@index([referenceType, referenceId])
+  @@map("inventory_transactions")
+}

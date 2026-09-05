@@ -1,0 +1,47 @@
+// Represents a customer, admin, or other authenticated user in the system.
+
+model User {
+  id String @id @default(uuid()) @db.Uuid
+
+  // Optional contact information.
+  email String? @unique
+  phone String? @unique
+
+  passwordHash String
+  firstName    String?
+  lastName     String?
+
+  // Profile information.
+  avatarUrl String?
+
+  // Identity verification 
+  emailVerified Boolean    @default(false)
+  phoneVerified Boolean    @default(false)
+  status        UserStatus @default(ACTIVE)
+
+  lastLoginAt DateTime?
+
+  // Date and time 
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Related models and tables.
+  addresses       Address[]
+  sessions        UserSession[]
+  roles           UserRole[]
+  carts           Cart[]
+  wishlist        Wishlist?
+  orders          Order[]
+  reviews         Review[]
+  notifications   Notification[]
+  idempotencyKeys IdempotencyKey[]
+
+  createdRefunds Refund[]   @relation("RefundRequestedBy")
+  auditLogs      AuditLog[] @relation("AuditActor")
+
+  // Indexes.
+  @@index([status])
+  @@index([createdAt])
+  @@map("users")
+}

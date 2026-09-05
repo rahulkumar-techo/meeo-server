@@ -1,0 +1,31 @@
+// Stores domain events inside the same database transaction as business data changes.
+model OutboxEvent {
+  id String @id @default(uuid()) @db.Uuid
+
+  eventType String
+
+  aggregateType String
+  aggregateId   String
+
+  payload Json
+
+  status OutboxStatus @default(PENDING)
+
+  attempts    Int @default(0)
+  maxAttempts Int @default(10)
+
+  lockedBy String?
+  lockedAt DateTime?
+
+  nextRetryAt DateTime?
+
+  publishedAt DateTime?
+
+  lastError String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, nextRetryAt, createdAt])
+  @@map("outbox_events")
+}

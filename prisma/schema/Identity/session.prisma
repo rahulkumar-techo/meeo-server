@@ -1,0 +1,30 @@
+// Stores active and historical user login sessions and refresh tokens.
+model UserSession {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+
+  refreshTokenHash String
+
+  deviceName String?
+
+  deviceId String?
+
+  ipAddress String?
+
+  userAgent String?
+
+  expiresAt DateTime
+
+  lastUsedAt DateTime?
+
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}

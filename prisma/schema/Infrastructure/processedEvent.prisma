@@ -1,0 +1,23 @@
+// Tracks events processed by a consumer to ensure idempotent event handling.
+model ProcessedEvent {
+  id String @id @default(uuid()) @db.Uuid
+
+  eventId String
+
+  consumerName String
+
+  status ProcessedEventStatus @default(PROCESSING)
+
+  attempts Int @default(0)
+
+  lastError String?
+
+  processedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, consumerName])
+  @@index([status])
+  @@map("processed_events")
+}

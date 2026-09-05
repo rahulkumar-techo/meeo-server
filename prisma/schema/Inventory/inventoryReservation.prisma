@@ -1,0 +1,26 @@
+// Temporarily reserves inventory for an order to prevent overselling during checkout.
+// Temporarily reserves inventory for an order to prevent overselling during checkout.
+model InventoryReservation {
+  id String @id @default(uuid()) @db.Uuid
+
+  variantId String  @db.Uuid
+  orderId   String? @db.Uuid
+
+  quantity Int
+
+  status InventoryReservationStatus @default(ACTIVE)
+
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  order Order? @relation(fields: [orderId], references: [id])
+
+  @@index([variantId])
+  @@index([orderId])
+  @@index([status, expiresAt])
+  @@map("inventory_reservations")
+}
