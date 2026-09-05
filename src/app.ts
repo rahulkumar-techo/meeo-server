@@ -4,6 +4,7 @@ import { appRateLimit } from "./plugins/rate_limit.js";
 import { errorHandler } from "./common/errors/error-handler.js";
 import { mailTransporter } from "./lib/mail.js";
 import authRouter from "./modules/auth/auth.route.js";
+import userRouter from "./modules/user/user.route.js";
 import cookie from "@fastify/cookie";
 import authPlugin from "./plugins/auth.plugin.js";
 import { createYoga } from "graphql-yoga";
@@ -25,6 +26,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
 
     app.register(authRouter, { prefix: "/api/auth" });
+    app.register(userRouter, { prefix: "/api/user" });
 
     app.get("/health", async () => {
         return {
