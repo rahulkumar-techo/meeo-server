@@ -53,7 +53,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "dev:worker": "tsx watch src/apps/worker/main.ts",
-    "build": "tsc && tsc-alias",
+    "build": "npm run prisma:generate && tsc && tsc-alias",
     "start": "node dist/server.js",
     "start:worker": "node dist/apps/worker/main.js",
     "typecheck": "tsc --noEmit",
@@ -68,7 +68,6 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:studio": "prisma studio",
-    "postinstall": "prisma skills sync || exit 0"
+    "prisma:studio": "prisma studio"
   }
 }
