@@ -185,6 +185,7 @@ class AuthService {
         const accessToken = generateAccessToken({
             userId: user.id,
             email: user.email!,
+            sessionId,
         });
 
         return {

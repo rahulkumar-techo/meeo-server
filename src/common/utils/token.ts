@@ -4,6 +4,7 @@ import crypto from "crypto";
 export interface TokenPayload {
   userId: string;
   email: string;
+  sessionId?: string;
 }
 
 export interface RefreshTokenPayload extends TokenPayload {

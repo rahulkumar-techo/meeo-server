@@ -3,7 +3,7 @@ import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 process.env.JWT_ACCESS_SECRET = "unit-test-access-secret";
 process.env.DATABASE_URL = "postgresql://dummy:test@localhost:5432/test";
 
-const { authServiceMock, userServiceMock } = vi.hoisted(() => ({
+const { authServiceMock, userServiceMock, prismaMock } = vi.hoisted(() => ({
     authServiceMock: {
         register: vi.fn(), login: vi.fn(), verifyOtp: vi.fn(), resendOtp: vi.fn(),
         forgotPassword: vi.fn(), resetPassword: vi.fn(), refreshToken: vi.fn(), getCurrentUser: vi.fn(),
@@ -12,6 +12,10 @@ const { authServiceMock, userServiceMock } = vi.hoisted(() => ({
         updateProfile: vi.fn(), saveAddress: vi.fn(), deleteAddress: vi.fn(),
         requestPhoneOtp: vi.fn(), verifyPhone: vi.fn(),
     },
+    prismaMock: {
+        user: { findUnique: vi.fn() },
+        userSession: { findUnique: vi.fn() },
+    },
 }));
 
 // The system suite uses safe, deterministic environment values instead of developer credentials.
@@ -19,6 +23,7 @@ const { authServiceMock, userServiceMock } = vi.hoisted(() => ({
 // Only persistence and external service boundaries are replaced with deterministic dummies.
 vi.mock("../modules/auth/auth.service.js", () => ({ authService: authServiceMock }));
 vi.mock("../modules/user/services/user.service.js", () => ({ default: userServiceMock }));
+vi.mock("../lib/prisma.js", () => ({ prisma: prismaMock }));
 vi.mock("graphql-yoga", () => ({
     // Yoga is outside the auth/user workflow and can cause duplicate GraphQL realms in Vitest.
     createYoga: () => ({ fetch: async () => new Response("ok") }),
@@ -36,6 +41,12 @@ describe("authentication and user system flow", () => {
             email: "ada@example.test",
             firstName: "Ada",
             lastName: "Lovelace",
+        });
+        prismaMock.user.findUnique.mockResolvedValue({
+            id: "user-001",
+            email: "ada@example.test",
+            status: "ACTIVE",
+            roles: [],
         });
         app = await buildApp();
     });

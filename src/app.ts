@@ -5,6 +5,7 @@ import { errorHandler } from "./common/errors/error-handler.js";
 import { mailTransporter } from "./lib/mail.js";
 import authRouter from "./modules/auth/auth.route.js";
 import userRouter from "./modules/user/user.route.js";
+import authorizationRouter from "./modules/authorization/authorization.route.js";
 import cookie from "@fastify/cookie";
 import authPlugin from "./plugins/auth.plugin.js";
 import { createYoga } from "graphql-yoga";
@@ -26,6 +27,7 @@ export async function buildApp(): Promise<FastifyInstance> {
             tags: [
                 { name: "Auth", description: "Authentication and account recovery" },
                 { name: "User", description: "Authenticated user profile management" },
+                { name: "Authorization", description: "Role and permission administration" },
             ],
             components: {
                 securitySchemes: {
@@ -58,6 +60,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
     app.register(authRouter, { prefix: "/api/auth" });
     app.register(userRouter, { prefix: "/api/user" });
+    app.register(authorizationRouter, { prefix: "/api/v1/admin" });
 
     app.get("/health", async () => {
         return {
@@ -65,6 +68,17 @@ export async function buildApp(): Promise<FastifyInstance> {
             message: "API is running",
             timestamp: new Date().toISOString(),
         };
+    });
+
+    // Lightweight endpoint used by the keep-alive cron and external uptime monitors.
+    app.get("/ping", {
+        schema: {
+            tags: ["System"],
+            summary: "Check whether the server is awake",
+            response: { 200: { type: "string", example: "Awake" } },
+        },
+    }, async (_request, reply) => {
+        return reply.status(200).send("Awake");
     });
 
     const yoga = createYoga({

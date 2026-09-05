@@ -19,8 +19,8 @@ const userRouter = (app: FastifyInstance) => {
 
     // Address management
     app.post("/addresses", { schema: { ...authenticated("Create an address", addressSchema), response: { 201: successResponse(), ...commonErrors } } }, userController.createAddress.bind(userController));
-    app.patch("/addresses/:addressId", { schema: { ...authenticated("Update an address", addressSchema), params: { type: "object", required: ["addressId"], properties: { addressId: { type: "string" } } }, response: { 200: successResponse(), ...commonErrors } } }, userController.updateAddress.bind(userController));
-    app.delete("/addresses/:addressId", { schema: { ...authenticated("Delete an address"), params: { type: "object", required: ["addressId"], properties: { addressId: { type: "string" } } }, response: { 200: successResponse(), ...commonErrors } } }, userController.deleteAddress.bind(userController));
+    app.patch<{ Params: { addressId: string } }>("/addresses/:addressId", { schema: { ...authenticated("Update an address", addressSchema), params: { type: "object", required: ["addressId"], properties: { addressId: { type: "string" } } }, response: { 200: successResponse(), ...commonErrors } } }, userController.updateAddress.bind(userController));
+    app.delete<{ Params: { addressId: string } }>("/addresses/:addressId", { schema: { ...authenticated("Delete an address"), params: { type: "object", required: ["addressId"], properties: { addressId: { type: "string" } } }, response: { 200: successResponse(), ...commonErrors } } }, userController.deleteAddress.bind(userController));
 
     // Phone verification and updates
     app.post("/phone/request-otp", { schema: { ...authenticated("Request a phone verification OTP", userSchemas.phoneOtpBody), response: { 200: successResponse(), ...commonErrors } } }, userController.requestPhoneOtp.bind(userController));
