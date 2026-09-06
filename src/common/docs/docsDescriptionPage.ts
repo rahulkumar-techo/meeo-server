@@ -447,6 +447,7 @@ export const docsDescriptionHtml = `<!DOCTYPE html>
             <a href="#reviews" class="menu-item">⭐ Reviews & Ratings</a>
             <a href="#search" class="menu-item">🔍 Search & Discovery</a>
             <a href="#dashboard" class="menu-item">📊 Admin Dashboard & Analytics</a>
+            <a href="#security-audit" class="menu-item">🛡️ Security & Audit Logs</a>
             <a href="#simulation" class="menu-item">🧪 Checkout Simulation</a>
         </aside>
 
@@ -1896,6 +1897,63 @@ Database Transaction (API)
                                 <td><code>/api/v1/admin/dashboard/health</code></td>
                                 <td><span class="access-badge admin">[Admin]</span></td>
                                 <td>Returns real-time operational health metrics: unfulfilled orders, pending reviews awaiting moderation, pending outbox events, and dead-letter queue count.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Module: Security Hardening & Audit Logs -->
+            <section id="security-audit">
+                <h2>🛡️ Security Hardening & System Audit Logs</h2>
+                <p class="section-desc">Production-grade enterprise defense system featuring Helmet security headers (CSP, HSTS, X-Frame-Options), strict CORS origin whitelisting, tiered rate limiting, CSRF protection for cookie sessions, request body size guards (1MB JSON), prototype pollution defense, sensitive data log masking, client IP resolution, and immutable audit logs.</p>
+
+                <div class="card-grid">
+                    <div class="card">
+                        <div class="card-icon">🔒</div>
+                        <h3>Security Headers & CORS</h3>
+                        <p>Strict Content Security Policy (CSP), Strict-Transport-Security (HSTS 1 year preload), X-Content-Type-Options: nosniff, and origin-validated CORS preflight caching.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">⚡</div>
+                        <h3>Tiered Rate Limiting & CSRF</h3>
+                        <p>Global 300 req/min limits with strict 10 req/15 min quotas on auth endpoints, double-submit cookie CSRF validation, and dynamic Retry-After response headers.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">📜</div>
+                        <h3>Audit Logs & Masking</h3>
+                        <p>Detailed tracking of administrative and financial mutations with before/after state diffs, client IPs, user agents, and automatic redaction of passwords, tokens, and PII.</p>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="route-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Access Level</th>
+                                <th>Purpose & Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/auth/csrf</code></td>
+                                <td><span class="access-badge public">[Public]</span></td>
+                                <td>Generates and sets an anti-CSRF token cookie alongside JSON response for browser clients performing cookie-based state mutations.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/v1/admin/audit-logs</code></td>
+                                <td><span class="access-badge admin">[Admin]</span></td>
+                                <td>Returns a paginated, filterable timeline of system audit events with actor details, target entity types, actions, client IPs, and timestamp ranges.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/v1/admin/audit-logs/:id</code></td>
+                                <td><span class="access-badge admin">[Admin]</span></td>
+                                <td>Retrieves detailed state changes (<code>oldValue</code>, <code>newValue</code>), actor metadata, and diagnostic headers for a specific audit log record.</td>
                             </tr>
                         </tbody>
                     </table>

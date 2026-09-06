@@ -45,5 +45,6 @@ export const PERMISSIONS = {
     DASHBOARD_READ: "dashboard:read",
 
     AUDIT_READ: "audit:read",
+    AUDIT_LOG_READ: "audit:read",
     SYSTEM_MANAGE: "system:manage",
 } as const;

@@ -69,6 +69,22 @@ export const errorHandler = (
         });
     }
 
+    // Payload too large (413)
+    if ("statusCode" in error && error.statusCode === 413) {
+        return reply.status(413).send({
+            success: false,
+            message: "Request payload too large. Maximum allowed size exceeded.",
+        });
+    }
+
+    // Rate limit exceeded (429)
+    if ("statusCode" in error && error.statusCode === 429) {
+        return reply.status(429).send({
+            success: false,
+            message: error.message || "Rate limit exceeded. Please try again later.",
+        });
+    }
+
     // Unknown server errors
     return reply.status(500).send({
         success: false,

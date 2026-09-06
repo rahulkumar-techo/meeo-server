@@ -18,6 +18,10 @@ import couponRouter from "./modules/coupons/routes/coupon.route.js";
 import reviewRouter from "./modules/reviews/routes/review.route.js";
 import { searchRouter, discoveryRouter } from "./modules/search/routes/search.route.js";
 import dashboardRouter from "./modules/dashboard/routes/dashboard.route.js";
+import auditLogRouter from "./modules/audit/routes/auditLog.route.js";
+import helmetPlugin from "./plugins/helmet.plugin.js";
+import { sanitizeInput } from "./common/security/sanitizer.js";
+import { generateCsrfToken, setCsrfCookie } from "./common/security/csrf.js";
 import cookie from "@fastify/cookie";
 import authPlugin from "./plugins/auth.plugin.js";
 import { createYoga } from "graphql-yoga";
@@ -31,7 +35,12 @@ import { apiDescription, swaggerTags } from "./common/docs/apiDescription.js";
 import { docsDescriptionHtml } from "./common/docs/docsDescriptionPage.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
-    const app = Fastify(preetyLogger);
+    const app = Fastify({
+        ...preetyLogger,
+        bodyLimit: 1 * 1024 * 1024, // 1MB payload limit
+    });
+
+    await app.register(helmetPlugin);
 
     await app.register(swagger, {
         openapi: {
@@ -73,9 +82,45 @@ export async function buildApp(): Promise<FastifyInstance> {
         return reply.type("text/html").send(docsDescriptionHtml);
     });
 
-    app.register(cors, { 
-        origin: true 
+    const allowedOrigins = process.env.CORS_ORIGIN
+        ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
+        : [
+              "http://localhost:3000",
+              "http://localhost:5173",
+              "http://127.0.0.1:3000",
+              "http://127.0.0.1:5173",
+          ];
+
+    await app.register(cors, {
+        origin: (origin, cb) => {
+            if (!origin) return cb(null, true);
+            if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+                return cb(null, true);
+            }
+            return cb(new Error("Not allowed by CORS"), false);
+        },
+        credentials: true,
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allowedHeaders: [
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With",
+            "X-CSRF-Token",
+            "Idempotency-Key",
+            "Accept",
+        ],
+        exposedHeaders: [
+            "Content-Range",
+            "X-Content-Range",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+            "X-RateLimit-Reset",
+            "Retry-After",
+            "X-CSRF-Token",
+        ],
+        maxAge: 86400,
     });
+
     await appRateLimit(app);
     await app.register(cookie);
     await app.register(multipart, {
@@ -85,10 +130,39 @@ export async function buildApp(): Promise<FastifyInstance> {
     });
     await app.register(authPlugin);
 
-    // app.addHook("onReady", async () => {
-    //     await mailTransporter.verify();
-    //     app.log.info("Mail server connected successfully");
-    // });
+    // Prototype pollution defense & input sanitization hook
+    app.addHook("preValidation", async (request) => {
+        if (request.body && typeof request.body === "object") {
+            request.body = sanitizeInput(request.body);
+        }
+        if (request.query && typeof request.query === "object") {
+            request.query = sanitizeInput(request.query);
+        }
+    });
+
+    // CSRF token retrieval endpoint
+    app.get("/api/auth/csrf", {
+        schema: {
+            tags: ["Auth"],
+            summary: "Retrieve CSRF protection token for cookie-based state mutations",
+            response: {
+                200: {
+                    type: "object",
+                    properties: {
+                        success: { type: "boolean" },
+                        csrfToken: { type: "string" },
+                    },
+                },
+            },
+        },
+    }, async (_request, reply) => {
+        const token = generateCsrfToken();
+        setCsrfCookie(reply, token);
+        return reply.status(200).send({
+            success: true,
+            csrfToken: token,
+        });
+    });
 
     app.register(authRouter, { prefix: "/api/auth" });
     app.register(userRouter, { prefix: "/api/user" });
@@ -106,6 +180,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     app.register(searchRouter, { prefix: "/api/search" });
     app.register(discoveryRouter, { prefix: "/api/discovery" });
     app.register(dashboardRouter, { prefix: "/api/v1/admin/dashboard" });
+    app.register(auditLogRouter, { prefix: "/api/v1/admin/audit-logs" });
 
     app.get("/health", async () => {
         return {
