@@ -13,7 +13,8 @@ export default async function brandRouter(app: FastifyInstance) {
         {
             schema: {
                 tags: ["Catalog - Brands"],
-                summary: "List brands with pagination and search",
+                summary: "[Public] List brands",
+                description: "List all brands with pagination, search query, and status filter.",
             },
         },
         brandController.listBrands.bind(brandController),
@@ -24,7 +25,8 @@ export default async function brandRouter(app: FastifyInstance) {
         {
             schema: {
                 tags: ["Catalog - Brands"],
-                summary: "Get brand by ID",
+                summary: "[Public] Get brand by ID",
+                description: "Retrieve a single brand by UUID with product counts.",
                 params: catalogSchemas.brandParams,
             },
         },
@@ -36,7 +38,8 @@ export default async function brandRouter(app: FastifyInstance) {
         {
             schema: {
                 tags: ["Catalog - Brands"],
-                summary: "Get brand by slug",
+                summary: "[Public] Get brand by slug",
+                description: "Retrieve a single brand by unique URL slug.",
                 params: catalogSchemas.brandSlugParams,
             },
         },
@@ -55,7 +58,8 @@ export default async function brandRouter(app: FastifyInstance) {
             ],
             schema: {
                 tags: ["Catalog - Brands"],
-                summary: "Create a new brand",
+                summary: "[Admin: brand:create | product:create] Create brand",
+                description: "Create a new brand. Requires `brand:create` or `product:create` permission. Sets `createdById` to authenticated user.",
                 security: [{ bearerAuth: [] }],
                 body: catalogSchemas.createBrand,
             },
@@ -69,7 +73,8 @@ export default async function brandRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Brands"],
-                summary: "Update brand (Creator or User with brand/product update permission)",
+                summary: "[Creator OR Admin: brand:update | product:update] Update brand",
+                description: "Update brand details (name, slug, logoUrl, status). Permitted for brand creator OR users with `brand:update`/`product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.brandParams,
                 body: catalogSchemas.updateBrand,
@@ -84,7 +89,8 @@ export default async function brandRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Brands"],
-                summary: "Delete brand (Creator or User with brand/product delete permission)",
+                summary: "[Creator OR Admin: brand:delete | product:delete] Delete brand",
+                description: "Delete brand. Permitted for brand creator OR users with `brand:delete`/`product:delete` permission. Blocked if active products belong to this brand.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.brandParams,
             },

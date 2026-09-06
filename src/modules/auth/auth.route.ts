@@ -16,12 +16,12 @@ const publicAuthRoutes = (app: FastifyInstance) => {
     );
     app.post(
         "/resend-otp",
-        authenticationSchemas.emailAction,
+        authenticationSchemas.resendOtp,
         authController.resendOtp.bind(authController),
     );
     app.post(
         "/forgot-password",
-        authenticationSchemas.emailAction,
+        authenticationSchemas.forgotPassword,
         authController.forgotPassword.bind(authController),
     );
     app.post(

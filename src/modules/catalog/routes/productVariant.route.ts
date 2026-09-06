@@ -14,7 +14,8 @@ export default async function productVariantRouter(app: FastifyInstance) {
         {
             schema: {
                 tags: ["Catalog - Variants"],
-                summary: "Get a product variant by ID with product, attributes, and stock",
+                summary: "[Public] Get variant by ID",
+                description: "Fetch variant by UUID including parent product, dynamic attributes (Color, Size, etc.), and inventory stock.",
                 params: catalogSchemas.variantParams,
             },
         },
@@ -26,7 +27,8 @@ export default async function productVariantRouter(app: FastifyInstance) {
         {
             schema: {
                 tags: ["Catalog - Variants"],
-                summary: "Get a product variant by unique SKU code",
+                summary: "[Public] Get variant by SKU",
+                description: "Fetch variant by unique SKU barcode/identifier.",
                 params: catalogSchemas.variantSkuParams,
             },
         },
@@ -42,7 +44,8 @@ export default async function productVariantRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Variants"],
-                summary: "Update variant pricing, SKU, barcode, status, or attributes (Creator or Admin with product:update)",
+                summary: "[Creator OR Admin: product:update] Update variant",
+                description: "Update variant pricing (price, compareAtPrice, costPrice), SKU, barcode, status, or attributes. Permitted for product creator OR users with `product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.variantParams,
                 body: catalogSchemas.updateVariant,
@@ -57,7 +60,8 @@ export default async function productVariantRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Variants"],
-                summary: "Delete a product variant (Creator or Admin with product:delete)",
+                summary: "[Creator OR Admin: product:delete] Delete variant",
+                description: "Delete product variant. Permitted for product creator OR users with `product:delete` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.variantParams,
             },
@@ -75,7 +79,8 @@ export async function nestedProductVariantRouter(app: FastifyInstance) {
         {
             schema: {
                 tags: ["Catalog - Variants"],
-                summary: "List all variants of a product with pagination and status filter",
+                summary: "[Public] List product variants",
+                description: "List all variants belonging to a specific product with pagination and status filter.",
                 params: catalogSchemas.productVariantParams,
             },
         },
@@ -88,7 +93,8 @@ export async function nestedProductVariantRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Variants"],
-                summary: "Create a new variant for a product with SKU, pricing, and initial stock",
+                summary: "[Creator OR Admin: product:update] Create product variant",
+                description: "Create a single variant for a product with SKU, barcode, price, compareAtPrice, costPrice, attributes, and initial stock. Permitted for product creator OR users with `product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.productVariantParams,
                 body: catalogSchemas.createVariant,
@@ -103,7 +109,8 @@ export async function nestedProductVariantRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Variants"],
-                summary: "Batch create multiple variants for a product transactionally",
+                summary: "[Creator OR Admin: product:update] Batch create product variants",
+                description: "Transactionally create multiple variants (e.g., Matrix of Sizes & Colors) for a product. Permitted for product creator OR users with `product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.productVariantParams,
                 body: catalogSchemas.batchCreateVariants,

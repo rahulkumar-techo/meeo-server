@@ -3,11 +3,11 @@
  */
 
 export const catalogTags = [
-    { name: "Catalog - Categories", description: "Category management, hierarchy, and recursive tree" },
-    { name: "Catalog - Brands", description: "Brand / Manufacturer management" },
-    { name: "Catalog - Products", description: "Product catalog, status lifecycle (Draft, Publish, Archive), and SEO" },
-    { name: "Catalog - Images", description: "Product image uploads, ordering, and deletion" },
-    { name: "Catalog - Variants", description: "Product variants, SKU, Barcode, Pricing (Price, Compare-at, Cost), and Stock" },
+    { name: "Catalog - Categories", description: "📁 Categories: Hierarchical organization, parent/child trees, and navigation" },
+    { name: "Catalog - Brands", description: "🏷️ Brands: Manufacturer & brand entity management" },
+    { name: "Catalog - Products", description: "📦 Products: Product catalog lifecycle (Draft, Publish, Archive) and SEO metadata" },
+    { name: "Catalog - Variants", description: "🔢 Variants: Multi-variant SKUs, Barcodes, Pricing tiers (Price, Compare-at, Cost), and Stock levels" },
+    { name: "Catalog - Images", description: "🖼️ Images: ImageKit CDN direct uploads, gallery attachment, and reordering" },
 ];
 
 export const catalogSchemas = {

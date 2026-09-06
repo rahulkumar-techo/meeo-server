@@ -13,7 +13,8 @@ export default async function productRouter(app: FastifyInstance) {
         {
             schema: {
                 tags: ["Catalog - Products"],
-                summary: "List products with search, category, brand, and status filters",
+                summary: "[Public] List products",
+                description: "List products with search, category, brand, and status filters. Public customers receive only ACTIVE products.",
             },
         },
         productController.listProducts.bind(productController),
@@ -24,7 +25,8 @@ export default async function productRouter(app: FastifyInstance) {
         {
             schema: {
                 tags: ["Catalog - Products"],
-                summary: "Get product by ID with category, brand, images, and variants",
+                summary: "[Public] Get product by ID",
+                description: "Fetch product by UUID including category, brand, images, and variants.",
                 params: catalogSchemas.productParams,
             },
         },
@@ -36,7 +38,8 @@ export default async function productRouter(app: FastifyInstance) {
         {
             schema: {
                 tags: ["Catalog - Products"],
-                summary: "Get product by slug",
+                summary: "[Public] Get product by slug",
+                description: "Fetch product by unique URL slug with relations.",
                 params: catalogSchemas.productSlugParams,
             },
         },
@@ -55,7 +58,8 @@ export default async function productRouter(app: FastifyInstance) {
             ],
             schema: {
                 tags: ["Catalog - Products"],
-                summary: "Create a new product (defaults to DRAFT)",
+                summary: "[Admin: product:create] Create product",
+                description: "Create a new product in DRAFT status. Requires `product:create` permission. Sets `createdById` to authenticated user.",
                 security: [{ bearerAuth: [] }],
                 body: catalogSchemas.createProduct,
             },
@@ -69,7 +73,8 @@ export default async function productRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Products"],
-                summary: "Update product details and SEO fields (Creator or Admin with product:update)",
+                summary: "[Creator OR Admin: product:update] Update product",
+                description: "Update product title, description, category, brand, and SEO fields. Permitted for product creator OR users with `product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.productParams,
                 body: catalogSchemas.updateProduct,
@@ -84,7 +89,8 @@ export default async function productRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Products"],
-                summary: "Publish a draft/archived product to ACTIVE status",
+                summary: "[Creator OR Admin: product:update] Publish product",
+                description: "Transition product to ACTIVE status so it becomes visible on customer storefronts. Permitted for product creator OR users with `product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.productParams,
             },
@@ -98,7 +104,8 @@ export default async function productRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Products"],
-                summary: "Move a product back to DRAFT status",
+                summary: "[Creator OR Admin: product:update] Move product to draft",
+                description: "Revert product back to DRAFT status to hide from public browsing. Permitted for product creator OR users with `product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.productParams,
             },
@@ -112,7 +119,8 @@ export default async function productRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Products"],
-                summary: "Archive a product",
+                summary: "[Creator OR Admin: product:update] Archive product",
+                description: "Move product to ARCHIVED status. Permitted for product creator OR users with `product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.productParams,
             },
@@ -126,7 +134,8 @@ export default async function productRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Products"],
-                summary: "Delete product (Creator or Admin with product:delete)",
+                summary: "[Creator OR Admin: product:delete] Delete product",
+                description: "Permanently delete product and all associated variants and images. Permitted for product creator OR users with `product:delete` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.productParams,
             },
@@ -143,7 +152,8 @@ export default async function productRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Images"],
-                summary: "Generate client-side ImageKit authentication tokens (signature, token, expire)",
+                summary: "[Authenticated User] Get ImageKit client auth tokens",
+                description: "Generates time-limited signature, token, and expire parameters for client-side direct uploads via ImageKit SDK.",
                 security: [{ bearerAuth: [] }],
             },
         },
@@ -156,7 +166,8 @@ export default async function productRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Images"],
-                summary: "Upload image (file binary or base64/URL payload) to ImageKit and attach to product",
+                summary: "[Creator OR Admin: product:update] Upload & attach product image",
+                description: "Uploads an image (multipart file binary or base64/URL payload) to ImageKit and attaches it to the product with sort order. Permitted for product creator OR users with `product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.productParams,
                 body: catalogSchemas.uploadImage,
@@ -171,7 +182,8 @@ export default async function productRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Images"],
-                summary: "Add an image by URL to a product",
+                summary: "[Creator OR Admin: product:update] Attach image URL to product",
+                description: "Attaches an existing hosted image URL to the product. Permitted for product creator OR users with `product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.productParams,
                 body: catalogSchemas.addImage,
@@ -186,7 +198,8 @@ export default async function productRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Images"],
-                summary: "Delete an image from a product (and remove from ImageKit if tracked)",
+                summary: "[Creator OR Admin: product:update] Delete product image",
+                description: "Deletes an image from a product (and removes from ImageKit if tracked). Permitted for product creator OR users with `product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.productImageParams,
             },
@@ -200,7 +213,8 @@ export default async function productRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Catalog - Images"],
-                summary: "Reorder images for a product",
+                summary: "[Creator OR Admin: product:update] Reorder product images",
+                description: "Reorders image gallery display sequence for a product. Permitted for product creator OR users with `product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.productParams,
                 body: catalogSchemas.reorderImages,

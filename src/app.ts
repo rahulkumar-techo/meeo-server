@@ -24,14 +24,34 @@ export async function buildApp(): Promise<FastifyInstance> {
     await app.register(swagger, {
         openapi: {
             info: {
-                title: "E-Commerce API",
-                description: "Authentication, RBAC, and Product Catalog Management API",
+                title: "E-Commerce REST API",
+                description: `
+## 🛒 Complete E-Commerce Backend API Documentation
+
+### 🔐 Access Control & Authorization Model
+
+This API utilizes a **Role-Based Access Control (RBAC)** architecture combined with **Creator Ownership**:
+
+| Role / Access Level | Summary & Rules |
+|---|---|
+| **🌐 [Public]** | Unauthenticated access. Can view published catalog, active products, category trees, and login/register. |
+| **👤 [Authenticated User]** | Requires valid \`Bearer <JWT>\`. Can manage their own profile, addresses, sessions, and orders. |
+| **🛡️ [Creator OR Admin]** | Resource creator (\`createdById == user.id\`) OR staff possessing the required permission (e.g. \`product:update\`, \`category:delete\`). |
+| **👑 [Admin / Staff]** | Requires explicit RBAC permissions (e.g. \`role:create\`, \`user:update\`, \`product:create\`). |
+| **⚡ [Super Admin]** | Possesses \`system:manage\` permission or \`SUPER_ADMIN\` role. Automatically bypasses all permission and ownership constraints. |
+
+---
+
+### 🔑 Authentication Methods
+- **Bearer JWT**: Pass in header \`Authorization: Bearer <accessToken>\` for all protected endpoints.
+- **Refresh Cookie**: Handled automatically via HttpOnly cookie \`refreshToken\` on \`/api/auth/refresh\`.
+                `.trim(),
                 version: "1.0.0",
             },
             tags: [
-                { name: "Auth", description: "Authentication and account recovery" },
-                { name: "User", description: "Authenticated user profile management" },
-                { name: "Authorization", description: "Role and permission administration" },
+                { name: "Auth", description: "🔐 Authentication, OTP Verification, Password Reset, and Session Management" },
+                { name: "User", description: "👤 Authenticated User Profile, Saved Addresses, and Phone Verification" },
+                { name: "Authorization", description: "👑 Admin RBAC: Roles, Permissions, User Role Assignments, and Session Revocation" },
                 ...catalogTags,
             ],
             components: {

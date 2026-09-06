@@ -142,10 +142,11 @@ export const authorizationSchemas = {
 };
 
 // Adds the shared OpenAPI security metadata. The runtime authenticate hook is registered separately
-// in the router; this function only describes the bearer-token requirement in Swagger.
-export const protectedSchema = (summary: string, extra: Record<string, unknown> = {}) => ({
+// in the router; this function describes the bearer-token requirement and permissions in Swagger.
+export const protectedSchema = (summary: string, description: string, extra: Record<string, unknown> = {}) => ({
     tags: ["Authorization"],
     summary,
+    description,
     security: [{ bearerAuth: [] }],
     ...extra,
 });

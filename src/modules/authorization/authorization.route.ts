@@ -17,10 +17,14 @@ const authorizationRouter = (app: FastifyInstance) => {
         "/roles",
         {
             preHandler: app.requirePermission(PERMISSIONS.ROLE_CREATE),
-            schema: protectedSchema("Create a role", {
-                body: authorizationSchemas.role,
-                response: authorizationResponse(201, authorizationSchemas.roleResponse),
-            }),
+            schema: protectedSchema(
+                "[Admin: role:create] Create a role",
+                "Create a new RBAC system role (e.g. MANAGER, SUPPORT). Requires `role:create` permission.",
+                {
+                    body: authorizationSchemas.role,
+                    response: authorizationResponse(201, authorizationSchemas.roleResponse),
+                },
+            ),
         },
         authorizationController.createRole.bind(authorizationController),
     );
@@ -28,9 +32,13 @@ const authorizationRouter = (app: FastifyInstance) => {
         "/roles",
         {
             preHandler: app.requirePermission(PERMISSIONS.ROLE_READ),
-            schema: protectedSchema("List roles", {
-                response: authorizationListResponse(authorizationSchemas.roleResponse),
-            }),
+            schema: protectedSchema(
+                "[Admin: role:read] List roles",
+                "Retrieve all system roles and their assigned permissions. Requires `role:read` permission.",
+                {
+                    response: authorizationListResponse(authorizationSchemas.roleResponse),
+                },
+            ),
         },
         authorizationController.listRoles.bind(authorizationController),
     );
@@ -38,10 +46,14 @@ const authorizationRouter = (app: FastifyInstance) => {
         "/roles/:roleId",
         {
             preHandler: app.requirePermission(PERMISSIONS.ROLE_READ),
-            schema: protectedSchema("Get a role", {
-                params: authorizationSchemas.roleParams,
-                response: authorizationResponse(200, authorizationSchemas.roleResponse),
-            }),
+            schema: protectedSchema(
+                "[Admin: role:read] Get a role",
+                "Retrieve role details and associated permissions by UUID. Requires `role:read` permission.",
+                {
+                    params: authorizationSchemas.roleParams,
+                    response: authorizationResponse(200, authorizationSchemas.roleResponse),
+                },
+            ),
         },
         authorizationController.getRole.bind(authorizationController),
     );
@@ -49,11 +61,15 @@ const authorizationRouter = (app: FastifyInstance) => {
         "/roles/:roleId",
         {
             preHandler: app.requirePermission(PERMISSIONS.ROLE_UPDATE),
-            schema: protectedSchema("Update a role", {
-                params: authorizationSchemas.roleParams,
-                body: { ...authorizationSchemas.role, required: [] },
-                response: authorizationResponse(200, authorizationSchemas.roleResponse),
-            }),
+            schema: protectedSchema(
+                "[Admin: role:update] Update a role",
+                "Update role name or description. System roles like SUPER_ADMIN cannot be renamed. Requires `role:update` permission.",
+                {
+                    params: authorizationSchemas.roleParams,
+                    body: { ...authorizationSchemas.role, required: [] },
+                    response: authorizationResponse(200, authorizationSchemas.roleResponse),
+                },
+            ),
         },
         authorizationController.updateRole.bind(authorizationController),
     );
@@ -61,10 +77,14 @@ const authorizationRouter = (app: FastifyInstance) => {
         "/roles/:roleId",
         {
             preHandler: app.requirePermission(PERMISSIONS.ROLE_DELETE),
-            schema: protectedSchema("Delete a role", {
-                params: authorizationSchemas.roleParams,
-                response: authorizationResponse(200, authorizationSchemas.deletedResponse),
-            }),
+            schema: protectedSchema(
+                "[Admin: role:delete] Delete a role",
+                "Delete a custom role. System roles and roles with active assigned users cannot be deleted. Requires `role:delete` permission.",
+                {
+                    params: authorizationSchemas.roleParams,
+                    response: authorizationResponse(200, authorizationSchemas.deletedResponse),
+                },
+            ),
         },
         authorizationController.deleteRole.bind(authorizationController),
     );
@@ -72,9 +92,13 @@ const authorizationRouter = (app: FastifyInstance) => {
         "/permissions",
         {
             preHandler: app.requirePermission(PERMISSIONS.ROLE_READ),
-            schema: protectedSchema("List permissions", {
-                response: authorizationListResponse(authorizationSchemas.permissionResponse),
-            }),
+            schema: protectedSchema(
+                "[Admin: role:read] List all permissions",
+                "Retrieve all available system permissions for assigning to roles. Requires `role:read` permission.",
+                {
+                    response: authorizationListResponse(authorizationSchemas.permissionResponse),
+                },
+            ),
         },
         authorizationController.listPermissions.bind(authorizationController),
     );
@@ -82,11 +106,15 @@ const authorizationRouter = (app: FastifyInstance) => {
         "/roles/:roleId/permissions",
         {
             preHandler: app.requirePermission(PERMISSIONS.ROLE_UPDATE),
-            schema: protectedSchema("Replace role permissions", {
-                params: authorizationSchemas.roleParams,
-                body: authorizationSchemas.permissionAssignment,
-                response: authorizationResponse(200, authorizationSchemas.roleResponse),
-            }),
+            schema: protectedSchema(
+                "[Admin: role:update] Replace role permissions",
+                "Atomically replace the entire set of permissions granted to a role. Requires `role:update` permission.",
+                {
+                    params: authorizationSchemas.roleParams,
+                    body: authorizationSchemas.permissionAssignment,
+                    response: authorizationResponse(200, authorizationSchemas.roleResponse),
+                },
+            ),
         },
         authorizationController.replaceRolePermissions.bind(authorizationController),
     );
@@ -94,11 +122,15 @@ const authorizationRouter = (app: FastifyInstance) => {
         "/users/:userId/roles",
         {
             preHandler: app.requirePermission(PERMISSIONS.USER_UPDATE),
-            schema: protectedSchema("Replace user roles", {
-                params: authorizationSchemas.userParams,
-                body: authorizationSchemas.roleAssignment,
-                response: authorizationResponse(200, { type: "array", items: authorizationSchemas.assignedRoleResponse }),
-            }),
+            schema: protectedSchema(
+                "[Admin: user:update] Replace user roles",
+                "Atomically assign or replace the roles granted to a target user. Requires `user:update` permission.",
+                {
+                    params: authorizationSchemas.userParams,
+                    body: authorizationSchemas.roleAssignment,
+                    response: authorizationResponse(200, { type: "array", items: authorizationSchemas.assignedRoleResponse }),
+                },
+            ),
         },
         authorizationController.replaceUserRoles.bind(authorizationController),
     );
@@ -106,9 +138,13 @@ const authorizationRouter = (app: FastifyInstance) => {
         "/users",
         {
             preHandler: app.requirePermission(PERMISSIONS.USER_READ),
-            schema: protectedSchema("List users", {
-                response: authorizationListResponse(authorizationSchemas.userResponse),
-            }),
+            schema: protectedSchema(
+                "[Admin: user:read] List users",
+                "Retrieve user accounts with their statuses and assigned roles. Requires `user:read` permission.",
+                {
+                    response: authorizationListResponse(authorizationSchemas.userResponse),
+                },
+            ),
         },
         userController.listUsers.bind(userController),
     );
@@ -116,11 +152,15 @@ const authorizationRouter = (app: FastifyInstance) => {
         "/users/:userId",
         {
             preHandler: app.requirePermission(PERMISSIONS.USER_UPDATE),
-            schema: protectedSchema("Update a user", {
-                params: authorizationSchemas.userParams,
-                body: authorizationSchemas.userUpdate,
-                response: authorizationResponse(200, authorizationSchemas.userResponse),
-            }),
+            schema: protectedSchema(
+                "[Admin: user:update] Update user status & details",
+                "Update user status (ACTIVE, SUSPENDED, BLOCKED) or profile names. Requires `user:update` permission.",
+                {
+                    params: authorizationSchemas.userParams,
+                    body: authorizationSchemas.userUpdate,
+                    response: authorizationResponse(200, authorizationSchemas.userResponse),
+                },
+            ),
         },
         userController.updateUser.bind(userController),
     );
@@ -128,10 +168,14 @@ const authorizationRouter = (app: FastifyInstance) => {
         "/users/:userId/sessions",
         {
             preHandler: app.requirePermission(PERMISSIONS.USER_READ),
-            schema: protectedSchema("List user sessions", {
-                params: authorizationSchemas.userParams,
-                response: authorizationListResponse(authorizationSchemas.sessionResponse),
-            }),
+            schema: protectedSchema(
+                "[Admin: user:read] List user sessions",
+                "List all active login sessions and device metadata for a specific user. Requires `user:read` permission.",
+                {
+                    params: authorizationSchemas.userParams,
+                    response: authorizationListResponse(authorizationSchemas.sessionResponse),
+                },
+            ),
         },
         authController.listUserSessions.bind(authController),
     );
@@ -139,10 +183,14 @@ const authorizationRouter = (app: FastifyInstance) => {
         "/users/:userId/sessions/:sessionId",
         {
             preHandler: app.requirePermission(PERMISSIONS.USER_UPDATE),
-            schema: protectedSchema("Revoke a user session", {
-                params: authorizationSchemas.sessionParams,
-                response: authorizationResponse(200, authorizationSchemas.revokedResponse),
-            }),
+            schema: protectedSchema(
+                "[Admin: user:update] Revoke user session",
+                "Forcibly terminate and revoke an active session for any user. Requires `user:update` permission.",
+                {
+                    params: authorizationSchemas.sessionParams,
+                    response: authorizationResponse(200, authorizationSchemas.revokedResponse),
+                },
+            ),
         },
         authController.revokeUserSession.bind(authController),
     );
