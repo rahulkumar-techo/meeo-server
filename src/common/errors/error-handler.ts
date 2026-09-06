@@ -2,15 +2,29 @@ import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { AppError } from "./app-error.js";
 import { Prisma } from "@/generated/prisma/client.js";
 import { sendError } from "../utils/response.js";
+import { ZodError } from "zod";
 
 type ValidationError = NonNullable<FastifyError["validation"]>[number];
 
 export const errorHandler = (
-    error: FastifyError | AppError | Prisma.PrismaClientKnownRequestError,
+    error: FastifyError | AppError | Prisma.PrismaClientKnownRequestError | ZodError | Error,
     request: FastifyRequest,
     reply: FastifyReply,
 ) => {
     request.log.error(error);
+
+    // Zod validation errors
+    if (error instanceof ZodError || (error && typeof error === "object" && "name" in error && error.name === "ZodError")) {
+        const zodError = error as ZodError;
+        return reply.status(400).send({
+            success: false,
+            message: "Validation failed",
+            errors: zodError.issues?.map((err) => ({
+                field: err.path.join("."),
+                message: err.message,
+            })) ?? [],
+        });
+    }
 
     // Custom application errors
     if (error instanceof AppError) {

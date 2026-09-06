@@ -5,6 +5,16 @@ export const PERMISSIONS = {
     PRODUCT_UPDATE: "product:update",
     PRODUCT_DELETE: "product:delete",
 
+    CATEGORY_READ: "category:read",
+    CATEGORY_CREATE: "category:create",
+    CATEGORY_UPDATE: "category:update",
+    CATEGORY_DELETE: "category:delete",
+
+    BRAND_READ: "brand:read",
+    BRAND_CREATE: "brand:create",
+    BRAND_UPDATE: "brand:update",
+    BRAND_DELETE: "brand:delete",
+
     ORDER_READ: "order:read",
     ORDER_UPDATE: "order:update",
     ORDER_CANCEL: "order:cancel",

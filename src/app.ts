@@ -6,6 +6,7 @@ import { mailTransporter } from "./lib/mail.js";
 import authRouter from "./modules/auth/auth.route.js";
 import userRouter from "./modules/user/user.route.js";
 import authorizationRouter from "./modules/authorization/authorization.route.js";
+import catalogRouter from "./modules/catalog/routes/catalog.route.js";
 import cookie from "@fastify/cookie";
 import authPlugin from "./plugins/auth.plugin.js";
 import { createYoga } from "graphql-yoga";
@@ -13,7 +14,9 @@ import { graphqlSchema } from "./graphql/schema.js";
 import { preetyLogger } from "./const/logger.config.js";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
-import cors from "@fastify/cors"
+import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
+import { catalogTags } from "./common/docs/catalog.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
     const app = Fastify(preetyLogger);
@@ -22,13 +25,14 @@ export async function buildApp(): Promise<FastifyInstance> {
         openapi: {
             info: {
                 title: "E-Commerce API",
-                description: "Authentication and user account API",
+                description: "Authentication, RBAC, and Product Catalog Management API",
                 version: "1.0.0",
             },
             tags: [
                 { name: "Auth", description: "Authentication and account recovery" },
                 { name: "User", description: "Authenticated user profile management" },
                 { name: "Authorization", description: "Role and permission administration" },
+                ...catalogTags,
             ],
             components: {
                 securitySchemes: {
@@ -46,13 +50,27 @@ export async function buildApp(): Promise<FastifyInstance> {
             },
         },
     });
-    await app.register(swaggerUi, { routePrefix: "/docs" });
+    await app.register(swaggerUi, {
+        routePrefix: "/docs",
+        uiConfig: {
+            docExpansion: "list",
+            deepLinking: true,
+            filter: true,
+            displayRequestDuration: true,
+            persistAuthorization: true,
+        },
+    });
 
     app.register(cors, { 
-  origin: true 
-});
+        origin: true 
+    });
     await appRateLimit(app);
     await app.register(cookie);
+    await app.register(multipart, {
+        limits: {
+            fileSize: 10 * 1024 * 1024, // 10MB limit per file
+        },
+    });
     await app.register(authPlugin);
 
     // app.addHook("onReady", async () => {
@@ -60,11 +78,10 @@ export async function buildApp(): Promise<FastifyInstance> {
     //     app.log.info("Mail server connected successfully");
     // });
 
-
-
     app.register(authRouter, { prefix: "/api/auth" });
     app.register(userRouter, { prefix: "/api/user" });
     app.register(authorizationRouter, { prefix: "/api/v1/admin" });
+    app.register(catalogRouter, { prefix: "/api/v1" });
 
     app.get("/health", async () => {
         return {

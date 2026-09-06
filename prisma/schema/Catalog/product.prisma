@@ -2,8 +2,9 @@
 model Product {
   id String @id @default(uuid()) @db.Uuid
 
-  categoryId String? @db.Uuid
-  brandId    String? @db.Uuid
+  categoryId  String? @db.Uuid
+  brandId     String? @db.Uuid
+  createdById String? @db.Uuid
 
   name String
   slug String @unique
@@ -21,9 +22,9 @@ model Product {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  category Category? @relation(fields: [categoryId], references: [id])
-
-  brand Brand? @relation(fields: [brandId], references: [id])
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brand    Brand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  creator  User?     @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   images   ProductImage[]
   variants ProductVariant[]
@@ -34,6 +35,7 @@ model Product {
 
   @@index([categoryId])
   @@index([brandId])
+  @@index([createdById])
   @@index([status])
   @@index([isFeatured])
   @@map("products")
@@ -45,6 +47,7 @@ model ProductImage {
 
   productId String @db.Uuid
 
+  fileId  String?
   url     String
   altText String?
 
@@ -57,3 +60,4 @@ model ProductImage {
   @@index([productId])
   @@map("product_images")
 }
+

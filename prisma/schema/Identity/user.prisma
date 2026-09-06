@@ -37,8 +37,11 @@ model User {
   notifications   Notification[]
   idempotencyKeys IdempotencyKey[]
 
-  createdRefunds Refund[]   @relation("RefundRequestedBy")
-  auditLogs      AuditLog[] @relation("AuditActor")
+  createdRefunds    Refund[]    @relation("RefundRequestedBy")
+  createdCategories Category[]  @relation("CategoryCreatedBy")
+  createdBrands     Brand[]     @relation("BrandCreatedBy")
+  createdProducts   Product[]   @relation("ProductCreatedBy")
+  auditLogs         AuditLog[]  @relation("AuditActor")
 
   // Indexes.
   @@index([status])

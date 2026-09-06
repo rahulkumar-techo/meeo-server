@@ -3,7 +3,8 @@
 model Category {
   id String @id @default(uuid()) @db.Uuid
 
-  parentId String? @db.Uuid
+  parentId    String? @db.Uuid
+  createdById String? @db.Uuid
 
   name String
   slug String @unique
@@ -18,12 +19,15 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  parent Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  parent Category? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
 
   children Category[] @relation("CategoryHierarchy")
+
+  creator User? @relation("CategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   products Product[]
 
   @@index([parentId])
+  @@index([createdById])
   @@map("categories")
 }
