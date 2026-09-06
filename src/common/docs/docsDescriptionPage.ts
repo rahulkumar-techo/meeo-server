@@ -439,6 +439,7 @@ export const docsDescriptionHtml = `<!DOCTYPE html>
             <a href="#inventory" class="menu-item">📊 Inventory & Reservations</a>
             <a href="#cart" class="menu-item">🛒 Cart & Merge</a>
             <a href="#wishlist" class="menu-item">💖 Wishlist & Saved</a>
+            <a href="#orders" class="menu-item">🛍️ Orders & Checkout</a>
             <a href="#simulation" class="menu-item">🧪 Checkout Simulation</a>
         </aside>
 
@@ -1175,6 +1176,98 @@ export const docsDescriptionHtml = `<!DOCTYPE html>
                                 <td><code>/api/wishlist/products/:productId/move-to-cart</code></td>
                                 <td><span class="access-badge user">[Authenticated User]</span></td>
                                 <td>Directly add a saved product (or chosen variant) to cart and remove it from wishlist.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Module: Orders & Transactional Checkout -->
+            <section id="orders">
+                <h2>🛍️ Orders & Transactional Checkout</h2>
+                <p class="section-desc">Atomic checkout engine guaranteeing consistency across price re-verification, stock reservation holds, promotional coupon limits, immutable item snapshots, delivery address captures, and safe request deduplication via <code>Idempotency-Key</code>.</p>
+
+                <div class="card-grid">
+                    <div class="card">
+                        <div class="card-icon">⚡</div>
+                        <h3>Atomic Transaction</h3>
+                        <p>The entire checkout pipeline executes in an all-or-nothing database transaction preventing partial checkouts or inconsistent stock states.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">🔁</div>
+                        <h3>Idempotent Safety</h3>
+                        <p>Duplicate checkout requests with identical <code>Idempotency-Key</code> headers return the cached order result immediately without double-charging or creating duplicate orders.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">📸</div>
+                        <h3>Immutable Snapshots</h3>
+                        <p>Item prices, SKU, product titles, attribute variants, and delivery addresses are snapshotted permanently on the order.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">📜</div>
+                        <h3>Status Audit Trail</h3>
+                        <p>Every lifecycle update (PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED) writes an immutable record to <code>OrderStatusHistory</code>.</p>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="route-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Access Badge</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/orders/validate-checkout</code></td>
+                                <td><span class="access-badge public">[Public / User]</span></td>
+                                <td>Preview price calculation, coupon discounts, shipping fees, and taxes without creating an order.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/orders/checkout</code></td>
+                                <td><span class="access-badge public">[Public / User]</span></td>
+                                <td>Execute atomic checkout, reserve stock, apply coupons, snapshot items & address, and clear cart.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/orders</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>List customer's past orders with status and date filtering.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/orders/:id</code></td>
+                                <td><span class="access-badge user">[User / Admin]</span></td>
+                                <td>Retrieve full order details by ID with item snapshots and status history.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/orders/number/:orderNumber</code></td>
+                                <td><span class="access-badge user">[User / Admin]</span></td>
+                                <td>Lookup order details by human order number (e.g. ORD-20260906-AB123).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/orders/:id/cancel</code></td>
+                                <td><span class="access-badge user">[User / Admin]</span></td>
+                                <td>Cancel order and release reserved stock back to available inventory.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/orders/admin</code></td>
+                                <td><span class="access-badge admin">[Admin: order:read]</span></td>
+                                <td>Admin search and view across all orders in the system.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method patch">PATCH</span></td>
+                                <td><code>/api/orders/:id/status</code></td>
+                                <td><span class="access-badge admin">[Admin: order:update]</span></td>
+                                <td>Update order status (e.g. PROCESSING, SHIPPED, DELIVERED) with audit trail.</td>
                             </tr>
                         </tbody>
                     </table>
