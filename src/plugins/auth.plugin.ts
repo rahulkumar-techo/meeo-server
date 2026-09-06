@@ -27,6 +27,8 @@ declare module "fastify" {
 const authPlugin: FastifyPluginAsync = async (app) => {
 	app.decorateRequest("user", null as unknown as AuthorizationContext);
 
+	// Route preHandler: validates the bearer token, confirms the user/session is active,
+	// then loads roles and deduplicated permissions onto request.user.
 	app.decorate("authenticate", async (request: FastifyRequest) => {
 		const authorization = request.headers.authorization;
 		const [scheme, token] = authorization?.split(" ") ?? [];

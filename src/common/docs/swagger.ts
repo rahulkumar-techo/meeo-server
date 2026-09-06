@@ -1,4 +1,5 @@
-// Shared OpenAPI fragments keep auth and user route definitions consistent.
+// Shared OpenAPI fragments keep response, address, and user schemas consistent.
+// Feature-specific route metadata belongs in authentication.ts or authorization.ts.
 export const userSchema = {
     type: "object",
     properties: {
@@ -49,53 +50,6 @@ export const tempOtpResponse = {
     type: "object",
     properties: {
         tempOtp: { type: "string", pattern: "^[0-9]{4}$", description: "Temporary verification OTP" },
-    },
-};
-
-export const authSchemas = {
-    registerBody: {
-        type: "object",
-        required: ["firstName", "lastName", "email", "password"],
-        properties: {
-            firstName: { type: "string" },
-            lastName: { type: "string" },
-            email: { type: "string", format: "email" },
-            password: { type: "string", format: "password", minLength: 5, maxLength: 12 },
-        },
-    },
-    emailOtpBody: {
-        type: "object",
-        required: ["email", "otp"],
-        properties: {
-            email: { type: "string", format: "email" },
-            otp: { type: "string", pattern: "^[0-9]{4}$" },
-        },
-    },
-    emailBody: {
-        type: "object",
-        required: ["email"],
-        properties: {
-            email: { type: "string", format: "email" },
-        },
-    },
-    resetPasswordBody: {
-        type: "object",
-        required: ["email", "otp", "password"],
-        properties: {
-            email: { type: "string", format: "email" },
-            otp: { type: "string", pattern: "^[0-9]{4}$" },
-            password: { type: "string", format: "password", minLength: 5, maxLength: 12 },
-        },
-    },
-    loginBody: {
-        type: "object",
-        required: ["email", "password"],
-        properties: {
-            email: { type: "string", format: "email" },
-            password: { type: "string", format: "password" },
-            deviceName: { type: "string", maxLength: 100, description: "Friendly device name" },
-            deviceId: { type: "string", maxLength: 255, description: "Stable client device identifier" },
-        },
     },
 };
 

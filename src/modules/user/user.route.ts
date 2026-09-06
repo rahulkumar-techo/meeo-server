@@ -11,7 +11,8 @@ const authenticated = (summary: string, body?: object) => ({
 const commonErrors = { 400: errorResponse, 401: errorResponse, 404: errorResponse, 422: errorResponse };
 
 const userRouter = (app: FastifyInstance) => {
-    // Every user route requires a valid access token.
+    // Authenticate once for the whole router so every profile, address, and phone operation
+    // receives a verified request.user before its controller runs.
     app.addHook("preHandler", app.authenticate);
 
     // Profile management
