@@ -10,6 +10,13 @@ export const paymentTags = [
     },
 ];
 
+export const outboxTags = [
+    {
+        name: "Transactional Outbox & Events",
+        description: "⚡ Transactional Outbox Pattern, BullMQ Background Queues, Event Locking, Exponential Backoff, Dead-Letter Queues, and Consumer Idempotency",
+    },
+];
+
 /**
  * Cleanly aggregated Swagger tags for all API domains.
  */
@@ -31,6 +38,7 @@ export const swaggerTags = [
     ...cartTags,
     ...orderTags,
     ...paymentTags,
+    ...outboxTags,
 ];
 
 /**

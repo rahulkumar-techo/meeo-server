@@ -12,6 +12,7 @@ import cartRouter from "./modules/cart/routes/cart.route.js";
 import wishlistRouter from "./modules/wishlists/routes/wishlist.route.js";
 import orderRouter from "./modules/orders/routes/order.route.js";
 import paymentRouter from "./modules/payments/routes/payment.route.js";
+import outboxRouter from "./modules/outbox/routes/outbox.route.js";
 import cookie from "@fastify/cookie";
 import authPlugin from "./plugins/auth.plugin.js";
 import { createYoga } from "graphql-yoga";
@@ -93,6 +94,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     app.register(wishlistRouter, { prefix: "/api/wishlist" });
     app.register(orderRouter, { prefix: "/api/orders" });
     app.register(paymentRouter, { prefix: "/api/payments" });
+    app.register(outboxRouter, { prefix: "/api/outbox" });
 
     app.get("/health", async () => {
         return {
