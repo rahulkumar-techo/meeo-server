@@ -41,5 +41,6 @@ model Order {
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
+  @@index([userId, status, createdAt])
   @@map("orders")
 }

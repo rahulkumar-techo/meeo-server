@@ -54,6 +54,7 @@ export const productQuerySchema = z.object({
     }, z.boolean().optional().default(false)),
     page: z.coerce.number().int().min(1).optional().default(1),
     limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+    cursor: z.string().trim().optional(),
     sortBy: z.enum(["name", "createdAt", "updatedAt", "status"]).optional().default("createdAt"),
     sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
 });

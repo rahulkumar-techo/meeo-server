@@ -5,6 +5,9 @@ import type { AuthorizationContext } from "@/plugins/auth.plugin.js";
 import { verifyCatalogOwnershipOrPermission } from "../catalog-auth.helper.js";
 import { slugify } from "../utils/slug.util.js";
 import { uploadToImageKit, deleteFromImageKit, getImageKitAuthParams } from "@/lib/imagekit.js";
+import { cacheService } from "@/common/cache/cache.service.js";
+import { CACHE_KEYS, CACHE_TTL } from "@/common/cache/cache.keys.js";
+import { paginateWithCursor } from "@/common/utils/cursorPagination.js";
 import type {
     CreateProductInput,
     UpdateProductInput,
@@ -76,7 +79,7 @@ export class ProductService {
             ...(imagesData.length > 0 ? { images: { create: imagesData } } : {}),
         };
 
-        return prisma.product.create({
+        const created = await prisma.product.create({
             data,
             include: {
                 category: { select: { id: true, name: true, slug: true } },
@@ -84,6 +87,9 @@ export class ProductService {
                 images: { orderBy: { sortOrder: "asc" } },
             },
         });
+
+        await this.invalidateProductCache(created.id, created.slug);
+        return created;
     }
 
     /**
@@ -149,7 +155,7 @@ export class ProductService {
             ...(input.seoDescription !== undefined && { seoDescription: input.seoDescription }),
         };
 
-        return prisma.product.update({
+        const updated = await prisma.product.update({
             where: { id },
             data,
             include: {
@@ -158,6 +164,13 @@ export class ProductService {
                 images: { orderBy: { sortOrder: "asc" } },
             },
         });
+
+        await this.invalidateProductCache(id, existing.slug);
+        if (updated.slug !== existing.slug) {
+            await this.invalidateProductCache(id, updated.slug);
+        }
+
+        return updated;
     }
 
     /**
@@ -178,7 +191,7 @@ export class ProductService {
             PERMISSIONS.PRODUCT_UPDATE,
         );
 
-        return prisma.product.update({
+        const published = await prisma.product.update({
             where: { id },
             data: {
                 status: "ACTIVE",
@@ -190,6 +203,9 @@ export class ProductService {
                 images: { orderBy: { sortOrder: "asc" } },
             },
         });
+
+        await this.invalidateProductCache(id, existing.slug);
+        return published;
     }
 
     /**
@@ -210,7 +226,7 @@ export class ProductService {
             PERMISSIONS.PRODUCT_UPDATE,
         );
 
-        return prisma.product.update({
+        const drafted = await prisma.product.update({
             where: { id },
             data: {
                 status: "DRAFT",
@@ -221,6 +237,9 @@ export class ProductService {
                 images: { orderBy: { sortOrder: "asc" } },
             },
         });
+
+        await this.invalidateProductCache(id, existing.slug);
+        return drafted;
     }
 
     /**
@@ -241,7 +260,7 @@ export class ProductService {
             PERMISSIONS.PRODUCT_UPDATE,
         );
 
-        return prisma.product.update({
+        const archived = await prisma.product.update({
             where: { id },
             data: {
                 status: "ARCHIVED",
@@ -252,6 +271,9 @@ export class ProductService {
                 images: { orderBy: { sortOrder: "asc" } },
             },
         });
+
+        await this.invalidateProductCache(id, existing.slug);
+        return archived;
     }
 
     /**
@@ -277,6 +299,7 @@ export class ProductService {
             await prisma.product.delete({
                 where: { id },
             });
+            await this.invalidateProductCache(id, existing.slug);
             return { id, name: existing.name, deleted: true, permanent: true };
         }
 
@@ -289,67 +312,104 @@ export class ProductService {
             },
         });
 
+        await this.invalidateProductCache(id, existing.slug);
         return { id, name: existing.name, deleted: true, permanent: false };
     }
 
     /**
-     * Retrieves a single product by ID.
+     * Non-blocking cache invalidation helper for product mutations.
+     */
+    async invalidateProductCache(id?: string, ...slugs: (string | undefined)[]) {
+        const promises: Promise<any>[] = [
+            cacheService.invalidatePattern("cache:discovery:*"),
+            cacheService.invalidatePattern("cache:product:list:*"),
+            cacheService.invalidatePattern("cache:search:*"),
+        ];
+
+        if (id) {
+            promises.push(cacheService.del(CACHE_KEYS.PRODUCT.BY_ID(id)));
+        }
+        for (const slug of slugs) {
+            if (slug) {
+                promises.push(cacheService.del(CACHE_KEYS.PRODUCT.BY_SLUG(slug)));
+            }
+        }
+
+        await Promise.allSettled(promises);
+    }
+
+    /**
+     * Retrieves a single product by ID (cached).
      */
     async getProductById(id: string) {
-        const product = await prisma.product.findUnique({
-            where: { id },
-            include: {
-                category: true,
-                brand: true,
-                images: { orderBy: { sortOrder: "asc" } },
-                variants: {
+        const cacheKey = CACHE_KEYS.productById(id);
+        return cacheService.getOrSet(
+            cacheKey,
+            async () => {
+                const product = await prisma.product.findUnique({
+                    where: { id },
                     include: {
-                        attributeValues: {
+                        category: true,
+                        brand: true,
+                        images: { orderBy: { sortOrder: "asc" } },
+                        variants: {
                             include: {
-                                attributeValue: {
-                                    include: { attribute: true },
+                                attributeValues: {
+                                    include: {
+                                        attributeValue: {
+                                            include: { attribute: true },
+                                        },
+                                    },
                                 },
                             },
                         },
                     },
-                },
+                });
+
+                if (!product) {
+                    throw new AppError("Product not found", 404);
+                }
+
+                return product;
             },
-        });
-
-        if (!product) {
-            throw new AppError("Product not found", 404);
-        }
-
-        return product;
+            CACHE_TTL.ONE_HOUR,
+        );
     }
 
     /**
-     * Retrieves a single product by slug.
+     * Retrieves a single product by slug (cached).
      */
     async getProductBySlug(slug: string) {
-        const product = await prisma.product.findUnique({
-            where: { slug },
-            include: {
-                category: true,
-                brand: true,
-                images: { orderBy: { sortOrder: "asc" } },
-                variants: true,
+        const cacheKey = CACHE_KEYS.productBySlug(slug);
+        return cacheService.getOrSet(
+            cacheKey,
+            async () => {
+                const product = await prisma.product.findUnique({
+                    where: { slug },
+                    include: {
+                        category: true,
+                        brand: true,
+                        images: { orderBy: { sortOrder: "asc" } },
+                        variants: true,
+                    },
+                });
+
+                if (!product) {
+                    throw new AppError("Product not found", 404);
+                }
+
+                return product;
             },
-        });
-
-        if (!product) {
-            throw new AppError("Product not found", 404);
-        }
-
-        return product;
+            CACHE_TTL.ONE_HOUR,
+        );
     }
 
     /**
-     * Lists products with multi-attribute filtering, search, pagination, and sorting.
+     * Lists products with multi-attribute filtering, search, pagination (offset or cursor), and sorting.
      */
     async listProducts(query: ProductQueryInput) {
-        const page = query.page;
-        const limit = query.limit;
+        const page = query.page ?? 1;
+        const limit = query.limit ?? 20;
         const skip = (page - 1) * limit;
 
         const where: Prisma.ProductWhereInput = {};
@@ -383,17 +443,47 @@ export class ProductService {
             ];
         }
 
+        // Fast Cursor Pagination
+        if (query.cursor) {
+            const cursorResult = await paginateWithCursor(
+                (args) =>
+                    prisma.product.findMany({
+                        where,
+                        orderBy: { [query.sortBy ?? "createdAt"]: query.sortOrder ?? "desc" },
+                        include: {
+                            category: { select: { id: true, name: true, slug: true } },
+                            brand: { select: { id: true, name: true, slug: true, logoUrl: true } },
+                            images: { orderBy: { sortOrder: "asc" } },
+                            _count: { select: { variants: true } },
+                        },
+                        ...args,
+                    }),
+                limit,
+                query.cursor,
+            );
+
+            return {
+                items: cursorResult.items,
+                pageInfo: cursorResult.pageInfo,
+                total: await prisma.product.count({ where }),
+                page: 1,
+                limit,
+                totalPages: 1,
+            };
+        }
+
         const [total, products] = await Promise.all([
             prisma.product.count({ where }),
             prisma.product.findMany({
                 where,
                 skip,
                 take: limit,
-                orderBy: { [query.sortBy]: query.sortOrder },
+                orderBy: { [query.sortBy ?? "createdAt"]: query.sortOrder ?? "desc" },
                 include: {
                     category: { select: { id: true, name: true, slug: true } },
                     brand: { select: { id: true, name: true, slug: true, logoUrl: true } },
                     images: { orderBy: { sortOrder: "asc" } },
+                    _count: { select: { variants: true } },
                 },
             }),
         ]);
@@ -492,7 +582,7 @@ export class ProductService {
             targetSortOrder = highestSortOrder + 1;
         }
 
-        return prisma.productImage.create({
+        const image = await prisma.productImage.create({
             data: {
                 productId,
                 fileId: uploadResult.fileId || null,
@@ -501,6 +591,9 @@ export class ProductService {
                 sortOrder: targetSortOrder,
             },
         });
+
+        await this.invalidateProductCache(productId, product.slug);
+        return image;
     }
 
     /**
@@ -538,6 +631,7 @@ export class ProductService {
             where: { id: imageId },
         });
 
+        await this.invalidateProductCache(productId, product.slug);
         return { id: imageId, productId, deleted: true };
     }
 
@@ -577,6 +671,7 @@ export class ProductService {
             ),
         );
 
+        await this.invalidateProductCache(productId, product.slug);
         return prisma.productImage.findMany({
             where: { productId },
             orderBy: { sortOrder: "asc" },

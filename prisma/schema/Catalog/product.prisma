@@ -38,6 +38,10 @@ model Product {
   @@index([createdById])
   @@index([status])
   @@index([isFeatured])
+  @@index([status, isFeatured, createdAt])
+  @@index([status, createdAt])
+  @@index([categoryId, status])
+  @@index([brandId, status])
   @@map("products")
 }
 

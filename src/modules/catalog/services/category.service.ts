@@ -6,6 +6,8 @@ import { verifyCatalogOwnershipOrPermission } from "../catalog-auth.helper.js";
 import { slugify } from "../utils/slug.util.js";
 import type { CreateCategoryInput, UpdateCategoryInput, CategoryQueryInput } from "../validations/category.validation.js";
 import type { Prisma, ProductStatus } from "@/generated/prisma/client.js";
+import { cacheService } from "@/common/cache/cache.service.js";
+import { CACHE_KEYS, CACHE_TTL } from "@/common/cache/cache.keys.js";
 
 export interface CategoryTreeNode {
     id: string;
@@ -64,12 +66,15 @@ export class CategoryService {
             createdById: creatorId ?? null,
         };
 
-        return prisma.category.create({
+        const result = await prisma.category.create({
             data,
             include: {
                 parent: { select: { id: true, name: true, slug: true } },
             },
         });
+
+        await this.invalidateCategoryCache();
+        return result;
     }
 
     /**
@@ -138,7 +143,7 @@ export class CategoryService {
             ...(input.parentId !== undefined && { parentId: input.parentId }),
         };
 
-        return prisma.category.update({
+        const updated = await prisma.category.update({
             where: { id },
             data,
             include: {
@@ -146,6 +151,9 @@ export class CategoryService {
                 children: { select: { id: true, name: true, slug: true, status: true, sortOrder: true } },
             },
         });
+
+        await this.invalidateCategoryCache(id, existing.slug, updated.slug);
+        return updated;
     }
 
     /**
@@ -182,7 +190,7 @@ export class CategoryService {
         }
 
         // Reassign child categories to parent (prevent orphaned subtree)
-        return prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx) => {
             if (existing._count.children > 0) {
                 await tx.category.updateMany({
                     where: { parentId: id },
@@ -196,54 +204,69 @@ export class CategoryService {
 
             return { id, name: existing.name, deleted: true };
         });
+
+        await this.invalidateCategoryCache(id, existing.slug);
+        return result;
     }
 
     /**
      * Retrieves a single category by ID with its parent and immediate children.
      */
     async getCategoryById(id: string) {
-        const category = await prisma.category.findUnique({
-            where: { id },
-            include: {
-                parent: true,
-                children: {
-                    orderBy: { sortOrder: "asc" },
-                },
-                _count: {
-                    select: { products: true },
-                },
+        return cacheService.getOrSet(
+            CACHE_KEYS.CATEGORY.BY_ID(id),
+            async () => {
+                const category = await prisma.category.findUnique({
+                    where: { id },
+                    include: {
+                        parent: true,
+                        children: {
+                            orderBy: { sortOrder: "asc" },
+                        },
+                        _count: {
+                            select: { products: true },
+                        },
+                    },
+                });
+
+                if (!category) {
+                    throw new AppError("Category not found", 404);
+                }
+
+                return category;
             },
-        });
-
-        if (!category) {
-            throw new AppError("Category not found", 404);
-        }
-
-        return category;
+            CACHE_TTL.CATEGORY_DETAIL,
+        );
     }
 
     /**
      * Retrieves a single category by slug.
      */
     async getCategoryBySlug(slug: string) {
-        const category = await prisma.category.findUnique({
-            where: { slug },
-            include: {
-                parent: true,
-                children: {
-                    orderBy: { sortOrder: "asc" },
-                },
-                _count: {
-                    select: { products: true },
-                },
+        return cacheService.getOrSet(
+            CACHE_KEYS.CATEGORY.BY_SLUG(slug),
+            async () => {
+                const category = await prisma.category.findUnique({
+                    where: { slug },
+                    include: {
+                        parent: true,
+                        children: {
+                            orderBy: { sortOrder: "asc" },
+                        },
+                        _count: {
+                            select: { products: true },
+                        },
+                    },
+                });
+
+                if (!category) {
+                    throw new AppError("Category not found", 404);
+                }
+
+                return category;
             },
-        });
-
-        if (!category) {
-            throw new AppError("Category not found", 404);
-        }
-
-        return category;
+            CACHE_TTL.CATEGORY_DETAIL,
+        );
     }
 
     /**
@@ -304,34 +327,61 @@ export class CategoryService {
      * Recursively nests children inside parent nodes.
      */
     async getCategoryTree(statusFilter?: ProductStatus): Promise<CategoryTreeNode[]> {
-        const where: Prisma.CategoryWhereInput = statusFilter ? { status: statusFilter } : {};
-        const categories = await prisma.category.findMany({
-            where,
-            orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-        });
+        return cacheService.getOrSet(
+            CACHE_KEYS.CATEGORY.TREE(statusFilter),
+            async () => {
+                const where: Prisma.CategoryWhereInput = statusFilter ? { status: statusFilter } : {};
+                const categories = await prisma.category.findMany({
+                    where,
+                    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+                });
 
-        const categoryMap = new Map<string, CategoryTreeNode>();
-        const rootNodes: CategoryTreeNode[] = [];
+                const categoryMap = new Map<string, CategoryTreeNode>();
+                const rootNodes: CategoryTreeNode[] = [];
 
-        // 1. Initialize all nodes with an empty children array
-        for (const cat of categories) {
-            categoryMap.set(cat.id, {
-                ...cat,
-                children: [],
-            });
+                // 1. Initialize all nodes with an empty children array
+                for (const cat of categories) {
+                    categoryMap.set(cat.id, {
+                        ...cat,
+                        children: [],
+                    });
+                }
+
+                // 2. Link child nodes to their respective parents
+                for (const cat of categories) {
+                    const node = categoryMap.get(cat.id)!;
+                    if (cat.parentId && categoryMap.has(cat.parentId)) {
+                        categoryMap.get(cat.parentId)!.children.push(node);
+                    } else {
+                        rootNodes.push(node);
+                    }
+                }
+
+                return rootNodes;
+            },
+            CACHE_TTL.CATEGORY_TREE,
+        );
+    }
+
+    /**
+     * Invalidates category caches and discovery feeds.
+     */
+    private async invalidateCategoryCache(id?: string, ...slugs: (string | undefined)[]) {
+        const promises: Promise<any>[] = [
+            cacheService.invalidatePattern("cache:category:*"),
+            cacheService.invalidatePattern("cache:discovery:*"),
+        ];
+
+        if (id) {
+            promises.push(cacheService.del(CACHE_KEYS.CATEGORY.BY_ID(id)));
         }
-
-        // 2. Link child nodes to their respective parents
-        for (const cat of categories) {
-            const node = categoryMap.get(cat.id)!;
-            if (cat.parentId && categoryMap.has(cat.parentId)) {
-                categoryMap.get(cat.parentId)!.children.push(node);
-            } else {
-                rootNodes.push(node);
+        for (const slug of slugs) {
+            if (slug) {
+                promises.push(cacheService.del(CACHE_KEYS.CATEGORY.BY_SLUG(slug)));
             }
         }
 
-        return rootNodes;
+        await Promise.allSettled(promises);
     }
 
     /**

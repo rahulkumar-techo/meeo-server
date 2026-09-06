@@ -30,5 +30,6 @@ model ProductVariant {
   attributeValues VariantAttributeValue[]
 
   @@index([productId])
+  @@index([productId, status])
   @@map("product_variants")
 }
