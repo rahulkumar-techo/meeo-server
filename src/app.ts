@@ -14,6 +14,7 @@ import orderRouter from "./modules/orders/routes/order.route.js";
 import paymentRouter from "./modules/payments/routes/payment.route.js";
 import outboxRouter from "./modules/outbox/routes/outbox.route.js";
 import notificationRouter from "./modules/notifications/routes/notification.route.js";
+import couponRouter from "./modules/coupons/routes/coupon.route.js";
 import cookie from "@fastify/cookie";
 import authPlugin from "./plugins/auth.plugin.js";
 import { createYoga } from "graphql-yoga";
@@ -97,6 +98,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     app.register(paymentRouter, { prefix: "/api/payments" });
     app.register(outboxRouter, { prefix: "/api/outbox" });
     app.register(notificationRouter, { prefix: "/api/notifications" });
+    app.register(couponRouter, { prefix: "/api/coupons" });
 
     app.get("/health", async () => {
         return {

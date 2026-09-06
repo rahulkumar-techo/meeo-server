@@ -3,6 +3,7 @@ import { inventoryTags } from "./inventory.js";
 import { cartTags } from "./cartDocs.js";
 import { orderTags } from "./orderDocs.js";
 import { notificationTags } from "./notificationDocs.js";
+import { couponTags } from "./couponDocs.js";
 
 export const paymentTags = [
     {
@@ -41,6 +42,7 @@ export const swaggerTags = [
     ...paymentTags,
     ...outboxTags,
     ...notificationTags,
+    ...couponTags,
 ];
 
 /**

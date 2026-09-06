@@ -33,6 +33,11 @@ export const PERMISSIONS = {
     ROLE_UPDATE: "role:update",
     ROLE_DELETE: "role:delete",
 
+    COUPON_READ: "coupon:read",
+    COUPON_CREATE: "coupon:create",
+    COUPON_UPDATE: "coupon:update",
+    COUPON_DELETE: "coupon:delete",
+
     AUDIT_READ: "audit:read",
     SYSTEM_MANAGE: "system:manage",
 } as const;
