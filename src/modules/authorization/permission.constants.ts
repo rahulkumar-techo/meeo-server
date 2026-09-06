@@ -42,6 +42,8 @@ export const PERMISSIONS = {
     REVIEW_MODERATE: "review:moderate",
     REVIEW_DELETE: "review:delete",
 
+    DASHBOARD_READ: "dashboard:read",
+
     AUDIT_READ: "audit:read",
     SYSTEM_MANAGE: "system:manage",
 } as const;

@@ -17,6 +17,7 @@ import notificationRouter from "./modules/notifications/routes/notification.rout
 import couponRouter from "./modules/coupons/routes/coupon.route.js";
 import reviewRouter from "./modules/reviews/routes/review.route.js";
 import { searchRouter, discoveryRouter } from "./modules/search/routes/search.route.js";
+import dashboardRouter from "./modules/dashboard/routes/dashboard.route.js";
 import cookie from "@fastify/cookie";
 import authPlugin from "./plugins/auth.plugin.js";
 import { createYoga } from "graphql-yoga";
@@ -104,6 +105,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     app.register(reviewRouter, { prefix: "/api/reviews" });
     app.register(searchRouter, { prefix: "/api/search" });
     app.register(discoveryRouter, { prefix: "/api/discovery" });
+    app.register(dashboardRouter, { prefix: "/api/v1/admin/dashboard" });
 
     app.get("/health", async () => {
         return {

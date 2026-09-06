@@ -446,6 +446,7 @@ export const docsDescriptionHtml = `<!DOCTYPE html>
             <a href="#coupons" class="menu-item">🏷️ Coupons & Promotions</a>
             <a href="#reviews" class="menu-item">⭐ Reviews & Ratings</a>
             <a href="#search" class="menu-item">🔍 Search & Discovery</a>
+            <a href="#dashboard" class="menu-item">📊 Admin Dashboard & Analytics</a>
             <a href="#simulation" class="menu-item">🧪 Checkout Simulation</a>
         </aside>
 
@@ -1820,6 +1821,81 @@ Database Transaction (API)
                                 <td><code>/api/discovery/new-arrivals</code></td>
                                 <td><span class="access-badge public">[Public]</span></td>
                                 <td>Retrieves the most recently added active products.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Module: Admin Dashboard & Analytics -->
+            <section id="dashboard">
+                <h2>📊 Admin Dashboard & Operational Analytics</h2>
+                <p class="section-desc">Enterprise command center providing real-time financial indicators, order volume velocity, user base dynamics, low-inventory restocking alerts, payment failure diagnostics, and operational event pipeline telemetry.</p>
+
+                <div class="card-grid">
+                    <div class="card">
+                        <div class="card-icon">📈</div>
+                        <h3>Executive Financial KPIs</h3>
+                        <p>Gross/Net revenue, average order value (AOV), total order status breakdown, coupon discount deductions, and completed refund amounts across flexible time windows.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">👥</div>
+                        <h3>User & Customer Growth</h3>
+                        <p>Total user count breakdown across active, suspended, and blocked statuses, alongside new customer registrations within the selected period.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">⚠️</div>
+                        <h3>Alerts & Diagnostic Health</h3>
+                        <p>Instant low-stock reorder alerts, recent payment failures with gateway reason codes, unfulfilled order backlogs, and outbox DLQ event telemetry.</p>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="route-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Access Level</th>
+                                <th>Purpose & Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/v1/admin/dashboard/overview</code></td>
+                                <td><span class="access-badge admin">[Admin]</span></td>
+                                <td>Returns executive summary KPIs including total orders, gross/net revenue, refunds, active/suspended users, low stock counts, and failed payment metrics.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/v1/admin/dashboard/sales-chart</code></td>
+                                <td><span class="access-badge admin">[Admin]</span></td>
+                                <td>Returns time-series revenue and order counts aggregated by day, week, or month with customizable period presets (<code>7d</code>, <code>30d</code>, <code>90d</code>, <code>1y</code>, <code>custom</code>).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/v1/admin/dashboard/top-products</code></td>
+                                <td><span class="access-badge admin">[Admin]</span></td>
+                                <td>Returns the top-performing products ranked by units sold or revenue generated within the specified timeframe.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/v1/admin/dashboard/low-stock</code></td>
+                                <td><span class="access-badge admin">[Admin]</span></td>
+                                <td>Returns paginated inventory variants where available stock is below the specified threshold (default: 10).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/v1/admin/dashboard/failed-payments</code></td>
+                                <td><span class="access-badge admin">[Admin]</span></td>
+                                <td>Returns recent failed payment transactions complete with gateway provider, error codes, and failure reasons for support triage.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/v1/admin/dashboard/health</code></td>
+                                <td><span class="access-badge admin">[Admin]</span></td>
+                                <td>Returns real-time operational health metrics: unfulfilled orders, pending reviews awaiting moderation, pending outbox events, and dead-letter queue count.</td>
                             </tr>
                         </tbody>
                     </table>
