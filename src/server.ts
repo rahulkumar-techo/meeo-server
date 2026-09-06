@@ -1,5 +1,4 @@
 import { buildApp } from "@/app.js";
-import { startKeepAliveCron } from "@/cron/keep-alive.cron.js";
 
 const start = async (): Promise<void> => {
   const app = await buildApp();
@@ -12,11 +11,9 @@ const start = async (): Promise<void> => {
       port,
       host,
     });
-    const keepAliveTask = startKeepAliveCron(port);
     app.log.info(`Server running on http://${host}:${port}`);
 
     const shutdown = async () => {
-      keepAliveTask.stop();
       await app.close();
     };
 
