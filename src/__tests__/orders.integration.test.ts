@@ -14,6 +14,12 @@ const { orderServiceMock, authPrismaMock } = vi.hoisted(() => ({
         getOrderByNumber: vi.fn(),
         cancelOrder: vi.fn(),
         updateOrderStatus: vi.fn(),
+        confirmOrder: vi.fn(),
+        processOrder: vi.fn(),
+        shipOrder: vi.fn(),
+        deliverOrder: vi.fn(),
+        expireStaleOrders: vi.fn(),
+        getOrderMetrics: vi.fn(),
     },
     authPrismaMock: {
         user: { findUnique: vi.fn() },
@@ -277,5 +283,116 @@ describe("Order HTTP Routes Integration Tests", () => {
             expect.objectContaining({ status: "SHIPPED" }),
             adminId,
         );
+    });
+
+    it("allows admin to confirm order via POST /api/orders/:id/confirm", async () => {
+        const app = await createTestApp();
+        const { token, adminId } = mockAdminUser();
+        const orderId = "a4175ef3-b1d6-4449-9f70-349f7e915570";
+
+        orderServiceMock.confirmOrder.mockResolvedValue({
+            id: orderId,
+            status: "CONFIRMED",
+        });
+
+        const response = await app.inject({
+            method: "POST",
+            url: `/api/orders/${orderId}/confirm`,
+            headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const payload = JSON.parse(response.payload);
+        expect(payload.success).toBe(true);
+        expect(orderServiceMock.confirmOrder).toHaveBeenCalledWith(orderId, adminId);
+    });
+
+    it("allows admin to ship order via POST /api/orders/:id/ship", async () => {
+        const app = await createTestApp();
+        const { token, adminId } = mockAdminUser();
+        const orderId = "a4175ef3-b1d6-4449-9f70-349f7e915570";
+
+        orderServiceMock.shipOrder.mockResolvedValue({
+            id: orderId,
+            status: "SHIPPED",
+            shipment: {
+                carrier: "BlueDart",
+                trackingNumber: "BD999888777",
+            },
+        });
+
+        const response = await app.inject({
+            method: "POST",
+            url: `/api/orders/${orderId}/ship`,
+            headers: { authorization: `Bearer ${token}` },
+            payload: {
+                carrier: "BlueDart",
+                trackingNumber: "BD999888777",
+                trackingUrl: "https://bluedart.com/track/BD999888777",
+            },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const payload = JSON.parse(response.payload);
+        expect(payload.success).toBe(true);
+        expect(orderServiceMock.shipOrder).toHaveBeenCalledWith(
+            orderId,
+            expect.objectContaining({ carrier: "BlueDart", trackingNumber: "BD999888777" }),
+            adminId,
+        );
+    });
+
+    it("allows admin to deliver order via POST /api/orders/:id/deliver", async () => {
+        const app = await createTestApp();
+        const { token, adminId } = mockAdminUser();
+        const orderId = "a4175ef3-b1d6-4449-9f70-349f7e915570";
+
+        orderServiceMock.deliverOrder.mockResolvedValue({
+            id: orderId,
+            status: "DELIVERED",
+        });
+
+        const response = await app.inject({
+            method: "POST",
+            url: `/api/orders/${orderId}/deliver`,
+            headers: { authorization: `Bearer ${token}` },
+            payload: {
+                receivedBy: "Jane Doe",
+                deliveryNotes: "Customer signed for delivery",
+            },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const payload = JSON.parse(response.payload);
+        expect(payload.success).toBe(true);
+        expect(orderServiceMock.deliverOrder).toHaveBeenCalledWith(
+            orderId,
+            expect.objectContaining({ receivedBy: "Jane Doe" }),
+            adminId,
+        );
+    });
+
+    it("fetches order metrics via GET /api/orders/admin/metrics", async () => {
+        const app = await createTestApp();
+        const { token } = mockAdminUser();
+
+        orderServiceMock.getOrderMetrics.mockResolvedValue({
+            totalOrders: 100,
+            countsByStatus: { CONFIRMED: 20, DELIVERED: 80 },
+            fulfilledOrders: 80,
+            activeFulfillmentCount: 20,
+            financials: { totalRevenue: 10000, averageOrderValue: 100, paidOrderCount: 100 },
+        });
+
+        const response = await app.inject({
+            method: "GET",
+            url: "/api/orders/admin/metrics",
+            headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const payload = JSON.parse(response.payload);
+        expect(payload.success).toBe(true);
+        expect(payload.data.totalOrders).toBe(100);
     });
 });

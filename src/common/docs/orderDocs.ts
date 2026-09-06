@@ -1,11 +1,11 @@
 /**
- * Fastify Swagger documentation schemas for Orders & Checkout module.
+ * Fastify Swagger documentation schemas for Orders & Fulfillment module.
  */
 
 export const orderTags = [
     {
-        name: "Orders & Checkout",
-        description: "🛍️ Transactional Checkout: Price & inventory validation, coupon discounts, order creation, item/address snapshots, and idempotency",
+        name: "Orders & Fulfillment",
+        description: "🛍️ Complete Order Lifecycle: Checkout, state machine transitions, warehouse packaging, carrier shipping, delivery, cancellations, expiration sweeps, and analytics metrics",
     },
 ];
 
@@ -91,6 +91,26 @@ export const orderSwaggerSchemas = {
         },
     },
 
+    shipOrder: {
+        type: "object",
+        required: ["carrier", "trackingNumber"],
+        properties: {
+            carrier: { type: "string", description: "Logistics courier / carrier name (e.g. FedEx, DHL, BlueDart)" },
+            trackingNumber: { type: "string", description: "Shipment tracking number / AWB" },
+            trackingUrl: { type: "string", format: "uri", description: "Online tracking URL" },
+            estimatedDeliveryAt: { type: "string", format: "date-time", description: "Estimated delivery timestamp" },
+            notes: { type: "string", description: "Special dispatch notes" },
+        },
+    },
+
+    deliverOrder: {
+        type: "object",
+        properties: {
+            receivedBy: { type: "string", description: "Name of the recipient who acknowledged delivery" },
+            deliveryNotes: { type: "string", description: "Delivery verification notes or proof summary" },
+        },
+    },
+
     cancelOrder: {
         type: "object",
         properties: {
@@ -98,6 +118,21 @@ export const orderSwaggerSchemas = {
                 type: "string",
                 description: "Reason for cancellation",
             },
+        },
+    },
+
+    expireOrders: {
+        type: "object",
+        properties: {
+            olderThanMinutes: { type: "integer", default: 30, minimum: 1, description: "Sweep orders older than N minutes" },
+        },
+    },
+
+    orderMetricsQuery: {
+        type: "object",
+        properties: {
+            startDate: { type: "string", format: "date-time" },
+            endDate: { type: "string", format: "date-time" },
         },
     },
 

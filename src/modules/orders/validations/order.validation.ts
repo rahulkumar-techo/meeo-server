@@ -82,6 +82,28 @@ export const orderNumberParamSchema = z.object({
     orderNumber: z.string().trim().min(1, "Order number is required"),
 });
 
+export const shipOrderSchema = z.object({
+    carrier: z.string().trim().min(1, "Carrier name is required").max(100),
+    trackingNumber: z.string().trim().min(1, "Tracking number is required").max(100),
+    trackingUrl: z.string().url("Invalid tracking URL format").optional(),
+    estimatedDeliveryAt: z.string().datetime().optional(),
+    notes: z.string().trim().max(500).optional(),
+});
+
+export const deliverOrderSchema = z.object({
+    receivedBy: z.string().trim().max(100).optional(),
+    deliveryNotes: z.string().trim().max(500).optional(),
+});
+
+export const expireOrdersSchema = z.object({
+    olderThanMinutes: z.coerce.number().int().positive().default(30),
+});
+
+export const orderMetricsQuerySchema = z.object({
+    startDate: z.string().datetime().optional(),
+    endDate: z.string().datetime().optional(),
+});
+
 export type AddressSnapshotInput = z.infer<typeof addressSnapshotSchema>;
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 export type OrderStatusUpdateInput = z.infer<typeof orderStatusUpdateSchema>;
@@ -89,3 +111,7 @@ export type OrderCancelInput = z.infer<typeof orderCancelSchema>;
 export type OrderQueryInput = z.infer<typeof orderQuerySchema>;
 export type OrderIdParamInput = z.infer<typeof orderIdParamSchema>;
 export type OrderNumberParamInput = z.infer<typeof orderNumberParamSchema>;
+export type ShipOrderInput = z.infer<typeof shipOrderSchema>;
+export type DeliverOrderInput = z.infer<typeof deliverOrderSchema>;
+export type ExpireOrdersInput = z.infer<typeof expireOrdersSchema>;
+export type OrderMetricsQueryInput = z.infer<typeof orderMetricsQuerySchema>;

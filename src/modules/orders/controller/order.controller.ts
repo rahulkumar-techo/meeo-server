@@ -3,11 +3,15 @@ import { sendCreated, sendOk } from "@/common/utils/response.js";
 import { orderService } from "../services/order.service.js";
 import {
     checkoutSchema,
+    deliverOrderSchema,
+    expireOrdersSchema,
     orderCancelSchema,
     orderIdParamSchema,
+    orderMetricsQuerySchema,
     orderNumberParamSchema,
     orderQuerySchema,
     orderStatusUpdateSchema,
+    shipOrderSchema,
     validateCheckoutSchema,
 } from "../validations/order.validation.js";
 
@@ -155,6 +159,102 @@ export class OrderController {
         return sendOk({
             reply,
             message: `Order status updated to ${input.status} successfully`,
+            data: result,
+        });
+    }
+
+    /**
+     * Confirms an order and commits inventory reservations (Admin).
+     */
+    async confirmOrder(request: FastifyRequest, reply: FastifyReply) {
+        const adminId = request.user.id;
+        const { id } = orderIdParamSchema.parse(request.params);
+
+        const result = await orderService.confirmOrder(id, adminId);
+
+        return sendOk({
+            reply,
+            message: "Order confirmed successfully for fulfillment",
+            data: result,
+        });
+    }
+
+    /**
+     * Transitions an order to PROCESSING for warehouse packaging (Admin).
+     */
+    async processOrder(request: FastifyRequest, reply: FastifyReply) {
+        const adminId = request.user.id;
+        const { id } = orderIdParamSchema.parse(request.params);
+
+        const result = await orderService.processOrder(id, adminId);
+
+        return sendOk({
+            reply,
+            message: "Order moved to warehouse processing",
+            data: result,
+        });
+    }
+
+    /**
+     * Ships an order and logs carrier tracking info (Admin).
+     */
+    async shipOrder(request: FastifyRequest, reply: FastifyReply) {
+        const adminId = request.user.id;
+        const { id } = orderIdParamSchema.parse(request.params);
+        const input = shipOrderSchema.parse(request.body);
+
+        const result = await orderService.shipOrder(id, input, adminId);
+
+        return sendOk({
+            reply,
+            message: "Order marked as shipped",
+            data: result,
+        });
+    }
+
+    /**
+     * Marks an order as delivered upon customer delivery confirmation (Admin).
+     */
+    async deliverOrder(request: FastifyRequest, reply: FastifyReply) {
+        const adminId = request.user.id;
+        const { id } = orderIdParamSchema.parse(request.params);
+        const input = deliverOrderSchema.parse(request.body || {});
+
+        const result = await orderService.deliverOrder(id, input, adminId);
+
+        return sendOk({
+            reply,
+            message: "Order marked as delivered successfully",
+            data: result,
+        });
+    }
+
+    /**
+     * Sweeps and expires stale unconfirmed orders and releases stock holds.
+     */
+    async expireStaleOrders(request: FastifyRequest, reply: FastifyReply) {
+        const adminId = request.user?.id || "SYSTEM_EXPIRATION_SWEEPER";
+        const input = expireOrdersSchema.parse(request.body || {});
+
+        const result = await orderService.expireStaleOrders(input.olderThanMinutes, adminId);
+
+        return sendOk({
+            reply,
+            message: `Stale orders sweep completed. Expired ${result.expiredCount} orders.`,
+            data: result,
+        });
+    }
+
+    /**
+     * Retrieves aggregated order metrics for the admin dashboard.
+     */
+    async getOrderMetrics(request: FastifyRequest, reply: FastifyReply) {
+        const query = orderMetricsQuerySchema.parse(request.query || {});
+        const result = await orderService.getOrderMetrics(query.startDate, query.endDate);
+
+        return sendOk({
+            reply,
+            message: "Order metrics retrieved successfully",
             data: result,
         });
     }

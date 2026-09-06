@@ -4,9 +4,42 @@ import { orderInventoryService } from "./orderInventory.service.js";
 import { orderCreationService } from "./orderCreation.service.js";
 import type { OrderStatusUpdateInput } from "../validations/order.validation.js";
 
+/**
+ * Valid order status transitions state machine.
+ */
+export const ALLOWED_ORDER_TRANSITIONS: Record<string, string[]> = {
+    PENDING: ["PAYMENT_PENDING", "CONFIRMED", "CANCELLED", "EXPIRED"],
+    PAYMENT_PENDING: ["CONFIRMED", "PENDING", "CANCELLED", "EXPIRED"],
+    CONFIRMED: ["PROCESSING", "CANCELLED", "REFUNDED"],
+    PROCESSING: ["SHIPPED", "CANCELLED", "REFUNDED"],
+    SHIPPED: ["DELIVERED", "CANCELLED", "REFUNDED"],
+    DELIVERED: ["REFUNDED"],
+    CANCELLED: [],
+    EXPIRED: [],
+    REFUNDED: [],
+};
+
 export class OrderStatusService {
     /**
-     * Updates an order status, writes an audit record in OrderStatusHistory, and releases holds if cancelled.
+     * Validates whether a requested status transition is allowed by the state machine.
+     */
+    validateStatusTransition(previousStatus: string, newStatus: string) {
+        if (previousStatus === newStatus) {
+            return;
+        }
+
+        const allowed = ALLOWED_ORDER_TRANSITIONS[previousStatus] || [];
+        if (!allowed.includes(newStatus)) {
+            const allowedDesc = allowed.length > 0 ? allowed.join(", ") : "None (terminal state)";
+            throw new AppError(
+                `Invalid order status transition from "${previousStatus}" to "${newStatus}". Allowed transitions from "${previousStatus}": [${allowedDesc}]`,
+                400,
+            );
+        }
+    }
+
+    /**
+     * Updates an order status with state machine validation, audit record logging, inventory release/restoration, and outbox event creation.
      */
     async updateOrderStatus(
         orderId: string,
@@ -32,14 +65,17 @@ export class OrderStatusService {
             return orderCreationService.formatOrderResponse(currentOrder);
         }
 
+        // Validate transition against state machine
+        this.validateStatusTransition(previousStatus, newStatus);
+
         await prisma.$transaction(async (tx) => {
-            // Update order status
+            // 1. Update order status
             await tx.order.update({
                 where: { id: orderId },
                 data: { status: newStatus },
             });
 
-            // Write status history audit
+            // 2. Write status history audit
             await tx.orderStatusHistory.create({
                 data: {
                     orderId,
@@ -50,7 +86,7 @@ export class OrderStatusService {
                 },
             });
 
-            // If order transitioned to CANCELLED or EXPIRED, release inventory reservations
+            // 3. If transitioning to CANCELLED or EXPIRED, release inventory reservations
             if (newStatus === "CANCELLED" || newStatus === "EXPIRED") {
                 await orderInventoryService.releaseOrderReservations(
                     tx,
@@ -58,6 +94,24 @@ export class OrderStatusService {
                     input.reason ?? `Order transitioned to ${newStatus}`,
                 );
             }
+
+            // 4. Create Outbox Domain Event
+            await tx.outboxEvent.create({
+                data: {
+                    eventType: `ORDER_${newStatus}`,
+                    aggregateType: "Order",
+                    aggregateId: orderId,
+                    payload: {
+                        orderId,
+                        orderNumber: order.orderNumber,
+                        previousStatus,
+                        newStatus,
+                        changedBy: changedBy ?? null,
+                        reason: input.reason ?? null,
+                        timestamp: new Date().toISOString(),
+                    },
+                },
+            });
         });
 
         const updatedOrder = await prisma.order.findUnique({
@@ -95,10 +149,10 @@ export class OrderStatusService {
             throw new AppError("You are not authorized to cancel this order", 403);
         }
 
-        // Customer can only cancel before fulfillment has begun
-        if (!isAdmin && order.status !== "PENDING" && order.status !== "PAYMENT_PENDING") {
+        // Customer can only cancel before fulfillment has begun (PENDING, PAYMENT_PENDING, CONFIRMED)
+        if (!isAdmin && order.status !== "PENDING" && order.status !== "PAYMENT_PENDING" && order.status !== "CONFIRMED") {
             throw new AppError(
-                `Cannot cancel order with current status "${order.status}". Please contact customer support.`,
+                `Cannot cancel order in "${order.status}" status. Please contact customer support.`,
                 400,
             );
         }

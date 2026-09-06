@@ -1258,16 +1258,52 @@ export const docsDescriptionHtml = `<!DOCTYPE html>
                                 <td>Cancel order and release reserved stock back to available inventory.</td>
                             </tr>
                             <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/orders/:id/confirm</code></td>
+                                <td><span class="access-badge admin">[Admin: order:update]</span></td>
+                                <td>Explicitly confirm order for fulfillment and commit stock holds.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/orders/:id/process</code></td>
+                                <td><span class="access-badge admin">[Admin: order:update]</span></td>
+                                <td>Move confirmed order to PROCESSING for warehouse packaging.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/orders/:id/ship</code></td>
+                                <td><span class="access-badge admin">[Admin: order:update]</span></td>
+                                <td>Mark order as SHIPPED with courier carrier and tracking number.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/orders/:id/deliver</code></td>
+                                <td><span class="access-badge admin">[Admin: order:update]</span></td>
+                                <td>Mark order as DELIVERED upon proof of delivery receipt.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/orders/expire-stale</code></td>
+                                <td><span class="access-badge admin">[Admin: order:update]</span></td>
+                                <td>Sweep abandoned checkout sessions and expire stock holds past TTL window.</td>
+                            </tr>
+                            <tr>
                                 <td><span class="method get">GET</span></td>
                                 <td><code>/api/orders/admin</code></td>
                                 <td><span class="access-badge admin">[Admin: order:read]</span></td>
                                 <td>Admin search and view across all orders in the system.</td>
                             </tr>
                             <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/orders/admin/metrics</code></td>
+                                <td><span class="access-badge admin">[Admin: order:read]</span></td>
+                                <td>Aggregated fulfillment analytics (sales volume, average order value, status breakdown).</td>
+                            </tr>
+                            <tr>
                                 <td><span class="method patch">PATCH</span></td>
                                 <td><code>/api/orders/:id/status</code></td>
                                 <td><span class="access-badge admin">[Admin: order:update]</span></td>
-                                <td>Update order status (e.g. PROCESSING, SHIPPED, DELIVERED) with audit trail.</td>
+                                <td>Update order status with state machine transition checks and audit trail.</td>
                             </tr>
                         </tbody>
                     </table>
