@@ -7,6 +7,7 @@ export const catalogTags = [
     { name: "Catalog - Brands", description: "Brand / Manufacturer management" },
     { name: "Catalog - Products", description: "Product catalog, status lifecycle (Draft, Publish, Archive), and SEO" },
     { name: "Catalog - Images", description: "Product image uploads, ordering, and deletion" },
+    { name: "Catalog - Variants", description: "Product variants, SKU, Barcode, Pricing (Price, Compare-at, Cost), and Stock" },
 ];
 
 export const catalogSchemas = {
@@ -208,5 +209,97 @@ export const catalogSchemas = {
             },
         },
     },
+
+    // ----------------------------------------------------
+    // Product Variant Schemas
+    // ----------------------------------------------------
+    productVariantParams: {
+        type: "object",
+        required: ["productId"],
+        properties: {
+            productId: { type: "string", format: "uuid" },
+        },
+    },
+
+    variantParams: {
+        type: "object",
+        required: ["id"],
+        properties: {
+            id: { type: "string", format: "uuid" },
+        },
+    },
+
+    variantSkuParams: {
+        type: "object",
+        required: ["sku"],
+        properties: {
+            sku: { type: "string" },
+        },
+    },
+
+    createVariant: {
+        type: "object",
+        required: ["sku", "price"],
+        properties: {
+            sku: { type: "string", description: "Unique stock keeping unit code (e.g. TSHIRT-RED-M)" },
+            barcode: { type: ["string", "null"], description: "Optional UPC/EAN/barcode" },
+            price: { type: "number", description: "Current selling price" },
+            compareAtPrice: { type: ["number", "null"], description: "Original strike-through / compare-at price" },
+            costPrice: { type: ["number", "null"], description: "Cost per item for profit margin tracking" },
+            status: { type: "string", enum: ["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"], default: "ACTIVE" },
+            attributeValueIds: {
+                type: "array",
+                items: { type: "string", format: "uuid" },
+                description: "Array of ProductAttributeValue IDs",
+            },
+            initialStock: { type: "integer", default: 0, description: "Initial available inventory quantity" },
+            reorderLevel: { type: ["integer", "null"], description: "Stock reorder notification threshold" },
+        },
+    },
+
+    updateVariant: {
+        type: "object",
+        properties: {
+            sku: { type: "string" },
+            barcode: { type: ["string", "null"] },
+            price: { type: "number" },
+            compareAtPrice: { type: ["number", "null"] },
+            costPrice: { type: ["number", "null"] },
+            status: { type: "string", enum: ["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"] },
+            attributeValueIds: {
+                type: "array",
+                items: { type: "string", format: "uuid" },
+            },
+        },
+    },
+
+    batchCreateVariants: {
+        type: "object",
+        required: ["variants"],
+        properties: {
+            variants: {
+                type: "array",
+                items: {
+                    type: "object",
+                    required: ["sku", "price"],
+                    properties: {
+                        sku: { type: "string" },
+                        barcode: { type: ["string", "null"] },
+                        price: { type: "number" },
+                        compareAtPrice: { type: ["number", "null"] },
+                        costPrice: { type: ["number", "null"] },
+                        status: { type: "string", enum: ["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"], default: "ACTIVE" },
+                        attributeValueIds: {
+                            type: "array",
+                            items: { type: "string", format: "uuid" },
+                        },
+                        initialStock: { type: "integer", default: 0 },
+                        reorderLevel: { type: ["integer", "null"] },
+                    },
+                },
+            },
+        },
+    },
 };
+
 

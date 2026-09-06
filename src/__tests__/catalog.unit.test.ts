@@ -34,6 +34,25 @@ const { prismaMock, imagekitMock } = vi.hoisted(() => ({
             update: vi.fn(),
             delete: vi.fn(),
         },
+        productVariant: {
+            findUnique: vi.fn(),
+            findMany: vi.fn(),
+            create: vi.fn(),
+            update: vi.fn(),
+            delete: vi.fn(),
+            count: vi.fn(),
+        },
+        productAttributeValue: {
+            findMany: vi.fn(),
+        },
+        variantAttributeValue: {
+            createMany: vi.fn(),
+            deleteMany: vi.fn(),
+        },
+        inventory: {
+            create: vi.fn(),
+            update: vi.fn(),
+        },
         $transaction: vi.fn((callback: (tx: unknown) => unknown) => {
             if (typeof callback === "function") {
                 return callback(prismaMock);
@@ -54,6 +73,7 @@ vi.mock("../lib/imagekit.js", () => imagekitMock);
 import { categoryService } from "../modules/catalog/services/category.service.js";
 import { brandService } from "../modules/catalog/services/brand.service.js";
 import { productService } from "../modules/catalog/services/product.service.js";
+import { productVariantService } from "../modules/catalog/services/productVariant.service.js";
 import { verifyCatalogOwnershipOrPermission } from "../modules/catalog/catalog-auth.helper.js";
 import { PERMISSIONS } from "../modules/authorization/permission.constants.js";
 import type { AuthorizationContext } from "../plugins/auth.plugin.js";
@@ -522,5 +542,225 @@ describe("Catalog Services and Authorization Unit Tests", () => {
             expect(auth.signature).toBe("mock-signature");
         });
     });
+
+    // ==========================================
+    // Product Variant Service Tests
+    // ==========================================
+    describe("ProductVariantService", () => {
+        it("creates a product variant with SKU, pricing, and initial stock", async () => {
+            const userContext: AuthorizationContext = {
+                userId: "user-1",
+                id: "user-1",
+                email: "a@a.com",
+                roles: [],
+                permissions: [PERMISSIONS.PRODUCT_UPDATE],
+            };
+
+            prismaMock.product.findUnique.mockResolvedValue({
+                id: "prod-1",
+                createdById: "user-1",
+            });
+
+            prismaMock.productVariant.findUnique.mockResolvedValueOnce(null); // SKU doesn't exist yet
+            prismaMock.productVariant.create.mockResolvedValue({
+                id: "var-1",
+                productId: "prod-1",
+                sku: "PHONE-RED-64",
+                barcode: "123456789012",
+                price: 499.99,
+                compareAtPrice: 599.99,
+                costPrice: 350.00,
+                status: "ACTIVE",
+            });
+            prismaMock.productVariant.findUnique.mockResolvedValueOnce({
+                id: "var-1",
+                productId: "prod-1",
+                sku: "PHONE-RED-64",
+                barcode: "123456789012",
+                price: 499.99,
+                compareAtPrice: 599.99,
+                costPrice: 350.00,
+                status: "ACTIVE",
+                inventory: { availableQuantity: 50 },
+            });
+
+            const result = await productVariantService.createVariant(
+                "prod-1",
+                {
+                    sku: "PHONE-RED-64",
+                    barcode: "123456789012",
+                    price: 499.99,
+                    compareAtPrice: 599.99,
+                    costPrice: 350.00,
+                    status: "ACTIVE",
+                    initialStock: 50,
+                },
+                userContext,
+            );
+
+            expect(result?.sku).toBe("PHONE-RED-64");
+            expect(prismaMock.productVariant.create).toHaveBeenCalled();
+            expect(prismaMock.inventory.create).toHaveBeenCalledWith({
+                data: expect.objectContaining({
+                    variantId: "var-1",
+                    availableQuantity: 50,
+                }),
+            });
+        });
+
+        it("prevents creating variant with duplicate SKU", async () => {
+            const userContext: AuthorizationContext = {
+                userId: "user-1",
+                id: "user-1",
+                email: "a@a.com",
+                roles: [],
+                permissions: [PERMISSIONS.PRODUCT_UPDATE],
+            };
+
+            prismaMock.product.findUnique.mockResolvedValue({
+                id: "prod-1",
+                createdById: "user-1",
+            });
+
+            prismaMock.productVariant.findUnique.mockResolvedValue({
+                id: "var-existing",
+                sku: "PHONE-RED-64",
+            });
+
+            await expect(
+                productVariantService.createVariant(
+                    "prod-1",
+                    {
+                        sku: "PHONE-RED-64",
+                        price: 499.99,
+                    },
+                    userContext,
+                ),
+            ).rejects.toThrow("already exists");
+        });
+
+        it("retrieves variant by SKU code", async () => {
+            prismaMock.productVariant.findUnique.mockResolvedValue({
+                id: "var-1",
+                sku: "PHONE-RED-64",
+                price: 499.99,
+                product: { id: "prod-1", name: "Smartphone" },
+            });
+
+            const variant = await productVariantService.getVariantBySku("phone-red-64");
+            expect(variant.sku).toBe("PHONE-RED-64");
+            expect(prismaMock.productVariant.findUnique).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: { sku: "PHONE-RED-64" },
+                }),
+            );
+        });
+
+        it("updates variant pricing and attributes", async () => {
+            const userContext: AuthorizationContext = {
+                userId: "user-1",
+                id: "user-1",
+                email: "a@a.com",
+                roles: [],
+                permissions: [PERMISSIONS.PRODUCT_UPDATE],
+            };
+
+            prismaMock.productVariant.findUnique.mockResolvedValueOnce({
+                id: "var-1",
+                sku: "PHONE-RED-64",
+                product: { createdById: "user-1" },
+            });
+
+            prismaMock.productVariant.update.mockResolvedValue({
+                id: "var-1",
+                price: 449.99,
+            });
+
+            prismaMock.productVariant.findUnique.mockResolvedValueOnce({
+                id: "var-1",
+                sku: "PHONE-RED-64",
+                price: 449.99,
+            });
+
+            const updated = await productVariantService.updateVariant(
+                "var-1",
+                {
+                    price: 449.99,
+                },
+                userContext,
+            );
+
+            expect(prismaMock.productVariant.update).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: { id: "var-1" },
+                }),
+            );
+            expect(updated?.price).toBe(449.99);
+        });
+
+        it("deletes a variant successfully", async () => {
+            const userContext: AuthorizationContext = {
+                userId: "user-1",
+                id: "user-1",
+                email: "a@a.com",
+                roles: [],
+                permissions: [PERMISSIONS.PRODUCT_DELETE],
+            };
+
+            prismaMock.productVariant.findUnique.mockResolvedValue({
+                id: "var-1",
+                productId: "prod-1",
+                product: { createdById: "user-1" },
+            });
+
+            prismaMock.productVariant.delete.mockResolvedValue({
+                id: "var-1",
+            });
+
+            const res = await productVariantService.deleteVariant("var-1", userContext);
+            expect(res.deleted).toBe(true);
+            expect(prismaMock.productVariant.delete).toHaveBeenCalledWith({
+                where: { id: "var-1" },
+            });
+        });
+
+        it("batch creates multiple variants for a product", async () => {
+            const userContext: AuthorizationContext = {
+                userId: "user-1",
+                id: "user-1",
+                email: "a@a.com",
+                roles: [],
+                permissions: [PERMISSIONS.PRODUCT_UPDATE],
+            };
+
+            prismaMock.product.findUnique.mockResolvedValue({
+                id: "prod-1",
+                createdById: "user-1",
+            });
+
+            prismaMock.productVariant.findMany.mockResolvedValueOnce([]); // No existing duplicates
+            prismaMock.productVariant.create.mockResolvedValueOnce({ id: "var-1" });
+            prismaMock.productVariant.create.mockResolvedValueOnce({ id: "var-2" });
+            prismaMock.productVariant.findMany.mockResolvedValueOnce([
+                { id: "var-1", sku: "TSHIRT-BLK-S", price: 29.99 },
+                { id: "var-2", sku: "TSHIRT-BLK-M", price: 29.99 },
+            ]);
+
+            const res = await productVariantService.batchCreateVariants(
+                "prod-1",
+                {
+                    variants: [
+                        { sku: "TSHIRT-BLK-S", price: 29.99, initialStock: 10 },
+                        { sku: "TSHIRT-BLK-M", price: 29.99, initialStock: 20 },
+                    ],
+                },
+                userContext,
+            );
+
+            expect(res).toHaveLength(2);
+            expect(prismaMock.productVariant.create).toHaveBeenCalledTimes(2);
+        });
+    });
 });
+
 

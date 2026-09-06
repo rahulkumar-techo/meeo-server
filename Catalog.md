@@ -361,6 +361,38 @@ flowchart TD
 
 ---
 
+### F. Product Variants & Pricing Architecture
+
+Product variants represent the actual purchasable SKUs in the e-commerce store with distinct pricing, stock, barcode, and attribute dimensions (e.g. Size, Color).
+
+```mermaid
+flowchart TD
+    subgraph CreateVariant ["Create Product Variant Flow"]
+        V1["POST /api/v1/products/:productId/variants\n{ sku, barcode?, price, compareAtPrice?, costPrice?, status?, attributeValueIds?, initialStock?, reorderLevel? }"]
+        V1 --> V2["Verify product exists & Ownership / product:update"]
+        V2 --> V3["Validate SKU uniqueness globally in DB"]
+        V3 --> V4{"Attribute IDs provided?"}
+        V4 -- "Yes" --> V5["Validate all ProductAttributeValue IDs exist"]
+        V4 -- "No" --> V6["Begin Prisma Transaction"]
+        V5 --> V6
+        V6 --> V7["1. Insert ProductVariant (price, compareAtPrice, costPrice, sku, barcode, status)"]
+        V7 --> V8["2. Insert VariantAttributeValue join records"]
+        V8 --> V9["3. Initialize Inventory record (availableQuantity = initialStock, reorderLevel)"]
+        V9 --> V10["Commit Transaction"]
+        V10 --> V_Done["Return 201 Created with full variant, attributes, and stock"]
+    end
+```
+
+#### Key Pricing & Field Definitions:
+- **`SKU`** (*Stock Keeping Unit*): Unique uppercase identifier (e.g. `TSHIRT-BLK-L`, `IPHONE15-PRO-256-TI`).
+- **`Barcode`** (*UPC / EAN / ISBN*): Optional optical barcode for physical POS scanning and warehouse logistics.
+- **`Price`** (*Selling Price*): The active purchasable price charged to customers.
+- **`Compare-at Price`** (*Original / MSRP Price*): Strikethrough price shown to customers to display discounts (`compareAtPrice >= price`).
+- **`Cost Price`** (*Cost of Goods Sold*): Internal unit cost paid by the merchant for margin and gross profit analytics.
+- **`Inventory / Stock`**: Initial `availableQuantity` and optional `reorderLevel` for low stock alerts.
+
+---
+
 ## 5. API Reference
 
 All routes are mounted under `/api/v1`. In Swagger UI (`/docs`), endpoints are organized into clean collapsible tabs.
@@ -543,6 +575,75 @@ Content-Type: application/json
 
 ---
 
+### Product Variants (`/api/v1/variants` & `/api/v1/products/:productId/variants`) — Tab: `Catalog - Variants`
+
+| Method | Path | Auth / Permission | Description |
+|---|---|---|---|
+| `GET` | `/products/:productId/variants` | Public | List all purchasable variants of a product (with status filter and search) |
+| `POST` | `/products/:productId/variants` | Creator OR `product:update` | Create a new variant (SKU, barcode, price, compare-at, cost, attributes, initial stock) |
+| `POST` | `/products/:productId/variants/batch` | Creator OR `product:update` | Batch create multiple variants in a single transaction |
+| `GET` | `/variants/:id` | Public | Get variant details by UUID (with parent product, attributes, and inventory) |
+| `GET` | `/variants/sku/:sku` | Public | Get variant details by unique SKU code |
+| `PATCH` | `/variants/:id` | Creator OR `product:update` | Update variant pricing, SKU, barcode, status, or attribute associations |
+| `DELETE` | `/variants/:id` | Creator OR `product:delete` | Delete a product variant |
+
+#### Example 1: Create Product Variant Request
+```http
+POST /api/v1/products/product-uuid/variants
+Authorization: Bearer <access-token>
+Content-Type: application/json
+
+{
+  "sku": "TSHIRT-BLK-L",
+  "barcode": "8901234567890",
+  "price": 29.99,
+  "compareAtPrice": 39.99,
+  "costPrice": 12.50,
+  "status": "ACTIVE",
+  "attributeValueIds": [
+    "attribute-value-color-black-uuid",
+    "attribute-value-size-large-uuid"
+  ],
+  "initialStock": 100,
+  "reorderLevel": 15
+}
+```
+
+#### Example 2: Batch Create Product Variants Request
+```http
+POST /api/v1/products/product-uuid/variants/batch
+Authorization: Bearer <access-token>
+Content-Type: application/json
+
+{
+  "variants": [
+    {
+      "sku": "TSHIRT-BLK-S",
+      "price": 29.99,
+      "compareAtPrice": 39.99,
+      "costPrice": 12.50,
+      "initialStock": 50
+    },
+    {
+      "sku": "TSHIRT-BLK-M",
+      "price": 29.99,
+      "compareAtPrice": 39.99,
+      "costPrice": 12.50,
+      "initialStock": 75
+    },
+    {
+      "sku": "TSHIRT-BLK-L",
+      "price": 29.99,
+      "compareAtPrice": 39.99,
+      "costPrice": 12.50,
+      "initialStock": 100
+    }
+  ]
+}
+```
+
+---
+
 ## 6. Testing & Development Workflows
 
 ### Run Automated Tests
@@ -575,3 +676,5 @@ Open **`http://localhost:5000/docs`** in your browser. All catalog endpoints are
 - **`Catalog - Brands`**
 - **`Catalog - Products`**
 - **`Catalog - Images`**
+- **`Catalog - Variants`**
+
