@@ -438,8 +438,8 @@ export const docsDescriptionHtml = `<!DOCTYPE html>
             <a href="#images" class="menu-item">🖼️ Images & ImageKit</a>
             <a href="#inventory" class="menu-item">📊 Inventory & Reservations</a>
             <a href="#cart" class="menu-item">🛒 Cart & Merge</a>
-            <a href="#wishlist" class="menu-item">💖 Wishlist & Saved</a>
             <a href="#orders" class="menu-item">🛍️ Orders & Checkout</a>
+            <a href="#payments" class="menu-item">💳 Payments & Webhooks</a>
             <a href="#simulation" class="menu-item">🧪 Checkout Simulation</a>
         </aside>
 
@@ -1268,6 +1268,69 @@ export const docsDescriptionHtml = `<!DOCTYPE html>
                                 <td><code>/api/orders/:id/status</code></td>
                                 <td><span class="access-badge admin">[Admin: order:update]</span></td>
                                 <td>Update order status (e.g. PROCESSING, SHIPPED, DELIVERED) with audit trail.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Module: Payments & Transactions -->
+            <section id="payments">
+                <h2>💳 Payments, Webhooks & Transactions</h2>
+                <p class="section-desc">Multi-provider payment gateway integration (Mock, Stripe, Razorpay), discrete payment attempts, cryptographic webhook verification, duplicate event deduplication, transactional fulfillment, and full/partial refunds.</p>
+
+                <div class="table-wrap">
+                    <table class="route-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Access Level</th>
+                                <th>Purpose & Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/payments/initialize</code></td>
+                                <td><span class="access-badge user">[User / Public]</span></td>
+                                <td>Initializes payment session with chosen provider (Mock, Stripe, Razorpay) for an order in PENDING status.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/payments/retry</code></td>
+                                <td><span class="access-badge user">[User / Public]</span></td>
+                                <td>Initiates a new incremented payment attempt for an existing pending or failed payment.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/payments/:id</code></td>
+                                <td><span class="access-badge user">[User / Public]</span></td>
+                                <td>Get full payment details including discrete attempts, ledger transactions, and refunds.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/payments/webhook/:provider</code></td>
+                                <td><span class="access-badge public">[Public / Webhook]</span></td>
+                                <td>Asynchronous webhook ingestion. Validates cryptographic signatures, deduplicates events, and runs atomic database transaction (Payment + Order + Inventory Confirmation + Outbox Event).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/payments/refund</code></td>
+                                <td><span class="access-badge admin">[Admin: payment:refund]</span></td>
+                                <td>Issues a full or partial refund for a successful payment, logs REFUND transaction, and updates order status.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/payments/reconcile</code></td>
+                                <td><span class="access-badge admin">[Admin: payment:read]</span></td>
+                                <td>Reconciles local payment status against external gateway to heal delayed or missed webhooks.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/payments/admin/list</code></td>
+                                <td><span class="access-badge admin">[Admin: payment:read]</span></td>
+                                <td>Lists all platform payments with status filters and pagination.</td>
                             </tr>
                         </tbody>
                     </table>

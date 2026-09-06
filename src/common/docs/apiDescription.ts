@@ -3,6 +3,13 @@ import { inventoryTags } from "./inventory.js";
 import { cartTags } from "./cartDocs.js";
 import { orderTags } from "./orderDocs.js";
 
+export const paymentTags = [
+    {
+        name: "Payments & Transactions",
+        description: "💳 Payment Intents, Multi-Provider Adapters (Mock, Stripe, Razorpay), Attempts, Webhooks, Idempotency, Outbox Events, and Full/Partial Refunds",
+    },
+];
+
 /**
  * Cleanly aggregated Swagger tags for all API domains.
  */
@@ -23,6 +30,7 @@ export const swaggerTags = [
     ...inventoryTags,
     ...cartTags,
     ...orderTags,
+    ...paymentTags,
 ];
 
 /**
