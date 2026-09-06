@@ -93,6 +93,8 @@ export const authSchemas = {
         properties: {
             email: { type: "string", format: "email" },
             password: { type: "string", format: "password" },
+            deviceName: { type: "string", maxLength: 100, description: "Friendly device name" },
+            deviceId: { type: "string", maxLength: 255, description: "Stable client device identifier" },
         },
     },
 };

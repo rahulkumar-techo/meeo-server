@@ -124,8 +124,8 @@ class AuthService {
         return { tempOtp };
     }
 
-    async login(payload: AuthLoginOption) {
-        const { email, password } = payload;
+    async login(payload: AuthLoginOption, metadata?: { ipAddress?: string; userAgent?: string }) {
+        const { email, password, deviceName, deviceId } = payload;
 
         // Find user
         const user = await prisma.user.findUnique({
@@ -157,6 +157,10 @@ class AuthService {
             );
         }
 
+        if (user.status !== "ACTIVE") {
+            throw new AppError(`Account is ${user.status.toLowerCase().replaceAll("_", " ")}`, 403);
+        }
+
         // Refresh token expiration
         const expiresAt = new Date(
             Date.now() + 7 * 24 * 60 * 60 * 1000,
@@ -172,13 +176,19 @@ class AuthService {
         });
 
         // Store HASH, never raw token
+        const sessionData = {
+            id: sessionId,
+            userId: user.id,
+            refreshTokenHash: hashToken(refreshToken),
+            ...(deviceName ? { deviceName } : {}),
+            ...(deviceId ? { deviceId } : {}),
+            ...(metadata?.ipAddress ? { ipAddress: metadata.ipAddress } : {}),
+            ...(metadata?.userAgent ? { userAgent: metadata.userAgent } : {}),
+            expiresAt,
+        };
+
         await prisma.userSession.create({
-            data: {
-                id: sessionId,
-                userId: user.id,
-                refreshTokenHash: hashToken(refreshToken),
-                expiresAt,
-            },
+            data: sessionData,
         });
 
         // Generate access token
@@ -307,6 +317,7 @@ class AuthService {
         const accessToken = generateAccessToken({
             userId: payload.userId,
             email: payload.email,
+            sessionId: session.id,
         });
 
         return {
@@ -314,6 +325,52 @@ class AuthService {
             refreshToken: newRefreshToken,
         };
     };
+
+    async logout(sessionId: string) {
+        if (!sessionId) return;
+
+        await prisma.userSession.updateMany({
+            where: { id: sessionId, revokedAt: null },
+            data: { revokedAt: new Date() },
+        });
+    }
+
+    async listSessions(userId: string) {
+        return prisma.userSession.findMany({
+            where: { userId },
+            orderBy: { createdAt: "desc" },
+            select: {
+                id: true,
+                deviceName: true,
+                deviceId: true,
+                ipAddress: true,
+                userAgent: true,
+                expiresAt: true,
+                lastUsedAt: true,
+                revokedAt: true,
+                createdAt: true,
+            },
+        });
+    }
+
+    async revokeSession(userId: string, sessionId: string) {
+        const result = await prisma.userSession.updateMany({
+            where: { id: sessionId, userId, revokedAt: null },
+            data: { revokedAt: new Date() },
+        });
+
+        if (result.count !== 1) throw new AppError("Session not found", 404);
+        return { revoked: true };
+    }
+
+    async revokeAllSessions(userId: string) {
+        const result = await prisma.userSession.updateMany({
+            where: { userId, revokedAt: null },
+            data: { revokedAt: new Date() },
+        });
+
+        return { revoked: result.count };
+    }
 
     async getCurrentUser(userId: string) {
         const user = await prisma.user.findFirst({

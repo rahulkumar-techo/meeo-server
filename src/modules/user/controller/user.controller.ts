@@ -5,10 +5,22 @@ import {
     phoneOtpRequestSchema,
     phoneVerificationSchema,
     profileSchema,
+    adminUserUpdateSchema,
 } from "../user.validation.js";
 import { sendCreated, sendOk } from "@/common/utils/response.js";
 
 class UserController {
+
+    async listUsers(_request: FastifyRequest, reply: FastifyReply) {
+        const result = await userService.listUsers();
+        return sendOk({ reply, message: "Users fetched successfully", data: result });
+    }
+
+    async updateUser(request: FastifyRequest<{ Params: { userId: string } }>, reply: FastifyReply) {
+        const data = adminUserUpdateSchema.parse(request.body);
+        const result = await userService.updateUser(request.params.userId, data);
+        return sendOk({ reply, message: "User updated successfully", data: result });
+    }
 
     /// update profile 
     async updateProfile(request: FastifyRequest, reply: FastifyReply) {

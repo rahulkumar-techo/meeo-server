@@ -16,6 +16,28 @@ const publicAuthRoutes = (app: FastifyInstance) => {
 };
 
 const privateAuthRoutes = (app: FastifyInstance) => {
+    const sessionParams = { type: "object", required: ["sessionId"], properties: { sessionId: { type: "string", format: "uuid" } } };
+
+    app.post('/logout', {
+        preHandler: app.authenticate,
+        schema: {
+            tags: ["Auth"],
+            summary: "Log out",
+            security: [{ bearerAuth: [] }],
+            response: { 200: successResponse(), 401: errorResponse },
+        },
+    }, authController.logout.bind(authController));
+
+    app.get('/sessions', {
+        preHandler: app.authenticate,
+        schema: { tags: ["Auth"], summary: "List current user sessions", security: [{ bearerAuth: [] }], response: { 200: successResponse({ type: "array", items: { type: "object" } }), 401: errorResponse } },
+    }, authController.listSessions.bind(authController));
+
+    app.delete<{ Params: { sessionId: string } }>('/sessions/:sessionId', {
+        preHandler: app.authenticate,
+        schema: { tags: ["Auth"], summary: "Revoke a session", security: [{ bearerAuth: [] }], params: sessionParams, response: { 200: successResponse(), 401: errorResponse, 404: errorResponse } },
+    }, authController.revokeSession.bind(authController));
+
     app.get('/me', {
         preHandler: app.authenticate,
         schema: {

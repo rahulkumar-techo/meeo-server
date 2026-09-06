@@ -24,7 +24,9 @@ export const resetPassword = otpVerification.extend({
 
 export const loginSchema = z.object({
     email: z.string().email("Invalid email address"),
-    password: z.string().trim().min(5, "Password must be at least 5 characters").max(12, "Password cannot exceed 12 characters")
+    password: z.string().trim().min(5, "Password must be at least 5 characters").max(12, "Password cannot exceed 12 characters"),
+    deviceName: z.string().trim().max(100).optional(),
+    deviceId: z.string().trim().max(255).optional(),
 });
 
 

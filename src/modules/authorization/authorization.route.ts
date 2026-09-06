@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { PERMISSIONS } from "./permission.constants.js";
 import { authorizationController } from "./authorization.controller.js";
 import { errorResponse, successResponse } from "@/common/docs/swagger.js";
+import { userController } from "@/modules/user/controller/user.controller.js";
+import { authController } from "@/modules/auth/auth.controller.js";
 
 const roleBody = {
     type: "object",
@@ -85,6 +87,10 @@ const authorizationRouter = (app: FastifyInstance) => {
     app.get("/permissions", { preHandler: app.requirePermission(PERMISSIONS.ROLE_READ), schema: protectedSchema("List permissions", { response: { 200: successResponse({ type: "array", items: { type: "object", properties: { id: { type: "string" }, name: { type: "string" }, description: { type: ["string", "null"] } } } }), ...errors } }) }, authorizationController.listPermissions.bind(authorizationController));
     app.put("/roles/:roleId/permissions", { preHandler: app.requirePermission(PERMISSIONS.ROLE_UPDATE), schema: protectedSchema("Replace role permissions", { params: roleParams, body: permissionAssignmentBody, response: { 200: successResponse(roleResponse), ...errors } }) }, authorizationController.replaceRolePermissions.bind(authorizationController));
     app.put("/users/:userId/roles", { preHandler: app.requirePermission(PERMISSIONS.USER_UPDATE), schema: protectedSchema("Replace user roles", { params: userParams, body: roleAssignmentBody, response: { 200: successResponse({ type: "array", items: { type: "object", properties: { id: { type: "string" }, name: { type: "string" } } } }), ...errors } }) }, authorizationController.replaceUserRoles.bind(authorizationController));
+    app.get("/users", { preHandler: app.requirePermission(PERMISSIONS.USER_READ), schema: protectedSchema("List users", { response: { 200: successResponse({ type: "array", items: { type: "object" } }), ...errors } }) }, userController.listUsers.bind(userController));
+    app.patch<{ Params: { userId: string } }>("/users/:userId", { preHandler: app.requirePermission(PERMISSIONS.USER_UPDATE), schema: protectedSchema("Update a user", { params: userParams, body: { type: "object", minProperties: 1, properties: { firstName: { type: "string", minLength: 1 }, lastName: { type: "string", minLength: 1 }, status: { type: "string", enum: ["ACTIVE", "SUSPENDED", "BLOCKED", "PENDING_VERIFICATION"] } } }, response: { 200: successResponse({ type: "object" }), ...errors } }) }, userController.updateUser.bind(userController));
+    app.get<{ Params: { userId: string } }>("/users/:userId/sessions", { preHandler: app.requirePermission(PERMISSIONS.USER_READ), schema: protectedSchema("List user sessions", { params: userParams, response: { 200: successResponse({ type: "array", items: { type: "object" } }), ...errors } }) }, authController.listUserSessions.bind(authController));
+    app.delete<{ Params: { userId: string; sessionId: string } }>("/users/:userId/sessions/:sessionId", { preHandler: app.requirePermission(PERMISSIONS.USER_UPDATE), schema: protectedSchema("Revoke a user session", { params: { type: "object", required: ["userId", "sessionId"], properties: { userId: { type: "string", format: "uuid" }, sessionId: { type: "string", format: "uuid" } } }, response: { 200: successResponse(), ...errors } }) }, authController.revokeUserSession.bind(authController));
 };
 
 export default authorizationRouter;

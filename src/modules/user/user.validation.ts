@@ -6,6 +6,14 @@ export const profileSchema = z.object({
     lastName: z.string().min(1, "Last name is required"),
 });
 
+export const adminUserUpdateSchema = z.object({
+    firstName: z.string().min(1, "First name is required").optional(),
+    lastName: z.string().min(1, "Last name is required").optional(),
+    status: z.enum(["ACTIVE", "SUSPENDED", "BLOCKED", "PENDING_VERIFICATION"]).optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, {
+    message: "At least one field is required",
+});
+
 export const phoneOtpRequestSchema = z.object({
     phone: z.string().trim().regex(/^\+?[1-9]\d{7,14}$/, "Invalid phone number"),
 });
@@ -61,6 +69,7 @@ export const addressSchema = z.object({
 
 
 export type UserProfilePayload = z.infer<typeof profileSchema>;
+export type AdminUserUpdatePayload = z.infer<typeof adminUserUpdateSchema>;
 export type UserAddressPayload = z.infer<typeof addressSchema>;
 export type PhoneOtpRequestPayload = z.infer<typeof phoneOtpRequestSchema>;
 export type PhoneVerificationPayload = z.infer<typeof phoneVerificationSchema>;

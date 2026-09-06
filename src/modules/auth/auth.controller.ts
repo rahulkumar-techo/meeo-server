@@ -39,7 +39,10 @@ class AuthController {
     ) {
 
         const data = loginSchema.parse(request.body);
-        const result = await authService.login(data);
+        const result = await authService.login(data, {
+            ipAddress: request.ip,
+            ...(request.headers["user-agent"] ? { userAgent: request.headers["user-agent"] } : {}),
+        });
 
         // Store refresh token in HTTP-only cookie
         reply.setCookie("refreshToken", result.refreshToken, refreshTokenCookieOptions,);
@@ -118,6 +121,42 @@ class AuthController {
                 refreshToken: result.refreshToken,
             },
         });
+    }
+
+    async logout(request: FastifyRequest, reply: FastifyReply) {
+        await authService.logout(request.user.sessionId ?? "");
+        reply.clearCookie("refreshToken", refreshTokenCookieOptions);
+
+        return sendOk({
+            reply,
+            message: "Logged out successfully",
+        });
+    }
+
+    async listSessions(request: FastifyRequest, reply: FastifyReply) {
+        return sendOk({
+            reply,
+            message: "Sessions fetched successfully",
+            data: await authService.listSessions(request.user.userId),
+        });
+    }
+
+    async revokeSession(request: FastifyRequest<{ Params: { sessionId: string } }>, reply: FastifyReply) {
+        const result = await authService.revokeSession(request.user.userId, request.params.sessionId);
+        return sendOk({ reply, message: "Session revoked successfully", data: result });
+    }
+
+    async listUserSessions(request: FastifyRequest<{ Params: { userId: string } }>, reply: FastifyReply) {
+        return sendOk({
+            reply,
+            message: "User sessions fetched successfully",
+            data: await authService.listSessions(request.params.userId),
+        });
+    }
+
+    async revokeUserSession(request: FastifyRequest<{ Params: { userId: string; sessionId: string } }>, reply: FastifyReply) {
+        const result = await authService.revokeSession(request.params.userId, request.params.sessionId);
+        return sendOk({ reply, message: "User session revoked successfully", data: result });
     }
 
 

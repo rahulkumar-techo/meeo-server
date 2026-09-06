@@ -4,6 +4,7 @@ import type {
     PhoneVerificationPayload,
     UserAddressPayload,
     UserProfilePayload,
+    AdminUserUpdatePayload,
 } from "../user.validation.js";
 import { AppError } from "@/common/errors/app-error.js";
 import { generateOtp } from "@/common/utils/generateOtp.js";
@@ -13,6 +14,64 @@ import { Keys } from "@/const/keys.js";
 const PHONE_OTP_EXPIRY_SECONDS = 60 * 5;
 
 class UserService {
+
+    async listUsers() {
+        return prisma.user.findMany({
+            where: { deletedAt: null },
+            orderBy: { createdAt: "desc" },
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                emailVerified: true,
+                phoneVerified: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true,
+                roles: { select: { role: { select: { id: true, name: true } } } },
+            },
+        });
+    }
+
+    async updateUser(userId: string, payload: AdminUserUpdatePayload) {
+        const data = {
+            ...(payload.firstName === undefined ? {} : { firstName: payload.firstName }),
+            ...(payload.lastName === undefined ? {} : { lastName: payload.lastName }),
+            ...(payload.status === undefined ? {} : { status: payload.status }),
+        };
+
+        const user = await prisma.user.updateMany({
+            where: { id: userId, deletedAt: null },
+            data,
+        });
+
+        if (user.count !== 1) throw new AppError("User not found", 404);
+
+        if (payload.status === "SUSPENDED" || payload.status === "BLOCKED") {
+            await prisma.userSession.updateMany({
+                where: { userId, revokedAt: null },
+                data: { revokedAt: new Date() },
+            });
+        }
+
+        return prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                emailVerified: true,
+                phoneVerified: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true,
+            },
+        });
+    }
 
     /// validate a phone verification OTP
     private async assertPhoneOtp(userId: string, otp: string) {
