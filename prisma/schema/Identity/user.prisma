@@ -34,8 +34,9 @@ model User {
   wishlist        Wishlist?
   orders          Order[]
   reviews         Review[]
-  notifications   Notification[]
-  idempotencyKeys IdempotencyKey[]
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+  idempotencyKeys        IdempotencyKey[]
 
   createdRefunds    Refund[]    @relation("RefundRequestedBy")
   createdCategories Category[]  @relation("CategoryCreatedBy")

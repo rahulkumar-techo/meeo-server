@@ -1,0 +1,24 @@
+// Stores user notification delivery channels and category preferences.
+model NotificationPreference {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @unique @db.Uuid
+
+  // Channels
+  emailEnabled Boolean @default(true)
+  pushEnabled  Boolean @default(true)
+  inAppEnabled Boolean @default(true)
+
+  // Event Categories
+  orderUpdates   Boolean @default(true)
+  promotions     Boolean @default(true)
+  securityAlerts Boolean @default(true)
+  lowStockAlerts Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
