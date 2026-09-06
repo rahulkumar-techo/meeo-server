@@ -445,6 +445,7 @@ export const docsDescriptionHtml = `<!DOCTYPE html>
             <a href="#notifications" class="menu-item">🔔 Notifications</a>
             <a href="#coupons" class="menu-item">🏷️ Coupons & Promotions</a>
             <a href="#reviews" class="menu-item">⭐ Reviews & Ratings</a>
+            <a href="#search" class="menu-item">🔍 Search & Discovery</a>
             <a href="#simulation" class="menu-item">🧪 Checkout Simulation</a>
         </aside>
 
@@ -1738,6 +1739,87 @@ Database Transaction (API)
                                 <td><code>/api/reviews/admin/reports/:id/resolve</code></td>
                                 <td><span class="access-badge admin">[Admin: review:moderate]</span></td>
                                 <td>Resolves an abuse report and optionally approves, rejects, or permanently deletes the target review.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Module: Search & Discovery -->
+            <section id="search">
+                <h2>🔍 Search & Discovery Engine</h2>
+                <p class="section-desc">High-performance PostgreSQL-powered product discovery engine featuring multi-field text search, recursive category sub-tree resolution, brand & price range filtering, rating thresholds, stock availability toggles, multiple sorting algorithms, autocomplete suggestions, faceted aggregations, featured showcases, and contextual related products recommendations.</p>
+
+                <div class="card-grid">
+                    <div class="card">
+                        <div class="card-icon">⚡</div>
+                        <h3>PostgreSQL Indexed Search</h3>
+                        <p>Multi-field text matching across product names, descriptions, SEO metadata, brand names, category names, and variant SKUs without premature external search engine overhead.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">📁</div>
+                        <h3>Recursive Hierarchy</h3>
+                        <p>Filtering by parent categories automatically searches all descendant subcategories across any arbitrary depth level.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">🎯</div>
+                        <h3>Contextual Recommendations</h3>
+                        <p>Recommends related items on product detail pages by matching common categories, brands, and name tokens while excluding the viewed product.</p>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="route-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Access Level</th>
+                                <th>Purpose & Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/search</code></td>
+                                <td><span class="access-badge public">[Public]</span></td>
+                                <td>Full product search with query, category (id/slug), brand (id/slug), min/max price, min rating, in-stock toggle, sorting (relevance, price_asc, price_desc, newest, rating_desc, popularity), and pagination.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/search/suggestions</code></td>
+                                <td><span class="access-badge public">[Public]</span></td>
+                                <td>Instant autocomplete suggestions returning matching product names, brands with counts, and categories with counts.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/search/facets</code></td>
+                                <td><span class="access-badge public">[Public]</span></td>
+                                <td>Returns contextual faceted aggregation data (available brands with counts, categories with counts, and dynamic price min/max range) for the active search criteria.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/discovery/featured</code></td>
+                                <td><span class="access-badge public">[Public]</span></td>
+                                <td>Retrieves curated spotlight and featured products (<code>isFeatured: true</code>) with starting prices and rating summaries.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/discovery/related/:productId</code></td>
+                                <td><span class="access-badge public">[Public]</span></td>
+                                <td>Recommends related products matching category, brand, and keywords, strictly excluding the specified product ID.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/discovery/trending</code></td>
+                                <td><span class="access-badge public">[Public]</span></td>
+                                <td>Retrieves top-rated and highest-reviewed products across the platform.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/discovery/new-arrivals</code></td>
+                                <td><span class="access-badge public">[Public]</span></td>
+                                <td>Retrieves the most recently added active products.</td>
                             </tr>
                         </tbody>
                     </table>

@@ -5,6 +5,7 @@ import { orderTags } from "./orderDocs.js";
 import { notificationTags } from "./notificationDocs.js";
 import { couponTags } from "./couponDocs.js";
 import { reviewTags } from "./reviewDocs.js";
+import { searchTags } from "./searchDocs.js";
 
 export const paymentTags = [
     {
@@ -45,6 +46,7 @@ export const swaggerTags = [
     ...notificationTags,
     ...couponTags,
     ...reviewTags,
+    ...searchTags,
 ];
 
 /**
