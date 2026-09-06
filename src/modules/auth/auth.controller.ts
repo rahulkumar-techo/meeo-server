@@ -124,7 +124,7 @@ class AuthController {
     }
 
     async logout(request: FastifyRequest, reply: FastifyReply) {
-        await authService.logout(request.user.sessionId ?? "");
+        await authService.logout(request.user.userId, request.user.sessionId ?? "");
         reply.clearCookie("refreshToken", refreshTokenCookieOptions);
 
         return sendOk({

@@ -14,6 +14,7 @@ import redis from "@/lib/redis.js";
 import { Keys } from "@/const/keys.js";
 import { generateAccessToken, generateRefreshToken, hashToken, verifyRefreshToken } from "@/common/utils/token.js";
 import crypto from "crypto";
+import { invalidateAuthContext } from "@/common/utils/auth-cache.js";
 
 class AuthService {
     private async assertOtp(key: string, otp: string) {
@@ -326,13 +327,14 @@ class AuthService {
         };
     };
 
-    async logout(sessionId: string) {
+    async logout(userId: string, sessionId: string) {
         if (!sessionId) return;
 
         await prisma.userSession.updateMany({
             where: { id: sessionId, revokedAt: null },
             data: { revokedAt: new Date() },
         });
+        await invalidateAuthContext(userId, sessionId);
     }
 
     async listSessions(userId: string) {
@@ -360,6 +362,7 @@ class AuthService {
         });
 
         if (result.count !== 1) throw new AppError("Session not found", 404);
+        await invalidateAuthContext(userId, sessionId);
         return { revoked: true };
     }
 
@@ -369,6 +372,7 @@ class AuthService {
             data: { revokedAt: new Date() },
         });
 
+        await invalidateAuthContext(userId);
         return { revoked: result.count };
     }
 

@@ -1,6 +1,7 @@
 import { AppError } from "@/common/errors/app-error.js";
 import { prisma } from "@/lib/prisma.js";
 import { Prisma } from "@/generated/prisma/client.js";
+import { invalidateAuthContext } from "@/common/utils/auth-cache.js";
 
 export type AuditContext = {
     actorId: string;
@@ -102,22 +103,29 @@ class AuthorizationService {
 
     /** Validates and replaces a role's permissions atomically, then audits the change. */
     async replaceRolePermissions(roleId: string, permissionIds: string[], audit: AuditContext) {
-        return prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx) => {
             const role = await tx.role.findUnique({ where: { id: roleId }, include: roleWithPermissions });
             if (!role) throw new AppError("Role not found", 404);
+            const assignedUsers = await tx.userRole.findMany({ where: { roleId }, select: { userId: true } });
             const uniquePermissionIds = [...new Set(permissionIds)];
             const permissions = await tx.permission.findMany({ where: { id: { in: uniquePermissionIds } }, select: { id: true, name: true } });
             if (permissions.length !== uniquePermissionIds.length) throw new AppError("One or more permissions were not found", 404);
             await tx.rolePermission.deleteMany({ where: { roleId } });
             if (uniquePermissionIds.length > 0) await tx.rolePermission.createMany({ data: uniquePermissionIds.map((permissionId) => ({ roleId, permissionId })) });
             await tx.auditLog.create({ data: auditData({ ...audit, action: "PERMISSIONS_ASSIGNED_TO_ROLE", entityType: "Role", entityId: roleId, oldValue: role.permissions.map(({ permission }) => permission.name), newValue: permissions.map(({ name }) => name) }) as never });
-            return tx.role.findUnique({ where: { id: roleId }, include: roleWithPermissions });
+            return {
+                role: await tx.role.findUnique({ where: { id: roleId }, include: roleWithPermissions }),
+                userIds: assignedUsers.map(({ userId }) => userId),
+            };
         });
+
+        await Promise.all(result.userIds.map((userId) => invalidateAuthContext(userId)));
+        return result.role;
     }
 
     /** Validates and replaces a user's roles atomically, then audits the change. */
     async replaceUserRoles(userId: string, roleIds: string[], audit: AuditContext) {
-        return prisma.$transaction(async (tx) => {
+        const roles = await prisma.$transaction(async (tx) => {
             const user = await tx.user.findUnique({ where: { id: userId }, include: { roles: { include: { role: true } } } });
             if (!user) throw new AppError("User not found", 404);
             const uniqueRoleIds = [...new Set(roleIds)];
@@ -128,6 +136,9 @@ class AuthorizationService {
             await tx.auditLog.create({ data: auditData({ ...audit, action: "ROLES_ASSIGNED_TO_USER", entityType: "User", entityId: userId, oldValue: user.roles.map(({ role }) => role.name), newValue: roles.map(({ name }) => name) }) as never });
             return roles;
         });
+
+        await invalidateAuthContext(userId);
+        return roles;
     }
 }
 

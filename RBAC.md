@@ -296,9 +296,59 @@ The user and role must already exist. Otherwise PostgreSQL will reject the forei
 6. A route guard checks the required permission.
 7. Missing authentication returns `401`; missing permission returns `403`.
 
-Permissions are loaded during authentication and are not stored in the JWT. After changing roles or permissions, log in again or issue a new access token.
+Permissions are loaded during authentication and are not stored in the JWT. The server may cache this authentication context in Redis as described below. After changing roles or permissions, log in again or issue a new access token.
 
-## 11. Protect a developer route
+## 11. Authentication context cache
+
+The authentication middleware loads the user's status, roles, and permissions. To avoid querying PostgreSQL on every protected request, the loaded context can be cached in Redis.
+
+### Request flow
+
+1. The server verifies the access token locally.
+2. It checks Redis using the user ID and session ID.
+3. If a valid cached context exists, the request uses its roles and permissions without querying PostgreSQL.
+4. If Redis has no entry, the entry is expired, or the cached session does not match the token, the server queries PostgreSQL.
+5. The fresh database result is stored in Redis for 30 seconds.
+
+The cache stores only authorization context:
+
+```text
+userId
+email
+roles
+permissions
+sessionId
+sessionExpiresAt
+```
+
+It never stores the password or raw refresh token. Session-specific keys prevent one login session from using another session's cached context.
+
+### Redis configuration
+
+Set `REDIS_URL` in Render or another deployment environment to enable the cache:
+
+```text
+REDIS_URL=redis://<host>:<port>
+```
+
+If `REDIS_URL` is missing, authentication continues normally against PostgreSQL. Redis errors also fall back to PostgreSQL, so Redis is a performance optimization and not the source of truth for users, roles, or permissions. The cache is disabled during tests.
+
+### Cache invalidation
+
+The application removes cached contexts when security data changes:
+
+| Event | Cache invalidated |
+| --- | --- |
+| User logout | Current session |
+| Logout from all devices | All sessions for the user |
+| Admin revokes a session | Selected session |
+| User is suspended or blocked | All sessions for the user |
+| User roles change | All sessions for the user |
+| Role permissions change | All users assigned to that role |
+
+The 30-second TTL is a final fallback for changes made directly in SQL. If roles or permissions are edited manually in Neon, allow the cache to expire, log in again, or restart the application before testing the new authorization state.
+
+## 12. Protect a developer route
 
 Use permission constants in route definitions:
 
@@ -326,7 +376,7 @@ preHandler: app.requireAllPermissions([
 
 Use `request.user.id` for ownership checks. RBAC answers whether a user has a capability; it does not replace checking whether the user owns a customer resource.
 
-## 12. Admin API reference
+## 13. Admin API reference
 
 All endpoints require a Bearer access token:
 
@@ -409,7 +459,7 @@ Authorization: Bearer <access-token>
 
 Admins with the listed permissions can inspect or revoke another user's sessions using the admin endpoints. Session responses include device name, device ID, IP address, user-agent, creation time, last-used time, expiry, and revocation time. Refresh tokens are never returned.
 
-## 13. Logout
+## 14. Logout
 
 Logout requires the current access token and revokes the session associated with that token. It also clears the refresh-token cookie:
 

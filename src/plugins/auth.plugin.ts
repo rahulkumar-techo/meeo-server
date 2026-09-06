@@ -2,6 +2,7 @@ import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { AppError } from "@/common/errors/app-error.js";
 import { verifyAccessToken, type TokenPayload } from "@/common/utils/token.js";
+import { getAuthContext, setAuthContext } from "@/common/utils/auth-cache.js";
 import { prisma } from "@/lib/prisma.js";
 import { requireAllPermissions, requireAnyPermission, requirePermission } from "@/modules/authorization/permission.middleware.js";
 
@@ -45,6 +46,18 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 		}
 
 		try {
+			const cachedContext = await getAuthContext(tokenPayload.userId, tokenPayload.sessionId);
+			if (cachedContext) {
+				request.user = {
+					...tokenPayload,
+					id: cachedContext.userId,
+					email: cachedContext.email ?? tokenPayload.email,
+					roles: cachedContext.roles,
+					permissions: cachedContext.permissions,
+				};
+				return;
+			}
+
 			const user = await prisma.user.findUnique({
 				where: { id: tokenPayload.userId },
 				select: {
@@ -70,6 +83,7 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 				throw new AppError("Authentication required", 401);
 			}
 
+			let sessionExpiresAt: Date | undefined;
 			if (tokenPayload.sessionId) {
 				const session = await prisma.userSession.findUnique({
 					where: { id: tokenPayload.sessionId },
@@ -79,12 +93,25 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 				if (!session || session.userId !== user.id || session.revokedAt || session.expiresAt < new Date()) {
 					throw new AppError("Invalid or expired session", 401);
 				}
+
+				sessionExpiresAt = session.expiresAt;
 			}
 
 			const roles = user.roles.map(({ role }) => role.name);
 			const permissions = [...new Set(user.roles.flatMap(({ role }) =>
 				role.permissions.map(({ permission }) => permission.name),
 			))];
+
+			const authContext = {
+				userId: user.id,
+				email: user.email,
+				roles,
+				permissions,
+				...(tokenPayload.sessionId ? { sessionId: tokenPayload.sessionId } : {}),
+				...(sessionExpiresAt ? { sessionExpiresAt: sessionExpiresAt.toISOString() } : {}),
+			};
+
+			await setAuthContext(authContext);
 
 			request.user = {
 				...tokenPayload,

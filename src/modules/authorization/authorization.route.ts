@@ -63,7 +63,7 @@ const authorizationRouter = (app: FastifyInstance) => {
             preHandler: app.requirePermission(PERMISSIONS.ROLE_DELETE),
             schema: protectedSchema("Delete a role", {
                 params: authorizationSchemas.roleParams,
-                response: authorizationResponse(200),
+                response: authorizationResponse(200, authorizationSchemas.deletedResponse),
             }),
         },
         authorizationController.deleteRole.bind(authorizationController),
@@ -73,7 +73,7 @@ const authorizationRouter = (app: FastifyInstance) => {
         {
             preHandler: app.requirePermission(PERMISSIONS.ROLE_READ),
             schema: protectedSchema("List permissions", {
-                response: authorizationListResponse({ type: "object" }),
+                response: authorizationListResponse(authorizationSchemas.permissionResponse),
             }),
         },
         authorizationController.listPermissions.bind(authorizationController),
@@ -97,7 +97,7 @@ const authorizationRouter = (app: FastifyInstance) => {
             schema: protectedSchema("Replace user roles", {
                 params: authorizationSchemas.userParams,
                 body: authorizationSchemas.roleAssignment,
-                response: authorizationResponse(200, { type: "array", items: { type: "object" } }),
+                response: authorizationResponse(200, { type: "array", items: authorizationSchemas.assignedRoleResponse }),
             }),
         },
         authorizationController.replaceUserRoles.bind(authorizationController),
@@ -107,7 +107,7 @@ const authorizationRouter = (app: FastifyInstance) => {
         {
             preHandler: app.requirePermission(PERMISSIONS.USER_READ),
             schema: protectedSchema("List users", {
-                response: authorizationListResponse({ type: "object" }),
+                response: authorizationListResponse(authorizationSchemas.userResponse),
             }),
         },
         userController.listUsers.bind(userController),
@@ -119,7 +119,7 @@ const authorizationRouter = (app: FastifyInstance) => {
             schema: protectedSchema("Update a user", {
                 params: authorizationSchemas.userParams,
                 body: authorizationSchemas.userUpdate,
-                response: authorizationResponse(200, { type: "object" }),
+                response: authorizationResponse(200, authorizationSchemas.userResponse),
             }),
         },
         userController.updateUser.bind(userController),
@@ -130,7 +130,7 @@ const authorizationRouter = (app: FastifyInstance) => {
             preHandler: app.requirePermission(PERMISSIONS.USER_READ),
             schema: protectedSchema("List user sessions", {
                 params: authorizationSchemas.userParams,
-                response: authorizationListResponse({ type: "object" }),
+                response: authorizationListResponse(authorizationSchemas.sessionResponse),
             }),
         },
         authController.listUserSessions.bind(authController),
@@ -141,7 +141,7 @@ const authorizationRouter = (app: FastifyInstance) => {
             preHandler: app.requirePermission(PERMISSIONS.USER_UPDATE),
             schema: protectedSchema("Revoke a user session", {
                 params: authorizationSchemas.sessionParams,
-                response: authorizationResponse(200),
+                response: authorizationResponse(200, authorizationSchemas.revokedResponse),
             }),
         },
         authController.revokeUserSession.bind(authController),

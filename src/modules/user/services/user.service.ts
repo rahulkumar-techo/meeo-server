@@ -10,6 +10,7 @@ import { AppError } from "@/common/errors/app-error.js";
 import { generateOtp } from "@/common/utils/generateOtp.js";
 import redis from "@/lib/redis.js";
 import { Keys } from "@/const/keys.js";
+import { invalidateAuthContext } from "@/common/utils/auth-cache.js";
 
 const PHONE_OTP_EXPIRY_SECONDS = 60 * 5;
 
@@ -55,6 +56,8 @@ class UserService {
                 data: { revokedAt: new Date() },
             });
         }
+
+        await invalidateAuthContext(userId);
 
         return prisma.user.findUnique({
             where: { id: userId },

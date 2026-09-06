@@ -45,6 +45,73 @@ export const authorizationSchemas = {
             },
         },
     },
+    permissionResponse: {
+        type: "object",
+        properties: {
+            id: { type: "string", format: "uuid" },
+            name: { type: "string" },
+            description: { type: ["string", "null"] },
+        },
+    },
+    assignedRoleResponse: {
+        type: "object",
+        properties: {
+            id: { type: "string", format: "uuid" },
+            name: { type: "string" },
+        },
+    },
+    userResponse: {
+        type: "object",
+        properties: {
+            id: { type: "string", format: "uuid" },
+            email: { type: ["string", "null"], format: "email" },
+            firstName: { type: ["string", "null"] },
+            lastName: { type: ["string", "null"] },
+            phone: { type: ["string", "null"] },
+            emailVerified: { type: "boolean" },
+            phoneVerified: { type: "boolean" },
+            status: { type: "string" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+            roles: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        role: {
+                            type: "object",
+                            properties: {
+                                id: { type: "string", format: "uuid" },
+                                name: { type: "string" },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+    sessionResponse: {
+        type: "object",
+        properties: {
+            id: { type: "string", format: "uuid" },
+            deviceName: { type: ["string", "null"] },
+            deviceId: { type: ["string", "null"] },
+            ipAddress: { type: ["string", "null"] },
+            userAgent: { type: ["string", "null"] },
+            expiresAt: { type: "string", format: "date-time" },
+            lastUsedAt: { type: ["string", "null"], format: "date-time" },
+            revokedAt: { type: ["string", "null"], format: "date-time" },
+            createdAt: { type: "string", format: "date-time" },
+        },
+    },
+    deletedResponse: {
+        type: "object",
+        properties: { deleted: { type: "boolean" } },
+    },
+    revokedResponse: {
+        type: "object",
+        properties: { revoked: { type: "boolean" } },
+    },
     permissionAssignment: {
         type: "object",
         required: ["permissionIds"],
