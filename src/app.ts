@@ -33,10 +33,15 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import { apiDescription, swaggerTags } from "./common/docs/apiDescription.js";
 import { docsDescriptionHtml } from "./common/docs/docsDescriptionPage.js";
+import { ulid } from "ulid";
+import { metricsService } from "./common/observability/metrics.service.js";
+import healthRouter, { metricsRouter } from "./modules/health/health.route.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
     const app = Fastify({
         ...preetyLogger,
+        requestIdHeader: "x-request-id",
+        genReqId: (req) => (req.headers["x-request-id"] as string) || `req_${ulid()}`,
         bodyLimit: 1 * 1024 * 1024, // 1MB payload limit
     });
 
@@ -130,6 +135,19 @@ export async function buildApp(): Promise<FastifyInstance> {
     });
     await app.register(authPlugin);
 
+    // Observability hooks: Request ID header attachment and duration measurement
+    app.addHook("onRequest", async (request, reply) => {
+        reply.header("x-request-id", request.id);
+        (request as any).startTime = performance.now();
+    });
+
+    app.addHook("onResponse", async (request, reply) => {
+        const startTime = (request as any).startTime || performance.now();
+        const durationMs = Number((performance.now() - startTime).toFixed(2));
+        const route = request.routeOptions?.url || request.url;
+        metricsService.recordHttpRequest(request.method, route, reply.statusCode, durationMs);
+    });
+
     // Prototype pollution defense & input sanitization hook
     app.addHook("preValidation", async (request) => {
         if (request.body && typeof request.body === "object") {
@@ -181,13 +199,15 @@ export async function buildApp(): Promise<FastifyInstance> {
     app.register(discoveryRouter, { prefix: "/api/discovery" });
     app.register(dashboardRouter, { prefix: "/api/v1/admin/dashboard" });
     app.register(auditLogRouter, { prefix: "/api/v1/admin/audit-logs" });
+    app.register(healthRouter, { prefix: "/health" });
+    app.register(metricsRouter, { prefix: "/metrics" });
 
-    app.get("/health", async () => {
-        return {
+    app.get("/health", async (_req, reply) => {
+        return reply.status(200).send({
             success: true,
             message: "API is running",
             timestamp: new Date().toISOString(),
-        };
+        });
     });
 
     // Lightweight endpoint used by the keep-alive cron and external uptime monitors.

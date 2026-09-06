@@ -29,7 +29,35 @@ const dlqWorker = createDomainEventWorker(
     2,
 );
 
-// 3. Outbox Publisher Poller Loop (Relay)
+// 3. Worker Heartbeat Reporting for Observability
+const WORKER_ID = `worker-${process.pid}-${Date.now().toString(36)}`;
+const HEARTBEAT_INTERVAL_MS = 10000;
+
+const sendHeartbeat = async () => {
+    if (isShuttingDown) return;
+    try {
+        if (redis.status === "ready" || redis.status === "connect") {
+            const heartbeatData = {
+                workerId: WORKER_ID,
+                workerName: "event-worker",
+                status: "running",
+                pid: process.pid,
+                queues: [QUEUE_NAMES.DOMAIN_EVENTS, QUEUE_NAMES.DEAD_LETTER],
+                concurrency: 5,
+                lastHeartbeatAt: new Date().toISOString(),
+                uptimeSeconds: Number(process.uptime().toFixed(1)),
+            };
+            await redis.set(`worker:heartbeat:${WORKER_ID}`, JSON.stringify(heartbeatData), "EX", 30);
+        }
+    } catch (err: any) {
+        // Silently log or ignore transient Redis heartbeat failures
+    }
+};
+
+const heartbeatInterval = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+sendHeartbeat().catch(() => {});
+
+// 4. Outbox Publisher Poller Loop (Relay)
 const POLL_INTERVAL_MS = Number(process.env.OUTBOX_POLL_INTERVAL_MS) || 5000;
 let isPolling = false;
 let isShuttingDown = false;
@@ -55,15 +83,19 @@ const pollInterval = setInterval(async () => {
 console.log(`✅ Workers active on "${QUEUE_NAMES.DOMAIN_EVENTS}" & "${QUEUE_NAMES.DEAD_LETTER}"`);
 console.log(`✅ Outbox poller loop running every ${POLL_INTERVAL_MS}ms`);
 
-// 4. Graceful Shutdown
+// 5. Graceful Shutdown
 async function gracefulShutdown(signal: string) {
     if (isShuttingDown) return;
     isShuttingDown = true;
 
     console.log(`\n🛑 Received ${signal}. Shutting down worker gracefully...`);
     clearInterval(pollInterval);
+    clearInterval(heartbeatInterval);
 
     try {
+        if (redis.status === "ready" || redis.status === "connect") {
+            await redis.del(`worker:heartbeat:${WORKER_ID}`);
+        }
         await Promise.allSettled([
             domainWorker.close(),
             dlqWorker.close(),

@@ -1,8 +1,8 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { AppError } from "./app-error.js";
 import { Prisma } from "@/generated/prisma/client.js";
-import { sendError } from "../utils/response.js";
 import { ZodError } from "zod";
+import { errorTracker } from "@/common/observability/errorTracker.js";
 
 type ValidationError = NonNullable<FastifyError["validation"]>[number];
 
@@ -11,7 +11,7 @@ export const errorHandler = (
     request: FastifyRequest,
     reply: FastifyReply,
 ) => {
-    request.log.error(error);
+    const requestId = request.id || (request.headers["x-request-id"] as string | undefined);
 
     // Zod validation errors
     if (error instanceof ZodError || (error && typeof error === "object" && "name" in error && error.name === "ZodError")) {
@@ -19,6 +19,7 @@ export const errorHandler = (
         return reply.status(400).send({
             success: false,
             message: "Validation failed",
+            requestId,
             errors: zodError.issues?.map((err) => ({
                 field: err.path.join("."),
                 message: err.message,
@@ -28,10 +29,10 @@ export const errorHandler = (
 
     // Custom application errors
     if (error instanceof AppError) {
-        return sendError({
-            reply,
-            statusCode: error.statusCode,
+        return reply.status(error.statusCode).send({
+            success: false,
             message: error.message,
+            requestId,
         });
     }
 
@@ -43,6 +44,7 @@ export const errorHandler = (
         return reply.status(409).send({
             success: false,
             message: "A record with this value already exists",
+            requestId,
         });
     }
 
@@ -54,6 +56,7 @@ export const errorHandler = (
         return reply.status(404).send({
             success: false,
             message: "Record not found",
+            requestId,
         });
     }
 
@@ -62,6 +65,7 @@ export const errorHandler = (
         return reply.status(400).send({
             success: false,
             message: "Validation failed",
+            requestId,
             errors: error.validation.map((item: ValidationError) => ({
                 field: item.instancePath,
                 message: item.message,
@@ -74,6 +78,7 @@ export const errorHandler = (
         return reply.status(413).send({
             success: false,
             message: "Request payload too large. Maximum allowed size exceeded.",
+            requestId,
         });
     }
 
@@ -82,12 +87,23 @@ export const errorHandler = (
         return reply.status(429).send({
             success: false,
             message: error.message || "Rate limit exceeded. Please try again later.",
+            requestId,
         });
     }
+
+    // Capture uncaught 500 exceptions in ErrorTracker
+    errorTracker.captureException(error, {
+        requestId,
+        url: request.url,
+        method: request.method,
+        ip: request.ip,
+        userAgent: request.headers["user-agent"],
+    });
 
     // Unknown server errors
     return reply.status(500).send({
         success: false,
         message: "Internal server error",
+        requestId,
     });
 };
