@@ -7,6 +7,7 @@ import authRouter from "./modules/auth/auth.route.js";
 import userRouter from "./modules/user/user.route.js";
 import authorizationRouter from "./modules/authorization/authorization.route.js";
 import catalogRouter from "./modules/catalog/routes/catalog.route.js";
+import inventoryRouter from "./modules/inventory/routes/inventory.route.js";
 import cookie from "@fastify/cookie";
 import authPlugin from "./plugins/auth.plugin.js";
 import { createYoga } from "graphql-yoga";
@@ -16,7 +17,8 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
-import { catalogTags } from "./common/docs/catalog.js";
+import { apiDescription, swaggerTags } from "./common/docs/apiDescription.js";
+import { docsDescriptionHtml } from "./common/docs/docsDescriptionPage.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
     const app = Fastify(preetyLogger);
@@ -25,35 +27,10 @@ export async function buildApp(): Promise<FastifyInstance> {
         openapi: {
             info: {
                 title: "E-Commerce REST API",
-                description: `
-## 🛒 Complete E-Commerce Backend API Documentation
-
-### 🔐 Access Control & Authorization Model
-
-This API utilizes a **Role-Based Access Control (RBAC)** architecture combined with **Creator Ownership**:
-
-| Role / Access Level | Summary & Rules |
-|---|---|
-| **🌐 [Public]** | Unauthenticated access. Can view published catalog, active products, category trees, and login/register. |
-| **👤 [Authenticated User]** | Requires valid \`Bearer <JWT>\`. Can manage their own profile, addresses, sessions, and orders. |
-| **🛡️ [Creator OR Admin]** | Resource creator (\`createdById == user.id\`) OR staff possessing the required permission (e.g. \`product:update\`, \`category:delete\`). |
-| **👑 [Admin / Staff]** | Requires explicit RBAC permissions (e.g. \`role:create\`, \`user:update\`, \`product:create\`). |
-| **⚡ [Super Admin]** | Possesses \`system:manage\` permission or \`SUPER_ADMIN\` role. Automatically bypasses all permission and ownership constraints. |
-
----
-
-### 🔑 Authentication Methods
-- **Bearer JWT**: Pass in header \`Authorization: Bearer <accessToken>\` for all protected endpoints.
-- **Refresh Cookie**: Handled automatically via HttpOnly cookie \`refreshToken\` on \`/api/auth/refresh\`.
-                `.trim(),
+                description: apiDescription,
                 version: "1.0.0",
             },
-            tags: [
-                { name: "Auth", description: "🔐 Authentication, OTP Verification, Password Reset, and Session Management" },
-                { name: "User", description: "👤 Authenticated User Profile, Saved Addresses, and Phone Verification" },
-                { name: "Authorization", description: "👑 Admin RBAC: Roles, Permissions, User Role Assignments, and Session Revocation" },
-                ...catalogTags,
-            ],
+            tags: swaggerTags,
             components: {
                 securitySchemes: {
                     bearerAuth: {
@@ -81,6 +58,11 @@ This API utilizes a **Role-Based Access Control (RBAC)** architecture combined w
         },
     });
 
+    // Dedicated Interactive Documentation Manual Page
+    app.get("/docs/description", async (_request, reply) => {
+        return reply.type("text/html").send(docsDescriptionHtml);
+    });
+
     app.register(cors, { 
         origin: true 
     });
@@ -102,6 +84,7 @@ This API utilizes a **Role-Based Access Control (RBAC)** architecture combined w
     app.register(userRouter, { prefix: "/api/user" });
     app.register(authorizationRouter, { prefix: "/api/v1/admin" });
     app.register(catalogRouter, { prefix: "/api/v1" });
+    app.register(inventoryRouter, { prefix: "/api/inventory" });
 
     app.get("/health", async () => {
         return {

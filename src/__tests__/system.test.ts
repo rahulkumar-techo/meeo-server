@@ -62,6 +62,16 @@ describe("authentication and user system flow", () => {
         expect(response.json()).toMatchObject({ success: true, message: "API is running" });
     });
 
+    it("serves the interactive documentation manual page at /docs/description", async () => {
+        const response = await app.inject({ method: "GET", url: "/docs/description" });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.headers["content-type"]).toContain("text/html");
+        expect(response.body).toContain("Enterprise E-Commerce API Manual");
+        expect(response.body).toContain("/api/auth");
+        expect(response.body).toContain("/api/inventory");
+    });
+
     it("retrieves the current user with a dummy JWT and no real API call", async () => {
         const token = generateAccessToken({ userId: "user-001", email: "ada@example.test" });
         const response = await app.inject({
