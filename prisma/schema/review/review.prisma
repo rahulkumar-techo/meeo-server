@@ -10,17 +10,27 @@ model Review {
 
   title   String?
   content String?
+  images  String[] @default([])
+
+  isVerifiedPurchase Boolean @default(false)
 
   status ReviewStatus @default(PENDING)
+
+  moderatedBy    String?   @db.Uuid
+  moderatedAt    DateTime?
+  moderationNote String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id])
+  user    User           @relation(fields: [userId], references: [id])
+  product Product        @relation(fields: [productId], references: [id])
+  reports ReviewReport[]
 
-  product Product @relation(fields: [productId], references: [id])
-
-  @@index([productId])
+  @@unique([userId, productId])
+  @@index([productId, status])
   @@index([userId])
+  @@index([rating])
+  @@index([status])
   @@map("reviews")
 }

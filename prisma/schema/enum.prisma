@@ -122,6 +122,22 @@ enum ReviewStatus {
   REJECTED
 }
 
+enum ReviewReportReason {
+  SPAM
+  HARASSMENT
+  INAPPROPRIATE
+  FAKE_REVIEW
+  OFF_TOPIC
+  OTHER
+}
+
+enum ReviewReportStatus {
+  PENDING
+  REVIEWED
+  DISMISSED
+  ACTIONED
+}
+
 enum IdempotencyStatus {
   PROCESSING
   COMPLETED

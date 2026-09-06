@@ -34,6 +34,7 @@ model User {
   wishlist        Wishlist?
   orders          Order[]
   reviews         Review[]
+  reviewReports   ReviewReport[] @relation("UserReviewReports")
   notifications          Notification[]
   notificationPreference NotificationPreference?
   idempotencyKeys        IdempotencyKey[]

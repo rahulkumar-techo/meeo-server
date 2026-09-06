@@ -1,0 +1,28 @@
+// Represents a user report on an abusive or fraudulent product review.
+model ReviewReport {
+  id String @id @default(uuid()) @db.Uuid
+
+  reviewId String @db.Uuid
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  reporterId String @db.Uuid
+  reporter   User   @relation("UserReviewReports", fields: [reporterId], references: [id])
+
+  reason  ReviewReportReason
+  details String?
+
+  status ReviewReportStatus @default(PENDING)
+
+  resolvedBy     String?   @db.Uuid
+  resolvedAt     DateTime?
+  resolutionNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([reviewId, reporterId])
+  @@index([reviewId])
+  @@index([reporterId])
+  @@index([status])
+  @@map("review_reports")
+}

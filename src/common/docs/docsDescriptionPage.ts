@@ -438,8 +438,13 @@ export const docsDescriptionHtml = `<!DOCTYPE html>
             <a href="#images" class="menu-item">🖼️ Images & ImageKit</a>
             <a href="#inventory" class="menu-item">📊 Inventory & Reservations</a>
             <a href="#cart" class="menu-item">🛒 Cart & Merge</a>
+            <a href="#wishlist" class="menu-item">💖 Wishlist</a>
             <a href="#orders" class="menu-item">🛍️ Orders & Checkout</a>
             <a href="#payments" class="menu-item">💳 Payments & Webhooks</a>
+            <a href="#outbox" class="menu-item">⚡ Transactional Outbox</a>
+            <a href="#notifications" class="menu-item">🔔 Notifications</a>
+            <a href="#coupons" class="menu-item">🏷️ Coupons & Promotions</a>
+            <a href="#reviews" class="menu-item">⭐ Reviews & Ratings</a>
             <a href="#simulation" class="menu-item">🧪 Checkout Simulation</a>
         </aside>
 
@@ -1367,6 +1372,372 @@ export const docsDescriptionHtml = `<!DOCTYPE html>
                                 <td><code>/api/payments/admin/list</code></td>
                                 <td><span class="access-badge admin">[Admin: payment:read]</span></td>
                                 <td>Lists all platform payments with status filters and pagination.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Module: Transactional Outbox & Events -->
+            <section id="outbox">
+                <h2>⚡ Transactional Outbox & Event System</h2>
+                <p class="section-desc">Reliable asynchronous event delivery architecture utilizing the Transactional Outbox Pattern, BullMQ background queues, pessimistic publisher locking, exponential backoff retries, dead-letter queue (DLQ) handling, and consumer idempotency.</p>
+
+                <div class="diagram-box">
+Database Transaction (API)
+ ├── 1. Mutate Business Records (Orders, Payments, Inventory)
+ └── 2. Insert OutboxEvent (Status: PENDING)
+          │
+          ▼
+   Outbox Publisher (Background Cron / Sweep)
+   Claims batch with publisher lock UUID & sets status to PROCESSING
+          │
+          ▼
+   BullMQ Queue (Redis Stream)
+          │
+          ▼
+   Worker Consumers (Idempotent execution via ProcessedEvent table)
+   ├── Success ──► Mark OutboxEvent COMPLETED
+   └── Failure ──► Exponential Backoff Retry (Max Attempts ──► FAILED / DLQ)
+                </div>
+
+                <div class="table-wrap">
+                    <table class="route-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Access Level</th>
+                                <th>Purpose & Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/outbox/publish-now</code></td>
+                                <td><span class="access-badge admin">[Admin: system:manage]</span></td>
+                                <td>Manually triggers an immediate outbox sweep and publishes pending events to BullMQ.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/outbox/recover-stale</code></td>
+                                <td><span class="access-badge admin">[Admin: system:manage]</span></td>
+                                <td>Recovers stale events stuck in PROCESSING due to publisher crashes by unlocking them.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/outbox/events</code></td>
+                                <td><span class="access-badge admin">[Admin: audit:read]</span></td>
+                                <td>Lists all outbox events with status (PENDING, PROCESSING, PUBLISHED, FAILED), topic, and date filters.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/outbox/events/:id</code></td>
+                                <td><span class="access-badge admin">[Admin: audit:read]</span></td>
+                                <td>Retrieves detailed outbox event record including JSON payload, error logs, and retry attempts.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/outbox/events/:id/retry</code></td>
+                                <td><span class="access-badge admin">[Admin: system:manage]</span></td>
+                                <td>Forces an immediate manual retry for a failed or dead-lettered outbox event.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/outbox/processed</code></td>
+                                <td><span class="access-badge admin">[Admin: audit:read]</span></td>
+                                <td>Lists consumer idempotency logs from the ProcessedEvent ledger.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/outbox/metrics</code></td>
+                                <td><span class="access-badge admin">[Admin: audit:read]</span></td>
+                                <td>Aggregates real-time event pipeline health, queue sizes, failure counts, and retry throughput.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Module: Notifications -->
+            <section id="notifications">
+                <h2>🔔 Notifications & Multi-Channel Dispatch</h2>
+                <p class="section-desc">Event-driven multi-channel notifications (In-App, Email, Push) triggered asynchronously via Outbox consumers. Supports dynamic template rendering, customizable user preferences, unread badge counters, and background delivery retries.</p>
+
+                <div class="table-wrap">
+                    <table class="route-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Access Level</th>
+                                <th>Purpose & Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/notifications</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Lists user's in-app notifications with unread counter, channel filtering, and pagination.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method patch">PATCH</span></td>
+                                <td><code>/api/notifications/:id/read</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Marks a single notification as read.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/notifications/mark-all-read</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Marks all pending notifications as read in bulk for the current user.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/notifications/preferences</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Retrieves user's multi-channel notification preferences (Email, Push, In-App).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method put">PUT</span></td>
+                                <td><code>/api/notifications/preferences</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Updates notification preferences for order updates, promotional alerts, and stock changes.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/notifications/admin/send</code></td>
+                                <td><span class="access-badge admin">[Admin: system:manage]</span></td>
+                                <td>Allows administrators to manually dispatch system broadcasts or user notifications.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Module: Coupons & Promotions -->
+            <section id="coupons">
+                <h2>🏷️ Coupons & Promotional Discounts</h2>
+                <p class="section-desc">Enterprise promotional discounting engine supporting percentage discounts with maximum dollar caps, fixed monetary deductions, free shipping benefits, minimum order thresholds, date expiration, global usage limits, per-customer redemption limits, and immutable order usage tracking.</p>
+
+                <div class="card-grid">
+                    <div class="card">
+                        <div class="card-icon">🏷️</div>
+                        <h3>Flexible Discount Types</h3>
+                        <p>Configure <code>PERCENTAGE</code> (with optional <code>maximumDiscountAmount</code> cap), <code>FIXED_AMOUNT</code>, or <code>FREE_SHIPPING</code> discounts.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">🛑</div>
+                        <h3>Usage & Threshold Guardrails</h3>
+                        <p>Enforce minimum order subtotals, global lifetime redemption caps, and per-user redemption limits to eliminate discount abuse.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">📊</div>
+                        <h3>Promotional Analytics</h3>
+                        <p>Track gross discount dollars distributed, total redemption volume, active promotion performance, and top redeemed coupons.</p>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="route-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Access Level</th>
+                                <th>Purpose & Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/coupons/validate</code></td>
+                                <td><span class="access-badge public">[Public / User]</span></td>
+                                <td>Customer preview: validates coupon code, checks rules & limits, and calculates exact discount amount and free shipping benefits for a subtotal.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/coupons/my-history</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Retrieves redemption history of all promotional coupons applied by the authenticated user across past orders.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/coupons</code></td>
+                                <td><span class="access-badge admin">[Admin: coupon:read]</span></td>
+                                <td>Lists promotional coupons with code search, discount type filter, status filter, and pagination.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/coupons/metrics</code></td>
+                                <td><span class="access-badge admin">[Admin: coupon:read]</span></td>
+                                <td>Retrieves promotion analytics: total coupons, active/inactive counts, total discount dollars granted, and top redeemed coupons.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/coupons/:id</code></td>
+                                <td><span class="access-badge admin">[Admin: coupon:read]</span></td>
+                                <td>Retrieves full configuration details and recent redemption statistics for a coupon.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/coupons</code></td>
+                                <td><span class="access-badge admin">[Admin: coupon:create]</span></td>
+                                <td>Creates a new coupon with discount strategy, minimum order threshold, maximum discount cap, and global/per-user limits.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method put">PUT</span></td>
+                                <td><code>/api/coupons/:id</code></td>
+                                <td><span class="access-badge admin">[Admin: coupon:update]</span></td>
+                                <td>Updates discount rules, limits, or validity dates for an existing coupon.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method delete">DELETE</span></td>
+                                <td><code>/api/coupons/:id</code></td>
+                                <td><span class="access-badge admin">[Admin: coupon:delete]</span></td>
+                                <td>Permanently deletes unused coupons or deactivates coupons with existing order usages to preserve financial audit integrity.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method patch">PATCH</span></td>
+                                <td><code>/api/coupons/:id/status</code></td>
+                                <td><span class="access-badge admin">[Admin: coupon:update]</span></td>
+                                <td>Quickly toggles coupon status between ACTIVE, INACTIVE, and EXPIRED.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/coupons/:id/usages</code></td>
+                                <td><span class="access-badge admin">[Admin: coupon:read]</span></td>
+                                <td>Lists all order redemption records and audit details for a specific coupon.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Module: Reviews & Ratings -->
+            <section id="reviews">
+                <h2>⭐ Reviews, Ratings & Moderation</h2>
+                <p class="section-desc">Authentic customer product feedback ecosystem featuring 1–5 star ratings, photo attachments, automatic Verified Purchase badge verification against completed orders, review moderation state machine (PENDING, APPROVED, REJECTED), bulk moderation, star rating breakdown analytics, and spam/abuse reporting with administrative resolution.</p>
+
+                <div class="card-grid">
+                    <div class="card">
+                        <div class="card-icon">🛡️</div>
+                        <h3>Verified Purchase Badge</h3>
+                        <p>Reviews submitted by customers with paid/completed orders for that product automatically earn an authentic <code>isVerifiedPurchase: true</code> badge.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">⚖️</div>
+                        <h3>Moderation State Machine</h3>
+                        <p>New and edited reviews transition to <code>PENDING</code> until approved by moderators. Only <code>APPROVED</code> reviews appear in public storefront feeds.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">🚨</div>
+                        <h3>Abuse & Spam Reporting</h3>
+                        <p>Shoppers can flag fake reviews, spam, or harassment. Administrators can review reports and directly approve, reject, or delete offending reviews.</p>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="route-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Access Level</th>
+                                <th>Purpose & Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/reviews/products/:productId</code></td>
+                                <td><span class="access-badge public">[Public]</span></td>
+                                <td>Public feed: lists approved reviews, customer photos, verified badges, pagination, and star distribution summary.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/reviews/products/:productId/summary</code></td>
+                                <td><span class="access-badge public">[Public]</span></td>
+                                <td>Public product rating summary: average rating score, total review count, verified count, and 1 to 5 star distribution breakdown.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/reviews/:id</code></td>
+                                <td><span class="access-badge public">[Public]</span></td>
+                                <td>Retrieves single review details by ID.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/reviews</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Submits a 1–5 star rating, optional title, text, and photo URLs. Automatically detects verified purchase status and enters moderation queue.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method put">PUT</span></td>
+                                <td><code>/api/reviews/:id</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Updates review content or rating. Automatically resets status to PENDING for moderation re-check.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method delete">DELETE</span></td>
+                                <td><code>/api/reviews/:id</code></td>
+                                <td><span class="access-badge user">[User / Admin]</span></td>
+                                <td>Deletes a review. Review authors can delete their own reviews; Admins can delete any review.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/reviews/my-reviews</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Retrieves all reviews submitted by the authenticated customer with approval statuses.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/reviews/:id/report</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Flags a review for spam, harassment, fake content, or inappropriate behavior to alert administrators.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/reviews/admin/queue</code></td>
+                                <td><span class="access-badge admin">[Admin: review:moderate]</span></td>
+                                <td>Lists reviews currently waiting in the moderation queue (status: PENDING).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/reviews/admin/all</code></td>
+                                <td><span class="access-badge admin">[Admin: review:read]</span></td>
+                                <td>Lists all platform reviews with full status filtering (PENDING, APPROVED, REJECTED), rating filters, and search.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method patch">PATCH</span></td>
+                                <td><code>/api/reviews/admin/:id/moderate</code></td>
+                                <td><span class="access-badge admin">[Admin: review:moderate]</span></td>
+                                <td>Moderates a single review to APPROVED or REJECTED with an admin audit note.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/reviews/admin/bulk-moderate</code></td>
+                                <td><span class="access-badge admin">[Admin: review:moderate]</span></td>
+                                <td>Bulk approves or rejects multiple reviews simultaneously in a single transaction.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/reviews/admin/reports</code></td>
+                                <td><span class="access-badge admin">[Admin: review:moderate]</span></td>
+                                <td>Lists all user-submitted abuse/spam reports with status and reason filters.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/reviews/admin/reports/:id</code></td>
+                                <td><span class="access-badge admin">[Admin: review:moderate]</span></td>
+                                <td>Retrieves full abuse report details including reporter profile, flagged review, and author.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method patch">PATCH</span></td>
+                                <td><code>/api/reviews/admin/reports/:id/resolve</code></td>
+                                <td><span class="access-badge admin">[Admin: review:moderate]</span></td>
+                                <td>Resolves an abuse report and optionally approves, rejects, or permanently deletes the target review.</td>
                             </tr>
                         </tbody>
                     </table>
