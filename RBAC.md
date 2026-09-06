@@ -400,6 +400,13 @@ DELETE /api/auth/sessions/<session-id>
 Authorization: Bearer <access-token>
 ```
 
+To revoke every session for the current user and log out from all devices:
+
+```http
+POST /api/auth/logout-all
+Authorization: Bearer <access-token>
+```
+
 Admins with the listed permissions can inspect or revoke another user's sessions using the admin endpoints. Session responses include device name, device ID, IP address, user-agent, creation time, last-used time, expiry, and revocation time. Refresh tokens are never returned.
 
 ## 13. Logout

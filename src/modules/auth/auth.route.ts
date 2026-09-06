@@ -28,6 +28,16 @@ const privateAuthRoutes = (app: FastifyInstance) => {
         },
     }, authController.logout.bind(authController));
 
+    app.post('/logout-all', {
+        preHandler: app.authenticate,
+        schema: {
+            tags: ["Auth"],
+            summary: "Log out from all devices",
+            security: [{ bearerAuth: [] }],
+            response: { 200: successResponse(), 401: errorResponse },
+        },
+    }, authController.logoutAll.bind(authController));
+
     app.get('/sessions', {
         preHandler: app.authenticate,
         schema: { tags: ["Auth"], summary: "List current user sessions", security: [{ bearerAuth: [] }], response: { 200: successResponse({ type: "array", items: { type: "object" } }), 401: errorResponse } },

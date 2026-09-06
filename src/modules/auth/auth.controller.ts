@@ -133,6 +133,17 @@ class AuthController {
         });
     }
 
+    async logoutAll(request: FastifyRequest, reply: FastifyReply) {
+        const result = await authService.revokeAllSessions(request.user.userId);
+        reply.clearCookie("refreshToken", refreshTokenCookieOptions);
+
+        return sendOk({
+            reply,
+            message: "Logged out from all devices successfully",
+            data: result,
+        });
+    }
+
     async listSessions(request: FastifyRequest, reply: FastifyReply) {
         return sendOk({
             reply,
