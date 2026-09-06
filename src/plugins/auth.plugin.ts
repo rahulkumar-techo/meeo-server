@@ -19,6 +19,7 @@ declare module "fastify" {
 
 	interface FastifyInstance {
 		authenticate: (request: FastifyRequest) => Promise<void>;
+		optionalAuthenticate: (request: FastifyRequest) => Promise<void>;
 		requirePermission: (permission: string) => (request: FastifyRequest) => Promise<void>;
 		requireAnyPermission: (permissions: string[]) => (request: FastifyRequest) => Promise<void>;
 		requireAllPermissions: (permissions: string[]) => (request: FastifyRequest) => Promise<void>;
@@ -122,6 +123,24 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 			};
 		} catch {
 			throw new AppError("Authentication context unavailable", 401);
+		}
+	});
+
+	// Optional authentication: attempts to authenticate the user if token is provided,
+	// but gracefully continues for guest requests if no token is present.
+	app.decorate("optionalAuthenticate", async (request: FastifyRequest) => {
+		const authorization = request.headers.authorization;
+		const [scheme, token] = authorization?.split(" ") ?? [];
+
+		if (scheme !== "Bearer" || !token) {
+			return;
+		}
+
+		try {
+			await app.authenticate(request);
+		} catch {
+			// Token invalid or expired: proceed as unauthenticated guest
+			request.user = null as unknown as AuthorizationContext;
 		}
 	});
 

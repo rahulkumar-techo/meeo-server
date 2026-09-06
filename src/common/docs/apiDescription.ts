@@ -1,5 +1,6 @@
 import { catalogTags } from "./catalog.js";
 import { inventoryTags } from "./inventory.js";
+import { cartTags } from "./cartDocs.js";
 
 /**
  * Cleanly aggregated Swagger tags for all API domains.
@@ -19,6 +20,7 @@ export const swaggerTags = [
     },
     ...catalogTags,
     ...inventoryTags,
+    ...cartTags,
 ];
 
 /**

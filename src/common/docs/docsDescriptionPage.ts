@@ -437,6 +437,8 @@ export const docsDescriptionHtml = `<!DOCTYPE html>
             <a href="#variants" class="menu-item">🔢 Product Variants</a>
             <a href="#images" class="menu-item">🖼️ Images & ImageKit</a>
             <a href="#inventory" class="menu-item">📊 Inventory & Reservations</a>
+            <a href="#cart" class="menu-item">🛒 Cart & Merge</a>
+            <a href="#wishlist" class="menu-item">💖 Wishlist & Saved</a>
             <a href="#simulation" class="menu-item">🧪 Checkout Simulation</a>
         </aside>
 
@@ -1047,6 +1049,132 @@ export const docsDescriptionHtml = `<!DOCTYPE html>
                                 <td><code>/api/inventory/reservations/cleanup-expired</code></td>
                                 <td><span class="access-badge admin">[Admin: inventory:update]</span></td>
                                 <td>Sweeper endpoint to auto-expire stale holds and restore stock.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Module: Cart & Shopping Bag -->
+            <section id="cart">
+                <h2>🛒 Shopping Cart & Guest Merge</h2>
+                <p class="section-desc">Supports both anonymous guest carts (identified by <code>x-session-id</code> header) and authenticated user carts. Handles real-time inventory stock checks, subtotal calculations, guest-to-user cart merging upon login, and automatic TTL expiration.</p>
+
+                <div class="card-grid">
+                    <div class="card">
+                        <div class="card-icon">🪪</div>
+                        <h3>Guest Cart TTL</h3>
+                        <p>Guest carts are tracked via the <code>x-session-id</code> header with a 7-day expiration window. Expired carts are automatically cleaned up.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">🔀</div>
+                        <h3>Seamless Cart Merge</h3>
+                        <p>When a guest logs in, calling <code>POST /api/cart/merge</code> merges their guest items into their permanent cart, combining quantities and enforcing stock limits.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">🛡️</div>
+                        <h3>Real-Time Stock Checks</h3>
+                        <p>Adding and updating item quantities immediately checks physical stock availability to prevent overselling.</p>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="route-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Access Badge</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/cart</code></td>
+                                <td><span class="access-badge public">[Guest / User]</span></td>
+                                <td>Retrieve current cart with calculated item subtotals, overall cart subtotal, and stock alerts.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/cart/items</code></td>
+                                <td><span class="access-badge public">[Guest / User]</span></td>
+                                <td>Add a variant to the cart (validates inventory stock limits).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method patch">PATCH</span></td>
+                                <td><code>/api/cart/items/:itemId</code></td>
+                                <td><span class="access-badge public">[Guest / User]</span></td>
+                                <td>Update item quantity in cart (setting quantity to 0 removes the item).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method delete">DELETE</span></td>
+                                <td><code>/api/cart/items/:itemId</code></td>
+                                <td><span class="access-badge public">[Guest / User]</span></td>
+                                <td>Remove a specific item from the cart.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method delete">DELETE</span></td>
+                                <td><code>/api/cart</code></td>
+                                <td><span class="access-badge public">[Guest / User]</span></td>
+                                <td>Clear all items in the cart.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/cart/merge</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Merge guest cart items into authenticated user's permanent cart.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/cart/cleanup</code></td>
+                                <td><span class="access-badge admin">[Admin: system:manage]</span></td>
+                                <td>Clean up expired guest carts past their 7-day TTL.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Module: Wishlist -->
+            <section id="wishlist">
+                <h2>💖 Wishlist & Saved Products</h2>
+                <p class="section-desc">Enables authenticated customers to save favorite products, browse their wishlist with thumbnail previews and live price ranges, and seamlessly transfer saved items directly into their shopping cart.</p>
+
+                <div class="table-wrap">
+                    <table class="route-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>Access Badge</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method get">GET</span></td>
+                                <td><code>/api/wishlist</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>View user's wishlist with product details, active variants, starting price, and stock status.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/wishlist/products/:productId</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Add a product to wishlist (idempotent operation).</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method delete">DELETE</span></td>
+                                <td><code>/api/wishlist/products/:productId</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Remove a product from user's wishlist.</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method post">POST</span></td>
+                                <td><code>/api/wishlist/products/:productId/move-to-cart</code></td>
+                                <td><span class="access-badge user">[Authenticated User]</span></td>
+                                <td>Directly add a saved product (or chosen variant) to cart and remove it from wishlist.</td>
                             </tr>
                         </tbody>
                     </table>
