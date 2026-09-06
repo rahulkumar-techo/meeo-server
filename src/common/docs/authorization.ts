@@ -85,7 +85,11 @@ export const protectedSchema = (summary: string, extra: Record<string, unknown> 
 
 export const authorizationErrors = { 400: errorResponse, 401: errorResponse, 403: errorResponse, 404: errorResponse, 409: errorResponse, 422: errorResponse };
 
-export const authorizationListResponse = (items: object) => ({
-    200: successResponse({ type: "array", items }),
+// Controllers use sendOk/sendCreated, so successful responses must describe the
+// standard { success, message, data } envelope rather than the data value alone.
+export const authorizationResponse = (statusCode: number, data?: object) => ({
+    [statusCode]: successResponse(data),
     ...authorizationErrors,
 });
+
+export const authorizationListResponse = (items: object) => authorizationResponse(200, { type: "array", items });
