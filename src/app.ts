@@ -95,7 +95,8 @@ export async function buildApp(): Promise<FastifyInstance> {
               "http://127.0.0.1:3000",
               "http://127.0.0.1:5173",
               "https://meeo-dashboard.vercel.app",
-              "https://meeo-server.onrender.com"
+              "https://meeo-server.onrender.com",
+              "http://127.0.0.1:5000"
 
           ];
 
@@ -162,7 +163,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     });
 
     // CSRF token retrieval endpoint
-    app.get("/api/auth/csrf", {
+    app.get("/api/v1/auth/csrf", {
         schema: {
             tags: ["Auth"],
             summary: "Retrieve CSRF protection token for cookie-based state mutations",
@@ -185,23 +186,34 @@ export async function buildApp(): Promise<FastifyInstance> {
         });
     });
 
-    app.register(authRouter, { prefix: "/api/auth" });
-    app.register(userRouter, { prefix: "/api/user" });
+    // --- Authentication & User Management ---
+    app.register(authRouter, { prefix: "/api/v1/auth" });
+    app.register(userRouter, { prefix: "/api/v1/user" });
     app.register(authorizationRouter, { prefix: "/api/v1/admin" });
+
+    // --- Product Catalog (Categories, Brands, Products, Variants) ---
     app.register(catalogRouter, { prefix: "/api/v1" });
-    app.register(inventoryRouter, { prefix: "/api/inventory" });
-    app.register(cartRouter, { prefix: "/api/cart" });
-    app.register(wishlistRouter, { prefix: "/api/wishlist" });
-    app.register(orderRouter, { prefix: "/api/orders" });
-    app.register(paymentRouter, { prefix: "/api/payments" });
-    app.register(outboxRouter, { prefix: "/api/outbox" });
-    app.register(notificationRouter, { prefix: "/api/notifications" });
-    app.register(couponRouter, { prefix: "/api/coupons" });
-    app.register(reviewRouter, { prefix: "/api/reviews" });
-    app.register(searchRouter, { prefix: "/api/search" });
-    app.register(discoveryRouter, { prefix: "/api/discovery" });
+
+    // --- Commerce, Cart & Orders ---
+    app.register(inventoryRouter, { prefix: "/api/v1/inventory" });
+    app.register(cartRouter, { prefix: "/api/v1/cart" });
+    app.register(wishlistRouter, { prefix: "/api/v1/wishlist" });
+    app.register(orderRouter, { prefix: "/api/v1/orders" });
+    app.register(paymentRouter, { prefix: "/api/v1/payments" });
+
+    // --- Marketing, Discovery & Engagement ---
+    app.register(couponRouter, { prefix: "/api/v1/coupons" });
+    app.register(reviewRouter, { prefix: "/api/v1/reviews" });
+    app.register(searchRouter, { prefix: "/api/v1/search" });
+    app.register(discoveryRouter, { prefix: "/api/v1/discovery" });
+    app.register(notificationRouter, { prefix: "/api/v1/notifications" });
+    app.register(outboxRouter, { prefix: "/api/v1/outbox" });
+
+    // --- Admin & Analytics ---
     app.register(dashboardRouter, { prefix: "/api/v1/admin/dashboard" });
     app.register(auditLogRouter, { prefix: "/api/v1/admin/audit-logs" });
+
+    // --- Observability & System Health ---
     app.register(healthRouter, { prefix: "/health" });
     app.register(metricsRouter, { prefix: "/metrics" });
 

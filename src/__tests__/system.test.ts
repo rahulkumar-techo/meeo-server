@@ -76,7 +76,7 @@ describe("authentication and user system flow", () => {
         const token = generateAccessToken({ userId: "user-001", email: "ada@example.test" });
         const response = await app.inject({
             method: "GET",
-            url: "/api/auth/me",
+            url: "/api/v1/auth/me",
             headers: { authorization: `Bearer ${token}` },
         });
 

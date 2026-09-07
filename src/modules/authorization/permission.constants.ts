@@ -15,6 +15,11 @@ export const PERMISSIONS = {
     BRAND_UPDATE: "brand:update",
     BRAND_DELETE: "brand:delete",
 
+    ATTRIBUTE_READ: "attribute:read",
+    ATTRIBUTE_CREATE: "attribute:create",
+    ATTRIBUTE_UPDATE: "attribute:update",
+    ATTRIBUTE_DELETE: "attribute:delete",
+
     ORDER_READ: "order:read",
     ORDER_UPDATE: "order:update",
     ORDER_CANCEL: "order:cancel",

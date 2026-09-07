@@ -46,6 +46,19 @@ export default async function productRouter(app: FastifyInstance) {
         productController.getProductBySlug.bind(productController),
     );
 
+    app.get(
+        "/:id/attributes",
+        {
+            schema: {
+                tags: ["Catalog - Products"],
+                summary: "[Public] Get product attributes",
+                description: "Fetch all unique attributes (e.g. Color, Size) and their active values configured on this product.",
+                params: catalogSchemas.productParams,
+            },
+        },
+        productController.getProductAttributes.bind(productController),
+    );
+
     // ----------------------------------------------------
     // Authenticated / Management Product Endpoints
     // ----------------------------------------------------
@@ -170,7 +183,6 @@ export default async function productRouter(app: FastifyInstance) {
                 description: "Uploads an image (multipart file binary or base64/URL payload) to ImageKit and attaches it to the product with sort order. Permitted for product creator OR users with `product:update` permission.",
                 security: [{ bearerAuth: [] }],
                 params: catalogSchemas.productParams,
-                body: catalogSchemas.uploadImage,
             },
         },
         productController.uploadImage.bind(productController),

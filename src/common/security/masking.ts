@@ -77,10 +77,7 @@ export const secureLogSerializers = {
             method: req.method,
             url: req.url,
             path: req.routerPath || req.url?.split("?")[0],
-            parameters: maskSensitiveData(req.params),
-            headers: maskSensitiveData(req.headers),
-            remoteAddress: req.ip || req.socket?.remoteAddress,
-            remotePort: req.socket?.remotePort,
+            parameters: req.params && Object.keys(req.params).length > 0 ? maskSensitiveData(req.params) : undefined,
         };
     },
     res(res: any) {

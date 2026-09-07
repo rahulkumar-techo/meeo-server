@@ -405,6 +405,56 @@ export class ProductService {
     }
 
     /**
+     * Aggregates and returns all unique attributes and values configured across a product's variants.
+     */
+    async getProductAttributes(id: string) {
+        const product = await prisma.product.findUnique({
+            where: { id },
+            include: {
+                variants: {
+                    include: {
+                        attributeValues: {
+                            include: {
+                                attributeValue: {
+                                    include: { attribute: true },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (!product) {
+            throw new AppError("Product not found", 404);
+        }
+
+        const attributeMap = new Map<string, { id: string; name: string; values: { id: string; value: string }[] }>();
+
+        for (const variant of product.variants) {
+            for (const vav of variant.attributeValues) {
+                const attr = vav.attributeValue.attribute;
+                const val = vav.attributeValue;
+
+                if (!attributeMap.has(attr.id)) {
+                    attributeMap.set(attr.id, {
+                        id: attr.id,
+                        name: attr.name,
+                        values: [],
+                    });
+                }
+
+                const current = attributeMap.get(attr.id)!;
+                if (!current.values.some((v) => v.id === val.id)) {
+                    current.values.push({ id: val.id, value: val.value });
+                }
+            }
+        }
+
+        return Array.from(attributeMap.values());
+    }
+
+    /**
      * Lists products with multi-attribute filtering, search, pagination (offset or cursor), and sorting.
      */
     async listProducts(query: ProductQueryInput) {

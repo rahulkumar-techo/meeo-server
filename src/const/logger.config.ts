@@ -1,18 +1,24 @@
 import { secureLogSerializers } from "@/common/security/masking.js";
 
+const isProduction = process.env.NODE_ENV === "production";
+
 export const preetyLogger = {
     logger: {
-        level: process.env.LOG_LEVEL ?? "info",
+        level: process.env.LOG_LEVEL ?? (isProduction ? "info" : "debug"),
         serializers: secureLogSerializers,
-        transport: {
-            target: "pino-pretty",
-            options: {
-                colorize: true,
-                levelFirst: true,
-                translateTime: "SYS:yyyy-mm-dd HH:MM:ss.l",
-                singleLine: true,
-                ignore: "pid,hostname",
-            },
-        },
+        ...(isProduction
+            ? {}
+            : {
+                  transport: {
+                      target: "pino-pretty",
+                      options: {
+                          colorize: true,
+                          levelFirst: true,
+                          translateTime: "SYS:HH:MM:ss.l",
+                          singleLine: true,
+                          ignore: "pid,hostname",
+                      },
+                  },
+              }),
     },
 };

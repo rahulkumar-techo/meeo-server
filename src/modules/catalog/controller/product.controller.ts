@@ -70,6 +70,19 @@ export class ProductController {
     }
 
     /**
+     * Retrieves all unique attributes and values associated with a product.
+     */
+    async getProductAttributes(request: FastifyRequest, reply: FastifyReply) {
+        const { id } = request.params as IdParam;
+        const result = await productService.getProductAttributes(id);
+        return sendOk({
+            reply,
+            message: "Product attributes retrieved successfully",
+            data: result,
+        });
+    }
+
+    /**
      * Updates an existing product's details or SEO fields.
      */
     async updateProduct(request: FastifyRequest, reply: FastifyReply) {
