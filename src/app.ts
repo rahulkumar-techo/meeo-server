@@ -95,7 +95,7 @@ export async function buildApp(): Promise<FastifyInstance> {
               "http://127.0.0.1:3000",
               "http://127.0.0.1:5173",
               "https://meeo-dashboard.vercel.app",
-              "https://meeo-server.onrender.com/docs"
+              "https://meeo-server.onrender.com"
 
           ];
 
