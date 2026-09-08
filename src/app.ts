@@ -40,6 +40,7 @@ import healthRouter, { metricsRouter } from "./modules/health/health.route.js";
 export async function buildApp(): Promise<FastifyInstance> {
     const app = Fastify({
         ...preetyLogger,
+        trustProxy: true,
         requestIdHeader: "x-request-id",
         genReqId: (req) => (req.headers["x-request-id"] as string) || `req_${ulid()}`,
         bodyLimit: 1 * 1024 * 1024, // 1MB payload limit
@@ -117,6 +118,12 @@ export async function buildApp(): Promise<FastifyInstance> {
             "X-CSRF-Token",
             "Idempotency-Key",
             "Accept",
+            "X-Refresh-Token",
+            "x-refresh-token",
+            "X-Client-Type",
+            "x-client-type",
+            "X-Platform",
+            "x-platform",
         ],
         exposedHeaders: [
             "Content-Range",

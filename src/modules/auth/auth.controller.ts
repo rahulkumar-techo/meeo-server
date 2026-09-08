@@ -12,7 +12,7 @@ import {
     type AuthRegisterInput,
 } from "./auth.validation.js";
 import { sendCreated, sendOk } from "@/common/utils/response.js";
-import { refreshTokenCookieOptions } from "@/config/cookie.js";
+import { accessTokenCookieOptions, refreshTokenCookieOptions } from "@/config/cookie.js";
 import { AppError } from "@/common/errors/app-error.js";
 
 class AuthController {
@@ -33,32 +33,6 @@ class AuthController {
     }
 
 
-    async login(
-        request: FastifyRequest,
-        reply: FastifyReply,
-    ) {
-
-        const data = loginSchema.parse(request.body);
-        const result = await authService.login(data, {
-            ipAddress: request.ip,
-            ...(request.headers["user-agent"] ? { userAgent: request.headers["user-agent"] } : {}),
-        });
-
-        // Store refresh token in HTTP-only cookie
-        reply.setCookie("refreshToken", result.refreshToken, refreshTokenCookieOptions,);
-
-        // Keep the cookie for browser clients and expose the token for clients that manage tokens explicitly.
-        return sendOk({
-            reply,
-            message: "Login successful",
-
-            data: {
-                user: result.user,
-                accessToken: result.accessToken,
-                refreshToken: result.refreshToken,
-            },
-        });
-    }
 
     async verifyOtp(request: FastifyRequest, reply: FastifyReply) {
         const data = otpVerification.parse(request.body);
@@ -103,29 +77,73 @@ class AuthController {
         });
     }
 
-    async refresh(request: FastifyRequest, reply: FastifyReply) {
-        const refreshToken = request.cookies.refreshToken;
+    // login and refresh 
+
+    async login(
+        request: FastifyRequest,
+        reply: FastifyReply,
+    ) {
+        const data = loginSchema.parse(request.body);
+        const result = await authService.login(data, {
+            ipAddress: request.ip,
+            ...(request.headers["user-agent"] ? { userAgent: request.headers["user-agent"] as string } : {}),
+        });
+
+        // 🔒 Store both tokens in secure HttpOnly cookies
+        reply.setCookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
+        reply.setCookie("accessToken", result.accessToken, accessTokenCookieOptions);
+
+        return sendOk({
+            reply,
+            message: "Login successful",
+            data: {
+                user: result.user,
+                accessToken: result.accessToken,
+            },
+        });
+    }
+
+    async refresh(
+        request: FastifyRequest<{ Body?: { refreshToken?: string } }>,
+        reply: FastifyReply,
+    ) {
+        const bodyToken = request.body?.refreshToken;
+        const cookieToken = request.cookies?.refreshToken;
+        const headerToken =
+            (request.headers["x-refresh-token"] as string | undefined) ||
+            (request.headers.authorization?.startsWith("Bearer ")
+                ? request.headers.authorization.slice(7).trim()
+                : undefined);
+
+        // Get refresh token from cookie, body, or header
+        const refreshToken = cookieToken || bodyToken || headerToken;
 
         if (!refreshToken) {
             throw new AppError("Refresh token required", 401);
         }
 
         const result = await authService.refreshToken(refreshToken);
+
+        // 🔒 Always rotate and set both HttpOnly cookies
         reply.setCookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
+        reply.setCookie("accessToken", result.accessToken, accessTokenCookieOptions);
 
         return sendOk({
             reply,
             message: "Token refreshed successfully",
             data: {
                 accessToken: result.accessToken,
-                refreshToken: result.refreshToken,
             },
         });
     }
 
+
+
+
     async logout(request: FastifyRequest, reply: FastifyReply) {
         await authService.logout(request.user.userId, request.user.sessionId ?? "");
         reply.clearCookie("refreshToken", refreshTokenCookieOptions);
+        reply.clearCookie("accessToken", accessTokenCookieOptions);
 
         return sendOk({
             reply,
@@ -136,6 +154,7 @@ class AuthController {
     async logoutAll(request: FastifyRequest, reply: FastifyReply) {
         const result = await authService.revokeAllSessions(request.user.userId);
         reply.clearCookie("refreshToken", refreshTokenCookieOptions);
+        reply.clearCookie("accessToken", accessTokenCookieOptions);
 
         return sendOk({
             reply,

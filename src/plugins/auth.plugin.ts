@@ -29,13 +29,14 @@ declare module "fastify" {
 const authPlugin: FastifyPluginAsync = async (app) => {
 	app.decorateRequest("user", null as unknown as AuthorizationContext);
 
-	// Route preHandler: validates the bearer token, confirms the user/session is active,
+	// Route preHandler: validates the bearer token (or accessToken cookie in browser), confirms the user/session is active,
 	// then loads roles and deduplicated permissions onto request.user.
 	app.decorate("authenticate", async (request: FastifyRequest) => {
 		const authorization = request.headers.authorization;
-		const [scheme, token] = authorization?.split(" ") ?? [];
+		const [scheme, tokenFromHeader] = authorization?.split(" ") ?? [];
+		const token = (scheme === "Bearer" && tokenFromHeader) ? tokenFromHeader : request.cookies?.accessToken;
 
-		if (scheme !== "Bearer" || !token) {
+		if (!token) {
 			throw new AppError("Authentication required", 401);
 		}
 
@@ -121,18 +122,23 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 				roles,
 				permissions,
 			};
-		} catch {
+		} catch (error) {
+			if (error instanceof AppError) {
+				throw error;
+			}
+			console.error("[Auth Plugin Unexpected Error]:", error);
 			throw new AppError("Authentication context unavailable", 401);
 		}
 	});
 
-	// Optional authentication: attempts to authenticate the user if token is provided,
+	// Optional authentication: attempts to authenticate the user if token is provided via header or cookie,
 	// but gracefully continues for guest requests if no token is present.
 	app.decorate("optionalAuthenticate", async (request: FastifyRequest) => {
 		const authorization = request.headers.authorization;
-		const [scheme, token] = authorization?.split(" ") ?? [];
+		const [scheme, tokenFromHeader] = authorization?.split(" ") ?? [];
+		const token = (scheme === "Bearer" && tokenFromHeader) ? tokenFromHeader : request.cookies?.accessToken;
 
-		if (scheme !== "Bearer" || !token) {
+		if (!token) {
 			return;
 		}
 

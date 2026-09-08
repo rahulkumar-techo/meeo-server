@@ -108,9 +108,9 @@ export const authenticationSchemas = {
     refresh: {
         schema: {
             tags: ["Auth"],
-            summary: "[Public / Cookie] Refresh access token",
-            description: "Exchanges a valid HttpOnly refreshToken cookie for a new short-lived JWT accessToken.",
-            security: [{ refreshCookie: [] }],
+            summary: "[Public / Cookie / Body] Refresh access token",
+            description: "Exchanges a valid HttpOnly refreshToken cookie, request body refreshToken, or authorization/x-refresh-token header for a new short-lived JWT accessToken.",
+            security: [{ refreshCookie: [] }, { bearerAuth: [] }],
             response: { 200: successResponse(tokenResponse), 401: errorResponse },
         },
     },

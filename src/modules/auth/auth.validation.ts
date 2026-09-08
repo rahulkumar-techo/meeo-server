@@ -4,7 +4,7 @@ export const authRegister = z.object({
     firstName: z.string().min(1, "First name is required"),
     lastName: z.string().min(1, "Last name is required"),
     email: z.string().email("Invalid email address"),
-    password: z.string().trim().min(5, "Password must be at least 5 characters").max(12, "Password cannot exceed 12 characters"),
+    password: z.string().trim().min(5, "Password must be at least 5 characters").max(100, "Password cannot exceed 100 characters"),
 });
 
 export const otpVerification = z.object({
@@ -19,12 +19,12 @@ export const resendOtp = z.object({
 export const forgotPassword = resendOtp;
 
 export const resetPassword = otpVerification.extend({
-    password: z.string().trim().min(5, "Password must be at least 5 characters").max(12, "Password cannot exceed 12 characters"),
+    password: z.string().trim().min(5, "Password must be at least 5 characters").max(100, "Password cannot exceed 100 characters"),
 });
 
 export const loginSchema = z.object({
     email: z.string().email("Invalid email address"),
-    password: z.string().trim().min(5, "Password must be at least 5 characters").max(12, "Password cannot exceed 12 characters"),
+    password: z.string().trim().min(5, "Password must be at least 5 characters").max(100, "Password cannot exceed 100 characters"),
     deviceName: z.string().trim().max(100).optional(),
     deviceId: z.string().trim().max(255).optional(),
 });
