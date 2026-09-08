@@ -1,262 +1,131 @@
-import { prisma } from "@/lib/prisma.js";
+import { userProfileService } from "./userProfile.service.js";
+import { userAddressService } from "./userAddress.service.js";
+import { userPhoneService } from "./userPhone.service.js";
+import { userAdminService } from "./userAdmin.service.js";
 import type {
     PhoneOtpRequestPayload,
     PhoneVerificationPayload,
     UserAddressPayload,
     UserProfilePayload,
     AdminUserUpdatePayload,
+    AdminUserQueryPayload,
+    AdminUserStatusUpdatePayload,
 } from "../user.validation.js";
-import { AppError } from "@/common/errors/app-error.js";
-import { generateOtp } from "@/common/utils/generateOtp.js";
-import redis from "@/lib/redis.js";
-import { Keys } from "@/const/keys.js";
-import { invalidateAuthContext } from "@/common/utils/auth-cache.js";
 
-const PHONE_OTP_EXPIRY_SECONDS = 60 * 5;
+// Re-export modular sub-services and interfaces for direct specialized consumption
+export { userProfileService, UserProfileService } from "./userProfile.service.js";
+export { userAddressService, UserAddressService } from "./userAddress.service.js";
+export { userPhoneService, UserPhoneService } from "./userPhone.service.js";
+export { userAdminService, UserAdminService } from "./userAdmin.service.js";
+export type { CustomerSummary } from "./userAdmin.service.js";
 
-class UserService {
+/**
+ * Unified UserService orchestrator facade.
+ * Delegates specialized domain logic across modular sub-services:
+ * - UserProfileService: Name & identity updates
+ * - UserAddressService: Address CRUD & ownership validation
+ * - UserPhoneService: Phone verification & Redis OTP lifecycle
+ * - UserAdminService: Customer 360 intelligence, metrics, & moderation
+ */
+export class UserService {
+    // ----------------------------------------------------
+    // Profile Operations (UserProfileService)
+    // ----------------------------------------------------
 
-    async listUsers() {
-        return prisma.user.findMany({
-            where: { deletedAt: null },
-            orderBy: { createdAt: "desc" },
-            select: {
-                id: true,
-                email: true,
-                firstName: true,
-                lastName: true,
-                phone: true,
-                emailVerified: true,
-                phoneVerified: true,
-                status: true,
-                createdAt: true,
-                updatedAt: true,
-                roles: { select: { role: { select: { id: true, name: true } } } },
-            },
-        });
-    }
-
-    async updateUser(userId: string, payload: AdminUserUpdatePayload) {
-        const data = {
-            ...(payload.firstName === undefined ? {} : { firstName: payload.firstName }),
-            ...(payload.lastName === undefined ? {} : { lastName: payload.lastName }),
-            ...(payload.status === undefined ? {} : { status: payload.status }),
-        };
-
-        const user = await prisma.user.updateMany({
-            where: { id: userId, deletedAt: null },
-            data,
-        });
-
-        if (user.count !== 1) throw new AppError("User not found", 404);
-
-        if (payload.status === "SUSPENDED" || payload.status === "BLOCKED") {
-            await prisma.userSession.updateMany({
-                where: { userId, revokedAt: null },
-                data: { revokedAt: new Date() },
-            });
-        }
-
-        await invalidateAuthContext(userId);
-
-        return prisma.user.findUnique({
-            where: { id: userId },
-            select: {
-                id: true,
-                email: true,
-                firstName: true,
-                lastName: true,
-                phone: true,
-                emailVerified: true,
-                phoneVerified: true,
-                status: true,
-                createdAt: true,
-                updatedAt: true,
-            },
-        });
-    }
-
-    /// validate a phone verification OTP
-    private async assertPhoneOtp(userId: string, otp: string) {
-        const storedOtp = await redis.get(Keys.PHONE_OTP(userId));
-
-        if (!storedOtp || storedOtp !== otp) {
-            throw new AppError("OTP is invalid or expired", 400);
-        }
-    }
-
-    /// generate and store an OTP for adding or updating a phone number
-    async requestPhoneOtp(userId: string, { phone }: PhoneOtpRequestPayload) {
-        const existingPhone = await prisma.user.findFirst({
-            where: {
-                phone,
-                id: { not: userId },
-            },
-            select: { id: true },
-        });
-
-        if (existingPhone) {
-            throw new AppError("Phone number is already in use", 409);
-        }
-
-        const otp = generateOtp(4);
-        await redis.set(
-            Keys.PHONE_OTP(userId),
-            JSON.stringify({ phone, otp }),
-            "EX",
-            PHONE_OTP_EXPIRY_SECONDS,
-        );
-
-        // Future SMS delivery:
-        // await smsService.sendOtp(phone, otp);
-
-        return { tempOtp: otp };
-    }
-
-    /// verify the phone OTP and save the phone number
-    async verifyPhone(userId: string, { phone, otp }: PhoneVerificationPayload) {
-        const storedValue = await redis.get(Keys.PHONE_OTP(userId));
-
-        if (!storedValue) {
-            throw new AppError("OTP is invalid or expired", 400);
-        }
-
-        let storedOtp: { phone: string; otp: string };
-        try {
-            storedOtp = JSON.parse(storedValue) as { phone: string; otp: string };
-        } catch {
-            throw new AppError("OTP is invalid or expired", 400);
-        }
-
-        if (storedOtp.phone !== phone || storedOtp.otp !== otp) {
-            throw new AppError("OTP is invalid or expired", 400);
-        }
-
-        await this.assertPhoneOtp(userId, otp);
-
-        const user = await prisma.user.update({
-            where: { id: userId },
-            data: {
-                phone,
-                phoneVerified: true,
-            },
-            select: {
-                phone: true,
-                phoneVerified: true,
-            },
-        });
-
-        await redis.del(Keys.PHONE_OTP(userId));
-        return user;
-    }
-
-    /// update profile 
+    /**
+     * Updates profile first name and last name for an authenticated user.
+     */
     async updateProfile(userId: string, payload: UserProfilePayload) {
-        const { firstName, lastName } = payload;
+        return userProfileService.updateProfile(userId, payload);
+    }
 
-        const user = await prisma.user.update({
-            where: { id: userId },
-            data: { firstName, lastName }
-        });
+    // ----------------------------------------------------
+    // Address Operations (UserAddressService)
+    // ----------------------------------------------------
 
-        if (!user)
-            throw new AppError("Failed to Update Profile", 403);
-
-        return {
-            firstName: user.firstName,
-            lastName: user.lastName
-        };
-    };
-
-    /// create or update an Address 
+    /**
+     * Creates or updates a delivery/billing address owned by the requesting user.
+     */
     async saveAddress(
-        isUpdateAddressRequest: boolean,
+        isUpdate: boolean,
         userId: string,
         payload: UserAddressPayload,
-        addressId?: string // Added: Optional ID needed for updates
+        addressId?: string,
     ) {
-        const { recipientName, addressLine1, city, state, postalCode, country, addressLine2 } = payload;
-        let address;
-
-        // Shared data structure for clean reuse
-        const addressData = {
-            recipientName,
-            addressLine1,
-            city,
-            state,
-            postalCode,
-            country,
-            addressLine2: addressLine2 ?? null,
-        };
-
-        // Shared select structure to ensure consistent API responses
-        const selectFields = {
-            id: true,
-            recipientName: true,
-            addressLine1: true,
-            city: true,
-            state: true,
-            postalCode: true,
-            country: true,
-            addressLine2: true,
-        };
-
-        if (isUpdateAddressRequest) {
-            if (!addressId) {
-                throw new AppError("Address ID is required for updates", 400);
-            }
-
-            address = await prisma.address.update({
-                where: {
-                    id: addressId,
-                    userId: userId // Security check: Ensure the address belongs to the requesting user
-                },
-                data: addressData,
-                select: selectFields
-            });
-        } else {
-            address = await prisma.address.create({
-                data: {
-                    ...addressData,
-                    user: {
-                        connect: { id: userId }
-                    }
-                },
-                select: selectFields
-            });
-        }
-
-        if (!address)
-            throw new AppError("Failed to process Address request", 403);
-
-        return address;
-    };
-
-    /// delete an Address safely
-    async deleteAddress(userId: string, addressId: string) {
-        if (!addressId) {
-            throw new AppError("Address ID is required", 400);
-        }
-
-        const deleteResult = await prisma.address.delete({
-            where: {
-                id: addressId,
-                userId: userId // Security check: prevents unauthorized deletions
-            }
-        });
-
-
-        if (!deleteResult) {
-            throw new AppError("Address not found or unauthorized to delete", 404);
-        }
-
-        return { success: true, message: "Address deleted successfully" };
+        return userAddressService.saveAddress(isUpdate, userId, payload, addressId);
     }
 
+    /**
+     * Safely deletes an address owned by the requesting user.
+     */
+    async deleteAddress(userId: string, addressId: string) {
+        return userAddressService.deleteAddress(userId, addressId);
+    }
 
+    // ----------------------------------------------------
+    // Phone Verification Operations (UserPhoneService)
+    // ----------------------------------------------------
 
+    /**
+     * Requests an SMS verification OTP for adding or updating a phone number.
+     */
+    async requestPhoneOtp(userId: string, payload: PhoneOtpRequestPayload) {
+        return userPhoneService.requestPhoneOtp(userId, payload);
+    }
 
+    /**
+     * Verifies the submitted OTP against Redis and updates user's phone status.
+     */
+    async verifyPhone(userId: string, payload: PhoneVerificationPayload) {
+        return userPhoneService.verifyPhone(userId, payload);
+    }
+
+    // ----------------------------------------------------
+    // Admin Customer Intelligence & Management (UserAdminService)
+    // ----------------------------------------------------
+
+    /**
+     * Admin: Retrieves paginated customers enriched with spend, loyalty tier, and risk score.
+     */
+    async listAdminUsers(query: AdminUserQueryPayload) {
+        return userAdminService.listAdminUsers(query);
+    }
+
+    /**
+     * Admin: Customer 360-degree comprehensive intelligence profile.
+     */
+    async getCustomer360(userId: string) {
+        return userAdminService.getCustomer360(userId);
+    }
+
+    /**
+     * Admin: Aggregated customer KPIs and tier distribution metrics dashboard.
+     */
+    async getAdminUserMetrics() {
+        return userAdminService.getAdminUserMetrics();
+    }
+
+    /**
+     * Admin: Updates customer status (ACTIVE, SUSPENDED, BLOCKED) and invalidates active sessions.
+     */
+    async updateUserStatus(userId: string, input: AdminUserStatusUpdatePayload) {
+        return userAdminService.updateUserStatus(userId, input);
+    }
+
+    /**
+     * Admin/Generic: Lists all users with their assigned roles.
+     */
+    async listUsers() {
+        return userAdminService.listUsers();
+    }
+
+    /**
+     * Admin/Generic: Modifies user account details and status.
+     */
+    async updateUser(userId: string, payload: AdminUserUpdatePayload) {
+        return userAdminService.updateUser(userId, payload);
+    }
 }
 
-export default new UserService();
-
+export const userService = new UserService();
+export default userService;

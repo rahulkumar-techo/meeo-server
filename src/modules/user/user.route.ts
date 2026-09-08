@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { userController } from "./controller/user.controller.js";
 import { addressSchema, errorResponse, successResponse, userSchemas } from "@/common/docs/swagger.js";
+import { PERMISSIONS } from "@/modules/authorization/permission.constants.js";
 
 const authenticated = (summary: string, description: string, body?: object) => ({
     tags: ["User"],
@@ -16,7 +17,86 @@ const userRouter = (app: FastifyInstance) => {
     // receives a verified request.user before its controller runs.
     app.addHook("preHandler", app.authenticate);
 
-    // Profile management
+    // ----------------------------------------------------
+    // Admin Customer Intelligence & User Management
+    // ----------------------------------------------------
+    app.get(
+        "/admin",
+        {
+            preHandler: app.requirePermission(PERMISSIONS.USER_READ),
+            schema: {
+                tags: ["User - Admin Management"],
+                summary: "[Admin: user:read] List all customers with ecommerce metrics",
+                description: "Retrieves paginated customer accounts with lifetime spend, tier, order count, and risk scores.",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        userController.listAdminUsers.bind(userController),
+    );
+
+    app.get(
+        "/admin/metrics",
+        {
+            preHandler: app.requirePermission(PERMISSIONS.USER_READ),
+            schema: {
+                tags: ["User - Admin Management"],
+                summary: "[Admin: user:read] Customer analytics metrics",
+                description: "Aggregated metrics including total customers, active accounts, repeat purchase rate, and tier distribution.",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        userController.getAdminUserMetrics.bind(userController),
+    );
+
+    app.get<{ Params: { userId: string } }>(
+        "/admin/:userId/360",
+        {
+            preHandler: app.requirePermission(PERMISSIONS.USER_READ),
+            schema: {
+                tags: ["User - Admin Management"],
+                summary: "[Admin: user:read] Customer 360-degree view",
+                description: "Comprehensive 360 intelligence view including orders history, saved addresses, reviews, active carts, and risk analysis.",
+                security: [{ bearerAuth: [] }],
+                params: { type: "object", required: ["userId"], properties: { userId: { type: "string" } } },
+            },
+        },
+        userController.getCustomer360.bind(userController),
+    );
+
+    app.patch<{ Params: { userId: string } }>(
+        "/admin/:userId/status",
+        {
+            preHandler: app.requirePermission(PERMISSIONS.USER_UPDATE),
+            schema: {
+                tags: ["User - Admin Management"],
+                summary: "[Admin: user:update] Update customer status (Block / Suspend / Activate)",
+                description: "Updates user status (ACTIVE, SUSPENDED, BLOCKED, PENDING_VERIFICATION) and automatically revokes active sessions if suspended/blocked.",
+                security: [{ bearerAuth: [] }],
+                params: { type: "object", required: ["userId"], properties: { userId: { type: "string" } } },
+            },
+        },
+        userController.updateUserStatus.bind(userController),
+    );
+
+    app.patch<{ Params: { userId: string } }>(
+        "/admin/:userId",
+        {
+            preHandler: app.requirePermission(PERMISSIONS.USER_UPDATE),
+            schema: {
+                tags: ["User - Admin Management"],
+                summary: "[Admin: user:update] Update user details & status",
+                description: "Update first/last name or status of a user. Requires `user:update` permission.",
+                security: [{ bearerAuth: [] }],
+                params: { type: "object", required: ["userId"], properties: { userId: { type: "string" } } },
+            },
+        },
+        userController.updateUser.bind(userController),
+    );
+
+    // ----------------------------------------------------
+    // Profile Management
+    // ----------------------------------------------------
+
     app.patch(
         "/profile",
         {

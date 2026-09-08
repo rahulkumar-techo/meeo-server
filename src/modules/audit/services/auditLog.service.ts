@@ -3,14 +3,14 @@ import { maskSensitiveData } from "@/common/security/masking.js";
 import type { AuditLogQueryInput } from "../validations/auditLog.validation.js";
 
 export interface CreateAuditLogParams {
-    actorId?: string | null;
+    actorId?: string | null | undefined;
     action: string;
     entityType: string;
-    entityId?: string | null;
+    entityId?: string | null | undefined;
     oldValue?: any;
     newValue?: any;
-    ipAddress?: string | null;
-    userAgent?: string | null;
+    ipAddress?: string | null | undefined;
+    userAgent?: string | null | undefined;
 }
 
 export class AuditLogService {

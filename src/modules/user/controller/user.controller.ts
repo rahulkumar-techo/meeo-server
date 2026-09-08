@@ -6,10 +6,49 @@ import {
     phoneVerificationSchema,
     profileSchema,
     adminUserUpdateSchema,
+    adminUserQuerySchema,
+    adminUserStatusUpdateSchema,
+    userIdParamSchema,
 } from "../user.validation.js";
 import { sendCreated, sendOk } from "@/common/utils/response.js";
 
 class UserController {
+
+    /**
+     * Admin: List users with pagination, tier, search, and ecommerce metrics.
+     */
+    async listAdminUsers(request: FastifyRequest, reply: FastifyReply) {
+        const query = adminUserQuerySchema.parse(request.query);
+        const result = await userService.listAdminUsers(query);
+        return sendOk({ reply, message: "Admin users fetched successfully", data: result });
+    }
+
+    /**
+     * Admin: Customer 360-Degree Intelligence View.
+     */
+    async getCustomer360(request: FastifyRequest, reply: FastifyReply) {
+        const { userId } = userIdParamSchema.parse(request.params);
+        const result = await userService.getCustomer360(userId);
+        return sendOk({ reply, message: "Customer 360 intelligence retrieved successfully", data: result });
+    }
+
+    /**
+     * Admin: Customer & User Analytics Metrics Dashboard.
+     */
+    async getAdminUserMetrics(_request: FastifyRequest, reply: FastifyReply) {
+        const result = await userService.getAdminUserMetrics();
+        return sendOk({ reply, message: "User metrics retrieved successfully", data: result });
+    }
+
+    /**
+     * Admin: Update User Status (ACTIVE, SUSPENDED, BLOCKED, PENDING_VERIFICATION).
+     */
+    async updateUserStatus(request: FastifyRequest, reply: FastifyReply) {
+        const { userId } = userIdParamSchema.parse(request.params);
+        const data = adminUserStatusUpdateSchema.parse(request.body);
+        const result = await userService.updateUserStatus(userId, data);
+        return sendOk({ reply, message: `User status updated to ${data.status} successfully`, data: result });
+    }
 
     async listUsers(_request: FastifyRequest, reply: FastifyReply) {
         const result = await userService.listUsers();

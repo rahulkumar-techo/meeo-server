@@ -64,6 +64,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest",
+    "test:jobs": "vitest run src/__tests__/jobs",
     "test:coverage": "vitest run --coverage",
     "ci:verify": "npm run prisma:generate && npm run typecheck && npm test -- --run && npm run build",
     "prepare": "node scripts/prepare-husky.mjs",

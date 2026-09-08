@@ -68,8 +68,33 @@ export const addressSchema = z.object({
 }).strict(); // Rejects any extra, unmapped fields injected into the request body
 
 
+export const adminUserQuerySchema = z.object({
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().max(100).default(20),
+    search: z.string().trim().optional(),
+    status: z.enum(["ACTIVE", "SUSPENDED", "BLOCKED", "PENDING_VERIFICATION"]).optional(),
+    tier: z.enum(["ALL", "BRONZE", "SILVER", "GOLD", "PLATINUM"]).optional(),
+    riskFlagOnly: z
+        .preprocess((val) => (val === "true" || val === true ? true : false), z.boolean())
+        .optional(),
+    sortBy: z.enum(["createdAt", "totalSpend", "totalOrders", "lastLoginAt", "riskScore"]).default("createdAt"),
+    sortOrder: z.enum(["asc", "desc"]).default("desc"),
+});
+
+export const adminUserStatusUpdateSchema = z.object({
+    status: z.enum(["ACTIVE", "SUSPENDED", "BLOCKED", "PENDING_VERIFICATION"]),
+    reason: z.string().trim().max(500).optional(),
+});
+
+export const userIdParamSchema = z.object({
+    userId: z.string().uuid("Invalid user ID format"),
+});
+
 export type UserProfilePayload = z.infer<typeof profileSchema>;
 export type AdminUserUpdatePayload = z.infer<typeof adminUserUpdateSchema>;
+export type AdminUserQueryPayload = z.infer<typeof adminUserQuerySchema>;
+export type AdminUserStatusUpdatePayload = z.infer<typeof adminUserStatusUpdateSchema>;
+export type UserIdParamPayload = z.infer<typeof userIdParamSchema>;
 export type UserAddressPayload = z.infer<typeof addressSchema>;
 export type PhoneOtpRequestPayload = z.infer<typeof phoneOtpRequestSchema>;
-export type PhoneVerificationPayload = z.infer<typeof phoneVerificationSchema>;
+export type PhoneVerificationPayload = z.infer<typeof phoneVerificationSchema>;

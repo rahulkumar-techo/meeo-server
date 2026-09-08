@@ -19,6 +19,8 @@ import reviewRouter from "./modules/reviews/routes/review.route.js";
 import { searchRouter, discoveryRouter } from "./modules/search/routes/search.route.js";
 import dashboardRouter from "./modules/dashboard/routes/dashboard.route.js";
 import auditLogRouter from "./modules/audit/routes/auditLog.route.js";
+import jobRouter from "./modules/jobs/routes/job.route.js";
+import settingRouter from "./modules/settings/routes/setting.route.js";
 import helmetPlugin from "./plugins/helmet.plugin.js";
 import { sanitizeInput } from "./common/security/sanitizer.js";
 import { generateCsrfToken, setCsrfCookie } from "./common/security/csrf.js";
@@ -215,6 +217,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     app.register(discoveryRouter, { prefix: "/api/v1/discovery" });
     app.register(notificationRouter, { prefix: "/api/v1/notifications" });
     app.register(outboxRouter, { prefix: "/api/v1/outbox" });
+    app.register(jobRouter, { prefix: "/api/v1/jobs" });
+    app.register(settingRouter, { prefix: "/api/v1/settings" });
 
     // --- Admin & Analytics ---
     app.register(dashboardRouter, { prefix: "/api/v1/admin/dashboard" });

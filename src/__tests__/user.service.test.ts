@@ -48,6 +48,10 @@ describe("UserService", () => {
         expect(prismaMock.user.update).toHaveBeenCalledWith({
             where: { id: "user-002" },
             data: { firstName: "Grace", lastName: "Hopper" },
+            select: {
+                firstName: true,
+                lastName: true,
+            },
         });
     });
 });
