@@ -49,6 +49,7 @@
     "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^9.1.1",
+    "socket.io": "^4.8.3",
     "ulid": "^3.0.2",
     "zod": "^4.5.4"
   },
@@ -56,7 +57,7 @@
     "dev": "tsx watch src/server.ts",
     "dev:worker": "tsx watch src/apps/worker/main.ts",
     "build": "npm run prisma:generate && tsc && tsc-alias",
-     "start": "npm run prisma:deploy && node dist/server.js",
+    "start": "npm run prisma:deploy && node dist/server.js",
     "start:worker": "node dist/apps/worker/main.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
