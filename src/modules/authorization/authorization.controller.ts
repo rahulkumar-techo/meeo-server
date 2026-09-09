@@ -55,16 +55,18 @@ class AuthorizationController {
     /** Replaces every permission link for a role in one transactional operation. */
     async replaceRolePermissions(request: FastifyRequest, reply: FastifyReply) {
         const { roleId } = request.params as Params;
-        const { permissionIds } = permissionAssignmentBody.parse(request.body);
-        const result = await authorizationService.replaceRolePermissions(roleId, permissionIds, audit(request));
+        const parsed = permissionAssignmentBody.parse(request.body);
+        const permissionIdentifiers = parsed.permissionIds ?? parsed.permissions ?? [];
+        const result = await authorizationService.replaceRolePermissions(roleId, permissionIdentifiers, audit(request));
         return sendOk({ reply, message: "Role permissions replaced successfully", data: result });
     }
 
     /** Replaces every role link for a user in one transactional operation. */
     async replaceUserRoles(request: FastifyRequest, reply: FastifyReply) {
         const { userId } = request.params as UserParams;
-        const { roleIds } = roleAssignmentBody.parse(request.body);
-        const result = await authorizationService.replaceUserRoles(userId, roleIds, audit(request));
+        const parsed = roleAssignmentBody.parse(request.body);
+        const roleIdentifiers = parsed.roleIds ?? parsed.roles ?? [];
+        const result = await authorizationService.replaceUserRoles(userId, roleIdentifiers, audit(request));
         return sendOk({ reply, message: "User roles replaced successfully", data: result });
     }
 }

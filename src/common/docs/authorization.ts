@@ -114,13 +114,17 @@ export const authorizationSchemas = {
     },
     permissionAssignment: {
         type: "object",
-        required: ["permissionIds"],
-        properties: { permissionIds: { type: "array", items: { type: "string", format: "uuid" }, maxItems: 100 } },
+        properties: {
+            permissionIds: { type: "array", items: { type: "string" }, maxItems: 100 },
+            permissions: { type: "array", items: { type: "string" }, maxItems: 100 },
+        },
     },
     roleAssignment: {
         type: "object",
-        required: ["roleIds"],
-        properties: { roleIds: { type: "array", items: { type: "string", format: "uuid" }, maxItems: 50 } },
+        properties: {
+            roleIds: { type: "array", items: { type: "string" }, maxItems: 50 },
+            roles: { type: "array", items: { type: "string" }, maxItems: 50 },
+        },
     },
     userUpdate: {
         type: "object",
