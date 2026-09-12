@@ -1,4 +1,4 @@
-import { errorResponse, successResponse, tempOtpResponse, tokenResponse, userSchema } from "./swagger.js";
+import { currentUserSchema, errorResponse, successResponse, tempOtpResponse, tokenResponse, userSchema } from "./swagger.js";
 
 // Keep authentication OpenAPI metadata separate from route registration and controller code.
 const jsonBody = (schema: object) => ({ body: schema });
@@ -157,7 +157,7 @@ export const authenticationSchemas = {
             summary: "[Authenticated User] Get current user profile & roles",
             description: "Returns the authenticated user's profile details, assigned roles, and granular permissions.",
             security: [{ bearerAuth: [] }],
-            response: { 200: successResponse(userSchema), 401: errorResponse },
+            response: { 200: successResponse(currentUserSchema), 401: errorResponse },
         },
     },
 };

@@ -39,7 +39,7 @@ export class PaymentCreationService {
             );
         }
 
-        const providerName = input.provider || "MOCK";
+        const providerName = input.provider || "RAZORPAY";
         const provider = paymentProviderRegistry.getProvider(providerName);
         const amount = Number(order.grandTotal);
         const currency = order.currency;

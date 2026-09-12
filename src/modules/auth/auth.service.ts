@@ -14,7 +14,7 @@ import redis from "@/lib/redis.js";
 import { Keys } from "@/const/keys.js";
 import { generateAccessToken, generateRefreshToken, hashToken, verifyRefreshToken } from "@/common/utils/token.js";
 import crypto from "crypto";
-import { invalidateAuthContext } from "@/common/utils/auth-cache.js";
+import { getAuthContext, invalidateAuthContext, setAuthContext } from "@/common/utils/auth-cache.js";
 
 class AuthService {
     private async assertOtp(key: string, otp: string) {
@@ -35,7 +35,7 @@ class AuthService {
     async register(payload: AuthRegisterInput) {
         const { firstName, lastName, email, password } = payload;
 
-        
+
 
         // Hash password
         const passwordHash = await argon2.hash(password);
@@ -376,7 +376,31 @@ class AuthService {
         return { revoked: result.count };
     }
 
-    async getCurrentUser(userId: string) {
+    /// ===========================================GET CURRENT USERS DETAILS===============================
+    private formatUserResponse(profile: any) {
+        const roles: string[] = profile.roles ?? [];
+        
+        // Dynamic check: Standard customer / guest has no roles or only the standard "CUSTOMER" role
+        const isStandardCustomer = roles.length === 0 || (roles.length === 1 && roles[0]?.toUpperCase() === "CUSTOMER");
+
+        if (isStandardCustomer) {
+            // Keep the consumer payload ultra-lightweight by omitting verbose permissions and roleDetails
+            const { permissions: _p, roleDetails: _r, ...leanCustomerPayload } = profile;
+            return leanCustomerPayload;
+        }
+
+        // All other dynamic roles (Admin, Seller, Manager, Support, etc.) receive the full payload
+        return profile;
+    }
+
+    async getCurrentUser(userId: string, sessionId?: string) {
+        // 1. Fast path: Single source of truth from unified AuthContext in Redis
+        const cached = await getAuthContext(userId, sessionId);
+        if (cached) {
+            return this.formatUserResponse(cached);
+        }
+
+        // 2. Database query on cache miss
         const user = await prisma.user.findFirst({
             where: {
                 id: userId,
@@ -392,6 +416,31 @@ class AuthService {
                 emailVerified: true,
                 phoneVerified: true,
                 status: true,
+                createdAt: true,
+                updatedAt: true,
+                // get roles and permissions 
+                roles: {
+                    select: {
+                        role: {
+                            select: {
+                                id: true,
+                                name: true,
+                                description: true,
+                                permissions: {
+                                    select: {
+                                        permission: {
+                                            select: {
+                                                id: true,
+                                                name: true,
+                                                description: true,
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
             },
         });
 
@@ -399,8 +448,49 @@ class AuthService {
             throw new AppError("User not found", 404);
         }
 
-        return user;
-    };
+        const roles = (user.roles ?? []).map((r) => r.role?.name).filter(Boolean) as string[];
+        const permissions = Array.from(
+            new Set(
+                (user.roles ?? []).flatMap((r) =>
+                    (r.role?.permissions ?? []).map((p) => p.permission?.name).filter(Boolean)
+                )
+            )
+        ) as string[];
+
+        const profileResult = {
+            id: user.id,
+            userId: user.id,
+            firstName: user.firstName ?? null,
+            lastName: user.lastName ?? null,
+            email: user.email ?? null,
+            phone: user.phone ?? null,
+            avatarUrl: user.avatarUrl ?? null,
+            emailVerified: Boolean(user.emailVerified),
+            phoneVerified: Boolean(user.phoneVerified),
+            status: user.status ?? "ACTIVE",
+            createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : new Date().toISOString(),
+            updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : new Date().toISOString(),
+            roles,
+            permissions,
+            roleDetails: (user.roles ?? []).map((r) => ({
+                id: r.role?.id,
+                name: r.role?.name,
+                description: r.role?.description ?? null,
+                permissions: (r.role?.permissions ?? []).map((p) => ({
+                    id: p.permission?.id,
+                    name: p.permission?.name,
+                    description: p.permission?.description ?? null,
+                })),
+            })),
+            ...(sessionId ? { sessionId } : {}),
+        };
+
+        // 3. Save to Redis as single source of truth (complete RBAC data for server-side guards)
+        await setAuthContext(profileResult);
+
+        // 4. Return dynamically optimized payload based on role
+        return this.formatUserResponse(profileResult);
+    }
 
 
 }

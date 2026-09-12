@@ -80,15 +80,12 @@ describe("Payment System Unit Tests", () => {
     // Provider Registry Tests
     // ----------------------------------------------------
     describe("PaymentProviderRegistry", () => {
-        it("resolves registered providers (MOCK, STRIPE, RAZORPAY)", () => {
-            const mockProv = paymentProviderRegistry.getProvider("MOCK");
-            expect(mockProv.name).toBe("MOCK");
+        it("resolves registered providers (RAZORPAY, STRIPE)", () => {
+            const rzpProv = paymentProviderRegistry.getProvider("RAZORPAY");
+            expect(rzpProv.name).toBe("RAZORPAY");
 
             const stripeProv = paymentProviderRegistry.getProvider("stripe");
             expect(stripeProv.name).toBe("STRIPE");
-
-            const rzpProv = paymentProviderRegistry.getProvider("RAZORPAY");
-            expect(rzpProv.name).toBe("RAZORPAY");
         });
 
         it("throws error for unsupported provider", () => {
@@ -110,7 +107,7 @@ describe("Payment System Unit Tests", () => {
             await expect(
                 service.initializePayment("user-1", {
                     orderId: "e2b9c3f5-0000-0000-0000-000000000000",
-                    provider: "MOCK",
+                    provider: "RAZORPAY",
                 }),
             ).rejects.toThrow("Order not found");
         });
@@ -125,7 +122,7 @@ describe("Payment System Unit Tests", () => {
             await expect(
                 service.initializePayment("user-1", {
                     orderId: "e2b9c3f5-0000-0000-0000-000000000000",
-                    provider: "MOCK",
+                    provider: "RAZORPAY",
                 }),
             ).rejects.toThrow("Forbidden");
         });
@@ -145,7 +142,7 @@ describe("Payment System Unit Tests", () => {
             prismaMock.payment.create.mockResolvedValue({
                 id: "pay-1",
                 orderId: "ord-1",
-                provider: "MOCK",
+                provider: "RAZORPAY",
                 status: "PENDING",
                 currency: "USD",
                 amount: 150.0,
@@ -162,7 +159,7 @@ describe("Payment System Unit Tests", () => {
 
             const result = await service.initializePayment("user-1", {
                 orderId: "ord-1",
-                provider: "MOCK",
+                provider: "RAZORPAY",
             });
 
             expect(result.paymentId).toBe("pay-1");
@@ -181,7 +178,7 @@ describe("Payment System Unit Tests", () => {
             prismaMock.payment.findUnique.mockResolvedValue({
                 id: "pay-1",
                 orderId: "ord-1",
-                provider: "MOCK",
+                provider: "RAZORPAY",
                 status: "FAILED",
                 currency: "USD",
                 amount: 150.0,
@@ -301,20 +298,20 @@ describe("Payment System Unit Tests", () => {
 
         it("rejects webhook when cryptographic signature is invalid", async () => {
             await expect(
-                service.processWebhook("MOCK", { id: "evt_1" }, { "x-mock-signature": "invalid_sig" }),
+                service.processWebhook("RAZORPAY", { id: "evt_1" }, { "x-razorpay-signature": "invalid_sig" }),
             ).rejects.toThrow("Invalid webhook signature");
         });
 
         it("deduplicates already completed webhook events idempotently", async () => {
             prismaMock.paymentWebhook.findUnique.mockResolvedValue({
                 id: "wh-1",
-                provider: "MOCK",
+                provider: "RAZORPAY",
                 providerEventId: "evt_dup_123",
                 processingStatus: "COMPLETED",
             });
 
             const result = await service.processWebhook(
-                "MOCK",
+                "RAZORPAY",
                 { id: "evt_dup_123", type: "payment_intent.succeeded" },
                 { "x-test-bypass-signature": "true" },
             );
@@ -331,7 +328,7 @@ describe("Payment System Unit Tests", () => {
             prismaMock.payment.findUnique.mockResolvedValue({
                 id: "pay-1",
                 orderId: "ord-1",
-                provider: "MOCK",
+                provider: "RAZORPAY",
                 currency: "USD",
                 amount: 200.0,
                 order: { id: "ord-1", status: "PAYMENT_PENDING" },
@@ -343,14 +340,22 @@ describe("Payment System Unit Tests", () => {
             ]);
 
             const result = await service.processWebhook(
-                "MOCK",
+                "RAZORPAY",
                 {
                     id: "evt_success_1",
-                    type: "payment_intent.succeeded",
-                    data: {
-                        paymentId: "pay-1",
-                        amount: 200.0,
-                        currency: "USD",
+                    event: "payment.captured",
+                    payload: {
+                        payment: {
+                            entity: {
+                                id: "pay_rzp_123",
+                                amount: 20000,
+                                currency: "USD",
+                                notes: {
+                                    paymentId: "pay-1",
+                                    orderId: "ord-1",
+                                },
+                            },
+                        },
                     },
                 },
                 { "x-test-bypass-signature": "true" },
@@ -430,7 +435,7 @@ describe("Payment System Unit Tests", () => {
             prismaMock.payment.findUnique.mockResolvedValue({
                 id: "pay-1",
                 orderId: "ord-1",
-                provider: "MOCK",
+                provider: "RAZORPAY",
                 currency: "USD",
                 status: "SUCCESS",
                 paidAmount: 100.0,
@@ -467,7 +472,7 @@ describe("Payment System Unit Tests", () => {
             prismaMock.payment.findUnique.mockResolvedValue({
                 id: "pay-1",
                 orderId: "ord-1",
-                provider: "MOCK",
+                provider: "RAZORPAY",
                 currency: "USD",
                 status: "SUCCESS",
                 paidAmount: 100.0,

@@ -192,7 +192,10 @@ class AuthController {
 
 
     async me(request: FastifyRequest, reply: FastifyReply) {
-        const user = await authService.getCurrentUser(request.user.userId);
+        const userId = request.user.userId || request.user.id;
+        const user = request.user.sessionId
+            ? await authService.getCurrentUser(userId, request.user.sessionId)
+            : await authService.getCurrentUser(userId);
 
         return sendOk({
             reply,

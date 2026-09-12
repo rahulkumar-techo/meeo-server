@@ -28,7 +28,7 @@ import cookie from "@fastify/cookie";
 import authPlugin from "./plugins/auth.plugin.js";
 import { createYoga } from "graphql-yoga";
 import { graphqlSchema } from "./graphql/schema.js";
-import { preetyLogger } from "./const/logger.config.js";
+import { preetyLogger, formatHttpLog } from "./const/logger.config.js";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import cors from "@fastify/cors";
@@ -99,7 +99,8 @@ export async function buildApp(): Promise<FastifyInstance> {
               "http://127.0.0.1:5173",
               "https://meeo-dashboard.vercel.app",
               "https://meeo-server.onrender.com",
-              "http://127.0.0.1:5000"
+              "http://127.0.0.1:5000",
+              "http://localhost:3001"
 
           ];
 
@@ -159,6 +160,15 @@ export async function buildApp(): Promise<FastifyInstance> {
         const durationMs = Number((performance.now() - startTime).toFixed(2));
         const route = request.routeOptions?.url || request.url;
         metricsService.recordHttpRequest(request.method, route, reply.statusCode, durationMs);
+
+        const logMsg = formatHttpLog(request.method, request.url, reply.statusCode, durationMs, request.id);
+        if (reply.statusCode >= 500) {
+            request.log.error(logMsg);
+        } else if (reply.statusCode >= 400) {
+            request.log.warn(logMsg);
+        } else {
+            request.log.info(logMsg);
+        }
     });
 
     // Prototype pollution defense & input sanitization hook

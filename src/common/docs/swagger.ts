@@ -12,6 +12,54 @@ export const userSchema = {
     },
 };
 
+export const currentUserSchema = {
+    type: "object",
+    properties: {
+        id: { type: "string" },
+        email: { type: ["string", "null"], format: "email" },
+        firstName: { type: ["string", "null"] },
+        lastName: { type: ["string", "null"] },
+        phone: { type: ["string", "null"] },
+        avatarUrl: { type: ["string", "null"] },
+        emailVerified: { type: "boolean" },
+        phoneVerified: { type: "boolean" },
+        status: { type: "string" },
+        createdAt: { type: "string" },
+        updatedAt: { type: "string" },
+        roles: {
+            type: "array",
+            items: { type: "string" },
+        },
+        permissions: {
+            type: "array",
+            items: { type: "string" },
+        },
+        roleDetails: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    id: { type: "string" },
+                    name: { type: "string" },
+                    description: { type: ["string", "null"] },
+                    permissions: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: {
+                                id: { type: "string" },
+                                name: { type: "string" },
+                                description: { type: ["string", "null"] },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+    additionalProperties: true,
+};
+
 export const addressSchema = {
     type: "object",
     required: ["recipientName", "addressLine1", "city", "state", "postalCode", "country"],

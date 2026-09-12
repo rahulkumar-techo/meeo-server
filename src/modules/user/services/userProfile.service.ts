@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
 import type { UserProfilePayload } from "../user.validation.js";
+import { invalidateAuthContext } from "@/common/utils/auth-cache.js";
 
 /**
  * Service managing user personal profile information (name, avatar, basic details).
@@ -29,6 +30,8 @@ export class UserProfileService {
             throw new AppError("Failed to update profile", 403);
         }
 
+        await invalidateAuthContext(userId);
+
         return {
             firstName: user.firstName,
             lastName: user.lastName,
@@ -37,3 +40,4 @@ export class UserProfileService {
 }
 
 export const userProfileService = new UserProfileService();
+

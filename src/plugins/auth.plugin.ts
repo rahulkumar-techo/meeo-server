@@ -10,6 +10,26 @@ export interface AuthorizationContext extends TokenPayload {
 	id: string;
 	roles: string[];
 	permissions: string[];
+	firstName?: string | null;
+	lastName?: string | null;
+	phone?: string | null;
+	avatarUrl?: string | null;
+	emailVerified?: boolean;
+	phoneVerified?: boolean;
+	status?: string;
+	createdAt?: string;
+	updatedAt?: string;
+	roleDetails?: Array<{
+		id?: string;
+		name?: string;
+		description?: string | null;
+		permissions?: Array<{
+			id?: string;
+			name?: string;
+			description?: string | null;
+		}>;
+	}>;
+	sessionExpiresAt?: string;
 }
 
 declare module "fastify" {
@@ -52,10 +72,10 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 			if (cachedContext) {
 				request.user = {
 					...tokenPayload,
-					id: cachedContext.userId,
+					...cachedContext,
+					id: cachedContext.id ?? cachedContext.userId ?? tokenPayload.userId,
+					userId: cachedContext.userId ?? tokenPayload.userId,
 					email: cachedContext.email ?? tokenPayload.email,
-					roles: cachedContext.roles,
-					permissions: cachedContext.permissions,
 				};
 				return;
 			}
@@ -65,14 +85,32 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 				select: {
 					id: true,
 					email: true,
+					firstName: true,
+					lastName: true,
+					phone: true,
+					avatarUrl: true,
+					emailVerified: true,
+					phoneVerified: true,
 					status: true,
+					createdAt: true,
+					updatedAt: true,
 					roles: {
 						select: {
 							role: {
 								select: {
+									id: true,
 									name: true,
+									description: true,
 									permissions: {
-										select: { permission: { select: { name: true } } },
+										select: {
+											permission: {
+												select: {
+													id: true,
+													name: true,
+													description: true,
+												},
+											},
+										},
 									},
 								},
 							},
@@ -99,16 +137,37 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 				sessionExpiresAt = session.expiresAt;
 			}
 
-			const roles = user.roles.map(({ role }) => role.name);
-			const permissions = [...new Set(user.roles.flatMap(({ role }) =>
-				role.permissions.map(({ permission }) => permission.name),
-			))];
+			const roles = (user.roles ?? []).map(({ role }) => role?.name).filter(Boolean) as string[];
+			const permissions = [...new Set((user.roles ?? []).flatMap(({ role }) =>
+				(role?.permissions ?? []).map(({ permission }) => permission?.name).filter(Boolean),
+			))] as string[];
+			const roleDetails = (user.roles ?? []).map(({ role }) => ({
+				id: role?.id,
+				name: role?.name,
+				description: role?.description ?? null,
+				permissions: (role?.permissions ?? []).map(({ permission }) => ({
+					id: permission?.id,
+					name: permission?.name,
+					description: permission?.description ?? null,
+				})),
+			}));
 
 			const authContext = {
+				id: user.id,
 				userId: user.id,
-				email: user.email,
+				email: user.email ?? tokenPayload.email,
+				firstName: user.firstName ?? null,
+				lastName: user.lastName ?? null,
+				phone: user.phone ?? null,
+				avatarUrl: user.avatarUrl ?? null,
+				emailVerified: Boolean(user.emailVerified),
+				phoneVerified: Boolean(user.phoneVerified),
+				status: user.status ?? "ACTIVE",
+				createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : new Date().toISOString(),
+				updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : new Date().toISOString(),
 				roles,
 				permissions,
+				roleDetails,
 				...(tokenPayload.sessionId ? { sessionId: tokenPayload.sessionId } : {}),
 				...(sessionExpiresAt ? { sessionExpiresAt: sessionExpiresAt.toISOString() } : {}),
 			};
@@ -117,10 +176,8 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 
 			request.user = {
 				...tokenPayload,
-				id: user.id,
+				...authContext,
 				email: user.email ?? tokenPayload.email,
-				roles,
-				permissions,
 			};
 		} catch (error) {
 			if (error instanceof AppError) {

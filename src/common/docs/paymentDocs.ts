@@ -4,7 +4,7 @@ export const paymentSwaggerSchemas = {
         required: ["orderId"],
         properties: {
             orderId: { type: "string", format: "uuid", description: "Target order ID" },
-            provider: { type: "string", enum: ["MOCK", "STRIPE", "RAZORPAY"], default: "MOCK" },
+            provider: { type: "string", enum: ["RAZORPAY", "STRIPE"], default: "RAZORPAY" },
             paymentMethod: { type: "string", description: "Card, UPI, Netbanking, etc." },
             returnUrl: { type: "string", format: "uri", description: "Redirect URL upon client completion" },
             metadata: { type: "object", description: "Custom gateway metadata" },

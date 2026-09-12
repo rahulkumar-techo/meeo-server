@@ -504,6 +504,16 @@ export class ProductService {
                             category: { select: { id: true, name: true, slug: true } },
                             brand: { select: { id: true, name: true, slug: true, logoUrl: true } },
                             images: { orderBy: { sortOrder: "asc" } },
+                            variants: {
+                                select: {
+                                    id: true,
+                                    sku: true,
+                                    price: true,
+                                    compareAtPrice: true,
+                                    status: true,
+                                },
+                                orderBy: { createdAt: "asc" },
+                            },
                             _count: { select: { variants: true } },
                         },
                         ...args,
@@ -533,6 +543,16 @@ export class ProductService {
                     category: { select: { id: true, name: true, slug: true } },
                     brand: { select: { id: true, name: true, slug: true, logoUrl: true } },
                     images: { orderBy: { sortOrder: "asc" } },
+                    variants: {
+                        select: {
+                            id: true,
+                            sku: true,
+                            price: true,
+                            compareAtPrice: true,
+                            status: true,
+                        },
+                        orderBy: { createdAt: "asc" },
+                    },
                     _count: { select: { variants: true } },
                 },
             }),

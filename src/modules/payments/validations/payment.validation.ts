@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const CreatePaymentIntentSchema = z.object({
     orderId: z.string().uuid({ message: "Invalid orderId format (UUID required)" }),
-    provider: z.enum(["MOCK", "STRIPE", "RAZORPAY"]).default("MOCK"),
+    provider: z.enum(["RAZORPAY", "STRIPE"]).default("RAZORPAY"),
     paymentMethod: z.string().min(1).max(50).optional(),
     returnUrl: z.string().url().optional(),
     metadata: z.record(z.string(), z.any()).optional(),

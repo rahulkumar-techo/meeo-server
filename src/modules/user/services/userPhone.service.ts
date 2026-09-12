@@ -3,6 +3,7 @@ import { AppError } from "@/common/errors/app-error.js";
 import { generateOtp } from "@/common/utils/generateOtp.js";
 import redis from "@/lib/redis.js";
 import { Keys } from "@/const/keys.js";
+import { invalidateAuthContext } from "@/common/utils/auth-cache.js";
 import type {
     PhoneOtpRequestPayload,
     PhoneVerificationPayload,
@@ -103,11 +104,13 @@ export class UserPhoneService {
             },
         });
 
-        // Invalidate Redis OTP after successful verification to prevent replay attacks
+        // Invalidate Redis OTP and user profile cache after successful verification
         await redis.del(Keys.PHONE_OTP(userId));
+        await invalidateAuthContext(userId);
 
         return user;
     }
 }
 
 export const userPhoneService = new UserPhoneService();
+

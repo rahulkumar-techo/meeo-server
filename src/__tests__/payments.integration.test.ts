@@ -98,7 +98,7 @@ describe("Payment HTTP Routes Integration Tests", () => {
             paymentId: "c1111111-95e3-4d22-b5e1-0bfab4b901a1",
             orderId: "d1111111-95e3-4d22-b5e1-0bfab4b901a1",
             orderNumber: "ORD-20260906-0001",
-            provider: "MOCK",
+            provider: "RAZORPAY",
             clientSecret: "mock_sec_123",
             checkoutUrl: "https://checkout.example.com/pay/mock_pay_123",
             amount: 150.0,
@@ -115,7 +115,7 @@ describe("Payment HTTP Routes Integration Tests", () => {
             },
             payload: {
                 orderId: "d1111111-95e3-4d22-b5e1-0bfab4b901a1",
-                provider: "MOCK",
+                provider: "RAZORPAY",
             },
         });
 
@@ -133,7 +133,7 @@ describe("Payment HTTP Routes Integration Tests", () => {
         paymentServiceMock.retryPayment.mockResolvedValue({
             paymentId: "c1111111-95e3-4d22-b5e1-0bfab4b901a1",
             orderId: "d1111111-95e3-4d22-b5e1-0bfab4b901a1",
-            provider: "MOCK",
+            provider: "RAZORPAY",
             status: "PROCESSING",
             attemptNumber: 2,
             amount: 150.0,
@@ -195,7 +195,7 @@ describe("Payment HTTP Routes Integration Tests", () => {
 
         const response = await app.inject({
             method: "POST",
-            url: "/api/payments/webhook/mock",
+            url: "/api/payments/webhook/razorpay",
             headers: {
                 "x-test-bypass-signature": "true",
             },
