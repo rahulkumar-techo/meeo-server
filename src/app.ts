@@ -35,17 +35,21 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import { apiDescription, swaggerTags } from "./common/docs/apiDescription.js";
 import { docsDescriptionHtml } from "./common/docs/docsDescriptionPage.js";
-import { ulid } from "ulid";
 import { metricsService } from "./common/observability/metrics.service.js";
 import healthRouter, { metricsRouter } from "./modules/health/health.route.js";
+import fastifyMetrics from "fastify-metrics";
 
 export async function buildApp(): Promise<FastifyInstance> {
     const app = Fastify({
         ...preetyLogger,
         trustProxy: true,
         requestIdHeader: "x-request-id",
-        genReqId: (req) => (req.headers["x-request-id"] as string) || `req_${ulid()}`,
         bodyLimit: 1 * 1024 * 1024, // 1MB payload limit
+    });
+
+    await app.register(fastifyMetrics.default, {
+        endpoint: "/metrics",
+        clearRegisterOnInit: true,
     });
 
     await app.register(helmetPlugin);
@@ -93,17 +97,17 @@ export async function buildApp(): Promise<FastifyInstance> {
     const allowedOrigins = process.env.CORS_ORIGIN
         ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
         : [
-              "http://localhost:3000",
-              "http://localhost:5173",
-              "http://127.0.0.1:3000",
-              "http://127.0.0.1:5173",
-              "https://meeo-dashboard.vercel.app",
-              "https://meeo-server.onrender.com",
-              "http://127.0.0.1:5000",
-              "http://localhost:3001",
-              "https://meeo-web.vercel.app"
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+            "https://meeo-dashboard.vercel.app",
+            "https://meeo-server.onrender.com",
+            "http://127.0.0.1:5000",
+            "http://localhost:3001",
+            "https://meeo-web.vercel.app"
 
-          ];
+        ];
 
     await app.register(cors, {
         origin: (origin, cb) => {
@@ -265,7 +269,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     });
 
     app.setErrorHandler(errorHandler);
-    
+
     /// Bind to the Yoga's endpoint to avoid rendering on any path
     app.route({
         url: "/graphql",

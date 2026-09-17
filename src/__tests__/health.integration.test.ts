@@ -49,6 +49,7 @@ vi.mock("../lib/mail.js", () => ({
     },
 }));
 
+import fastifyMetrics from "fastify-metrics";
 import healthRouter, { metricsRouter } from "../modules/health/health.route.js";
 import { errorHandler } from "../common/errors/error-handler.js";
 import { metricsService } from "../common/observability/metrics.service.js";
@@ -79,6 +80,7 @@ describe("Health, Readiness & Metrics HTTP Routes Integration Tests", () => {
             metricsService.recordHttpRequest(request.method, route, reply.statusCode, durationMs);
         });
 
+        await app.register(fastifyMetrics.default, { endpoint: "/metrics", clearRegisterOnInit: true });
         await app.register(cookie);
         await app.register(healthRouter, { prefix: "/health" });
         await app.register(metricsRouter, { prefix: "/metrics" });
@@ -184,8 +186,8 @@ describe("Health, Readiness & Metrics HTTP Routes Integration Tests", () => {
 
         expect(res.statusCode).toBe(200);
         expect(res.headers["content-type"]).toContain("text/plain");
-        expect(res.body).toContain("# HELP http_requests_total");
-        expect(res.body).toContain("process_memory_rss_bytes");
+        expect(res.body).toContain("process_cpu_user_seconds_total");
+        expect(res.body).toContain("process_resident_memory_bytes");
     });
 
     it("exposes JSON metrics snapshot via GET /metrics/json", async () => {
