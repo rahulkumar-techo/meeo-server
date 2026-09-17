@@ -29,10 +29,16 @@ export const loginSchema = z.object({
     deviceId: z.string().trim().max(255).optional(),
 });
 
+export const googleLoginSchema = z.object({
+    idToken: z.string().min(1, "Google ID token is required"),
+    deviceName: z.string().trim().max(100).optional(),
+    deviceId: z.string().trim().max(255).optional(),
+});
 
 export type AuthRegisterInput = z.infer<typeof authRegister>;
 export type AuthOtpVerification = z.infer<typeof otpVerification>;
 export type AuthLoginOption = z.infer<typeof loginSchema>;
+export type GoogleLoginInput = z.infer<typeof googleLoginSchema>;
 export type ResendOtpInput = z.infer<typeof resendOtp>;
 export type ForgotPasswordInput = z.infer<typeof forgotPassword>;
 export type ResetPasswordInput = z.infer<typeof resetPassword>;

@@ -105,6 +105,23 @@ export const authenticationSchemas = {
             response: { 200: successResponse({ type: "object", properties: { user: userSchema, accessToken: tokenResponse.properties.accessToken, refreshToken: tokenResponse.properties.refreshToken } }), ...commonErrors },
         },
     },
+    googleLogin: {
+        schema: {
+            tags: ["Auth"],
+            summary: "[Public] Google OAuth Login / Register",
+            description: "Verifies Google ID Token (from Next.js or React Native), creates or links user, returns JWT accessToken and sets HttpOnly refreshToken cookie.",
+            ...jsonBody({
+                type: "object",
+                required: ["idToken"],
+                properties: {
+                    idToken: { type: "string", description: "Google ID Token returned by Google Sign-In" },
+                    deviceName: { type: "string", maxLength: 100, description: "Friendly device name" },
+                    deviceId: { type: "string", maxLength: 255, description: "Stable client device identifier" },
+                },
+            }),
+            response: { 200: successResponse({ type: "object", properties: { user: userSchema, accessToken: tokenResponse.properties.accessToken, refreshToken: tokenResponse.properties.refreshToken } }), ...commonErrors },
+        },
+    },
     refresh: {
         schema: {
             tags: ["Auth"],

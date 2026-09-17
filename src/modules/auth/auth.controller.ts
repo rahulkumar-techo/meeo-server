@@ -6,6 +6,7 @@ import {
     authRegister,
     forgotPassword,
     loginSchema,
+    googleLoginSchema,
     otpVerification,
     resendOtp,
     resetPassword,
@@ -99,6 +100,32 @@ class AuthController {
             data: {
                 user: result.user,
                 accessToken: result.accessToken,
+            },
+        });
+    }
+
+    async googleLogin(
+        request: FastifyRequest,
+        reply: FastifyReply,
+    ) {
+        const data = googleLoginSchema.parse(request.body);
+        const result = await authService.authenticateWithGoogle(data, {
+            ipAddress: request.ip,
+            ...(request.headers["user-agent"] ? { userAgent: request.headers["user-agent"] as string } : {}),
+        });
+
+        // 🔒 Store both tokens in secure HttpOnly cookies (for Web / Next.js)
+        reply.setCookie("refreshToken", result.refreshToken, refreshTokenCookieOptions);
+        reply.setCookie("accessToken", result.accessToken, accessTokenCookieOptions);
+
+        // 📱 Return tokens in response payload (for React Native / Mobile apps)
+        return sendOk({
+            reply,
+            message: "Google authentication successful",
+            data: {
+                user: result.user,
+                accessToken: result.accessToken,
+                refreshToken: result.refreshToken,
             },
         });
     }

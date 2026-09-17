@@ -35,6 +35,11 @@ const publicAuthRoutes = (app: FastifyInstance) => {
         authController.login.bind(authController),
     );
     app.post(
+        "/google",
+        authenticationSchemas.googleLogin,
+        authController.googleLogin.bind(authController),
+    );
+    app.post(
         "/refresh",
         authenticationSchemas.refresh,
         authController.refresh.bind(authController),

@@ -6,6 +6,7 @@ import type {
     ResendOtpInput,
     ResetPasswordInput,
     AuthOtpVerification,
+    GoogleLoginInput,
 } from "./auth.validation.js";
 import argon2 from "argon2";
 import { AppError } from "@/common/errors/app-error.js";
@@ -15,6 +16,13 @@ import { Keys } from "@/const/keys.js";
 import { generateAccessToken, generateRefreshToken, hashToken, verifyRefreshToken } from "@/common/utils/token.js";
 import crypto from "crypto";
 import { getAuthContext, invalidateAuthContext, setAuthContext } from "@/common/utils/auth-cache.js";
+import { verifyGoogleIdToken } from "./googleAuth.service.js";
+
+interface SessionCreationOptions {
+    deviceId?: string | undefined;
+    deviceName?: string | undefined;
+    metadata?: { ipAddress?: string | undefined; userAgent?: string | undefined } | undefined;
+}
 
 class AuthService {
     private async assertOtp(key: string, otp: string) {
@@ -125,6 +133,52 @@ class AuthService {
         return { tempOtp };
     }
 
+    private async issueUserSessionAndTokens(
+        user: { id: string; email: string; firstName?: string | null | undefined; lastName?: string | null | undefined },
+        options?: SessionCreationOptions
+    ) {
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const sessionId = crypto.randomUUID();
+
+        const refreshToken = generateRefreshToken({
+            userId: user.id,
+            email: user.email,
+            sessionId,
+        });
+
+        const sessionData = {
+            id: sessionId,
+            userId: user.id,
+            refreshTokenHash: hashToken(refreshToken),
+            ...(options?.deviceName ? { deviceName: options.deviceName } : {}),
+            ...(options?.deviceId ? { deviceId: options.deviceId } : {}),
+            ...(options?.metadata?.ipAddress ? { ipAddress: options.metadata.ipAddress } : {}),
+            ...(options?.metadata?.userAgent ? { userAgent: options.metadata.userAgent } : {}),
+            expiresAt,
+        };
+
+        await prisma.userSession.create({
+            data: sessionData,
+        });
+
+        const accessToken = generateAccessToken({
+            userId: user.id,
+            email: user.email,
+            sessionId,
+        });
+
+        return {
+            user: {
+                id: user.id,
+                firstName: user.firstName ?? null,
+                lastName: user.lastName ?? null,
+                email: user.email,
+            },
+            accessToken,
+            refreshToken,
+        };
+    }
+
     async login(payload: AuthLoginOption, metadata?: { ipAddress?: string; userAgent?: string }) {
         const { email, password, deviceName, deviceId } = payload;
 
@@ -162,54 +216,10 @@ class AuthService {
             throw new AppError(`Account is ${user.status.toLowerCase().replaceAll("_", " ")}`, 403);
         }
 
-        // Refresh token expiration
-        const expiresAt = new Date(
-            Date.now() + 7 * 24 * 60 * 60 * 1000,
+        return this.issueUserSessionAndTokens(
+            { id: user.id, email: user.email!, firstName: user.firstName, lastName: user.lastName },
+            { deviceId, deviceName, metadata }
         );
-        // Create session ID
-        const sessionId = crypto.randomUUID();
-
-        // Generate refresh token
-        const refreshToken = generateRefreshToken({
-            userId: user.id,
-            email: user.email!,
-            sessionId,
-        });
-
-        // Store HASH, never raw token
-        const sessionData = {
-            id: sessionId,
-            userId: user.id,
-            refreshTokenHash: hashToken(refreshToken),
-            ...(deviceName ? { deviceName } : {}),
-            ...(deviceId ? { deviceId } : {}),
-            ...(metadata?.ipAddress ? { ipAddress: metadata.ipAddress } : {}),
-            ...(metadata?.userAgent ? { userAgent: metadata.userAgent } : {}),
-            expiresAt,
-        };
-
-        await prisma.userSession.create({
-            data: sessionData,
-        });
-
-        // Generate access token
-        const accessToken = generateAccessToken({
-            userId: user.id,
-            email: user.email!,
-            sessionId,
-        });
-
-        return {
-            user: {
-                id: user.id,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                email: user.email,
-            },
-
-            accessToken,
-            refreshToken,
-        };
     };
 
     async resetPassword({ email, otp, password }: ResetPasswordInput) {
@@ -379,7 +389,7 @@ class AuthService {
     /// ===========================================GET CURRENT USERS DETAILS===============================
     private formatUserResponse(profile: any) {
         const roles: string[] = profile.roles ?? [];
-        
+
         // Dynamic check: Standard customer / guest has no roles or only the standard "CUSTOMER" role
         const isStandardCustomer = roles.length === 0 || (roles.length === 1 && roles[0]?.toUpperCase() === "CUSTOMER");
 
@@ -492,6 +502,66 @@ class AuthService {
         return this.formatUserResponse(profileResult);
     }
 
+
+    async authenticateWithGoogle(
+        payload: GoogleLoginInput,
+        metadata?: { ipAddress?: string; userAgent?: string }
+    ) {
+        const { idToken, deviceName, deviceId } = payload;
+
+        // 1. Verify token cryptographically on server
+        const googleUser = await verifyGoogleIdToken(idToken);
+
+        // 2. Check if user already exists with this email
+        let user = await prisma.user.findFirst({
+            where: { email: googleUser.email, deletedAt: null },
+        });
+
+        if (user) {
+            if (user.status !== "ACTIVE") {
+                throw new AppError(`Account is ${user.status.toLowerCase().replaceAll("_", " ")}`, 403);
+            }
+
+            // Sync verification & avatar if missing
+            if (!user.emailVerified || (!user.avatarUrl && googleUser.avatarUrl)) {
+                user = await prisma.user.update({
+                    where: { id: user.id },
+                    data: {
+                        emailVerified: true,
+                        ...(user.avatarUrl ? {} : { avatarUrl: googleUser.avatarUrl }),
+                        lastLoginAt: new Date(),
+                    },
+                });
+            } else {
+                await prisma.user.update({
+                    where: { id: user.id },
+                    data: { lastLoginAt: new Date() },
+                });
+            }
+        } else {
+            // 3. New user registration via Google (generate un-guessable passwordHash)
+            const randomPasswordHash = await argon2.hash(crypto.randomBytes(32).toString("hex"));
+
+            user = await prisma.user.create({
+                data: {
+                    email: googleUser.email,
+                    firstName: googleUser.firstName,
+                    lastName: googleUser.lastName,
+                    avatarUrl: googleUser.avatarUrl,
+                    emailVerified: true,
+                    passwordHash: randomPasswordHash,
+                    status: "ACTIVE",
+                    lastLoginAt: new Date(),
+                },
+            });
+        }
+
+        // 4. Issue session and tokens (reusable logic)
+        return this.issueUserSessionAndTokens(
+            { id: user.id, email: user.email!, firstName: user.firstName, lastName: user.lastName },
+            { deviceId, deviceName, metadata }
+        );
+    }
 
 }
 
