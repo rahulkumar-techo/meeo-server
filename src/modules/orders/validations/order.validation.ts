@@ -25,7 +25,7 @@ export const checkoutSchema = z.object({
     billingAddress: addressSnapshotSchema.optional(),
     couponCode: z.string().trim().max(50).optional(),
     notes: z.string().trim().max(500).optional(),
-    currency: z.string().trim().length(3, "Currency must be a 3-letter ISO code").default("USD"),
+    currency: z.string().trim().length(3, "Currency must be a 3-letter ISO code").default("INR"),
 }).refine(
     (data) => !!data.shippingAddressId || !!data.shippingAddress,
     {

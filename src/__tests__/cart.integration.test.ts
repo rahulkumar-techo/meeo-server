@@ -68,7 +68,7 @@ describe("Cart HTTP Routes Integration Tests", () => {
         cartServiceMock.getCart.mockResolvedValue({
             id: "cart-guest",
             sessionId: "guest-session-123",
-            summary: { itemCount: 0, totalItems: 0, subtotal: 0, currency: "USD" },
+            summary: { itemCount: 0, totalItems: 0, subtotal: 0, currency: "INR" },
             items: [],
         });
 
@@ -93,7 +93,7 @@ describe("Cart HTTP Routes Integration Tests", () => {
 
         cartServiceMock.addItem.mockResolvedValue({
             id: "cart-1",
-            summary: { itemCount: 1, totalItems: 2, subtotal: 100, currency: "USD" },
+            summary: { itemCount: 1, totalItems: 2, subtotal: 100, currency: "INR" },
             items: [{ id: "item-1", variantId, quantity: 2 }],
         });
 
@@ -118,7 +118,7 @@ describe("Cart HTTP Routes Integration Tests", () => {
 
         cartServiceMock.updateItemQuantity.mockResolvedValue({
             id: "cart-1",
-            summary: { itemCount: 1, totalItems: 4, subtotal: 200, currency: "USD" },
+            summary: { itemCount: 1, totalItems: 4, subtotal: 200, currency: "INR" },
             items: [{ id: itemId, quantity: 4 }],
         });
 
@@ -140,7 +140,7 @@ describe("Cart HTTP Routes Integration Tests", () => {
 
         cartServiceMock.removeItem.mockResolvedValue({
             id: "cart-1",
-            summary: { itemCount: 0, totalItems: 0, subtotal: 0, currency: "USD" },
+            summary: { itemCount: 0, totalItems: 0, subtotal: 0, currency: "INR" },
             items: [],
         });
 
@@ -159,7 +159,7 @@ describe("Cart HTTP Routes Integration Tests", () => {
 
         cartServiceMock.clearCart.mockResolvedValue({
             id: "cart-1",
-            summary: { itemCount: 0, totalItems: 0, subtotal: 0, currency: "USD" },
+            summary: { itemCount: 0, totalItems: 0, subtotal: 0, currency: "INR" },
             items: [],
         });
 
@@ -180,7 +180,7 @@ describe("Cart HTTP Routes Integration Tests", () => {
         cartServiceMock.mergeGuestCart.mockResolvedValue({
             id: "cart-user",
             userId,
-            summary: { itemCount: 2, totalItems: 5, subtotal: 250, currency: "USD" },
+            summary: { itemCount: 2, totalItems: 5, subtotal: 250, currency: "INR" },
             items: [],
         });
 

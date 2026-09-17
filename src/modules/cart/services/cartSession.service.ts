@@ -181,7 +181,7 @@ export class CartSessionService {
                 itemCount: items.length,
                 totalItems,
                 subtotal: Number(subtotal.toFixed(2)),
-                currency: "USD",
+                currency: "INR",
             },
             items,
         };

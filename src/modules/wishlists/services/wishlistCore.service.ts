@@ -91,7 +91,7 @@ export class WishlistCoreService {
                 pricing: {
                     minPrice,
                     maxPrice,
-                    currency: "USD",
+                    currency: "INR",
                 },
                 inStock: totalInStock > 0,
                 availableVariantsCount: (product.variants || []).length,

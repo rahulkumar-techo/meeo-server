@@ -8,7 +8,7 @@ export const SystemSettingsSchema = z.object({
     operationsEmail: z.string().email().default("ops@example.com"),
     securityEmail: z.string().email().default("security@example.com"),
     requireAdmin2FA: z.boolean().default(false),
-    defaultCurrency: z.string().min(3).max(3).default("USD"),
+    defaultCurrency: z.string().min(3).max(3).default("INR"),
     timezone: z.string().min(1).default("UTC"),
 
     // Operational Controls & System Modes

@@ -16,7 +16,7 @@ describe("System Settings Unit Tests", () => {
         expect(defaults.platformBrandName).toBe("E-Commerce Platform");
         expect(defaults.publicDomainUrl).toBe("https://store.example.com");
         expect(defaults.supportEmail).toBe("support@example.com");
-        expect(defaults.defaultCurrency).toBe("USD");
+        expect(defaults.defaultCurrency).toBe("INR");
         expect(defaults.timezone).toBe("UTC");
         expect(defaults.requireAdmin2FA).toBe(false);
 

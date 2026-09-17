@@ -59,7 +59,7 @@ export const orderSwaggerSchemas = {
             },
             currency: {
                 type: "string",
-                default: "USD",
+                default: "INR",
                 description: "3-letter ISO currency code",
             },
         },
