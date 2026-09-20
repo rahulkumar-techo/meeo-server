@@ -2,7 +2,6 @@ import Fastify, { type FastifyInstance } from "fastify";
 import "dotenv/config.js";
 import { appRateLimit } from "./plugins/rate_limit.js";
 import { errorHandler } from "./common/errors/error-handler.js";
-import { mailTransporter } from "./lib/mail.js";
 import authRouter from "./modules/auth/auth.route.js";
 import userRouter from "./modules/user/user.route.js";
 import authorizationRouter from "./modules/authorization/authorization.route.js";

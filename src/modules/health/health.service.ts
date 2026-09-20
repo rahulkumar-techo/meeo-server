@@ -1,6 +1,6 @@
 import redis from "@/lib/redis.js";
 import { checkDatabaseHealth } from "@/lib/prisma.js";
-import { mailTransporter } from "@/lib/mail.js";
+import { verifyBrevoAccount, getBrevoClient } from "@/lib/brevo.js";
 import { getQueueMetrics } from "@/lib/queue.js";
 
 export interface ComponentHealth {
@@ -85,12 +85,12 @@ export class HealthService {
             };
         }
 
-        // 3. Mail Transporter Check
+        // 3. Mail (Brevo) Check
         let mailHealth: ComponentHealth = { status: "healthy" };
-        if (mailTransporter && typeof mailTransporter.verify === "function") {
+        if (getBrevoClient()) {
             const mailStart = performance.now();
             try {
-                await mailTransporter.verify();
+                await verifyBrevoAccount();
                 mailHealth = {
                     status: "healthy",
                     latencyMs: Number((performance.now() - mailStart).toFixed(2)),
@@ -99,7 +99,7 @@ export class HealthService {
                 mailHealth = {
                     status: "degraded",
                     latencyMs: Number((performance.now() - mailStart).toFixed(2)),
-                    message: err.message || "SMTP transporter verify failed",
+                    message: err.message || "Brevo API verification failed",
                 };
             }
         }

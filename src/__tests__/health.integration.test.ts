@@ -43,10 +43,9 @@ vi.mock("../lib/queue.js", () => ({
     getQueueMetrics: mockQueueMetrics,
 }));
 
-vi.mock("../lib/mail.js", () => ({
-    mailTransporter: {
-        verify: vi.fn().mockResolvedValue(true),
-    },
+vi.mock("../lib/brevo.js", () => ({
+    getBrevoClient: vi.fn().mockReturnValue({ account: { getAccount: vi.fn().mockResolvedValue({}) } }),
+    verifyBrevoAccount: vi.fn().mockResolvedValue({ email: "admin@meeo.com" }),
 }));
 
 import fastifyMetrics from "fastify-metrics";

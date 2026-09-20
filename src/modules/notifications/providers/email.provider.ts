@@ -1,4 +1,4 @@
-import { mailTransporter } from "@/lib/mail.js";
+import { mailService } from "@/common/mail/send.mail.js";
 import type { NotificationContent } from "../templates/notificationTemplates.js";
 
 export interface SendEmailOptions {
@@ -9,30 +9,28 @@ export interface SendEmailOptions {
 
 export class EmailProvider {
     /**
-     * Sends an email notification using Nodemailer / SMTP transporter.
+     * Sends an email notification using Brevo transactional email service.
      */
     async sendEmail(options: SendEmailOptions): Promise<{ messageId: string; success: boolean }> {
-        const { to, content, from } = options;
-        const sender = from || process.env.SMTP_FROM || '"E-Commerce Store" <no-reply@store.com>';
+        const { to, content } = options;
 
         try {
-            console.log(`[SMTP-Notification] 📤 Dispatching email notification to: ${to} | Subject: "${content.subject}"`);
-            const info = await mailTransporter.sendMail({
-                from: sender,
+            console.log(`[Email-Notification] 📤 Dispatching notification email to: ${to} | Subject: "${content.subject}"`);
+            const info = await mailService.sendMail({
                 to,
                 subject: content.subject,
                 text: content.body,
                 html: content.html,
             });
 
-            console.log(`[SMTP-Notification] ✅ Notification email delivered to ${to} | Message ID: ${info?.messageId}`);
+            console.log(`[Email-Notification] ✅ Notification email delivered to ${to} | Message ID: ${info?.messageId}`);
 
             return {
                 messageId: info?.messageId || `mock-mail-${Date.now()}`,
                 success: true,
             };
         } catch (err: any) {
-            console.error(`[SMTP-Notification] ❌ Failed to send email to ${to}:`, err.message);
+            console.error(`[Email-Notification] ❌ Failed to send email notification to ${to}:`, err.message);
             throw err;
         }
     }
