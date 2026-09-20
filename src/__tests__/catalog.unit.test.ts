@@ -27,12 +27,14 @@ const { prismaMock, imagekitMock } = vi.hoisted(() => ({
             delete: vi.fn(),
             count: vi.fn(),
         },
-        productImage: {
+        image: {
             findFirst: vi.fn(),
             findMany: vi.fn(),
             create: vi.fn(),
             update: vi.fn(),
             delete: vi.fn(),
+            createMany: vi.fn(),
+            deleteMany: vi.fn(),
         },
         productVariant: {
             findUnique: vi.fn(),
@@ -333,6 +335,88 @@ describe("Catalog Services and Authorization Unit Tests", () => {
             );
         });
 
+        it("creates and updates product with dynamic JSONB specifications (Flipkart style)", async () => {
+            const specifications = {
+                "General": {
+                    "Model Name": "Galaxy S24 Ultra",
+                    "Color": "Titanium Gray",
+                },
+                "Display": {
+                    "Display Size": "6.8 inch",
+                    "Resolution": "3120 x 1440 Pixels",
+                },
+            };
+
+            prismaMock.product.findUnique.mockResolvedValue(null);
+            prismaMock.product.create.mockResolvedValue({
+                id: "prod-spec-1",
+                name: "Galaxy S24 Ultra",
+                slug: "galaxy-s24-ultra",
+                specifications,
+                status: "DRAFT",
+            });
+
+            const created = await productService.createProduct({
+                name: "Galaxy S24 Ultra",
+                status: "DRAFT",
+                isFeatured: false,
+                images: [],
+                specifications,
+            });
+
+            expect(prismaMock.product.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        specifications,
+                    }),
+                }),
+            );
+
+            // Test update specifications
+            const userContext: AuthorizationContext = {
+                userId: "user-1",
+                id: "user-1",
+                email: "a@a.com",
+                roles: ["ADMIN"],
+                permissions: [PERMISSIONS.PRODUCT_UPDATE],
+            };
+
+            prismaMock.product.findUnique.mockResolvedValue({
+                id: "prod-spec-1",
+                slug: "galaxy-s24-ultra",
+                createdById: "user-1",
+            });
+            prismaMock.product.update.mockResolvedValue({
+                id: "prod-spec-1",
+                specifications: {
+                    ...specifications,
+                    "Camera": { "Primary Camera": "200MP" },
+                },
+            });
+
+            const updated = await productService.updateProduct(
+                "prod-spec-1",
+                {
+                    specifications: {
+                        ...specifications,
+                        "Camera": { "Primary Camera": "200MP" },
+                    },
+                },
+                userContext,
+            );
+
+            expect(prismaMock.product.update).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        specifications: {
+                            ...specifications,
+                            "Camera": { "Primary Camera": "200MP" },
+                        },
+                    }),
+                }),
+            );
+        });
+
         it("transitions product lifecycle: publish, draft, archive", async () => {
             const userContext: AuthorizationContext = {
                 userId: "user-1",
@@ -377,7 +461,7 @@ describe("Catalog Services and Authorization Unit Tests", () => {
                 images: [{ sortOrder: 2 }],
             });
 
-            prismaMock.productImage.create.mockResolvedValue({
+            prismaMock.image.create.mockResolvedValue({
                 id: "img-new",
                 productId: "prod-1",
                 url: "https://example.com/side.png",
@@ -391,13 +475,17 @@ describe("Catalog Services and Authorization Unit Tests", () => {
             );
 
             expect(result.sortOrder).toBe(3);
-            expect(prismaMock.productImage.create).toHaveBeenCalledWith({
+            expect(prismaMock.image.create).toHaveBeenCalledWith({
                 data: {
                     productId: "prod-1",
                     url: "https://example.com/side.png",
+                    thumbnailUrl: null,
                     altText: null,
                     sortOrder: 3,
                     fileId: null,
+                    width: null,
+                    height: null,
+                    size: null,
                 },
             });
         });
@@ -423,7 +511,7 @@ describe("Catalog Services and Authorization Unit Tests", () => {
                 name: "test.jpg",
             });
 
-            prismaMock.productImage.create.mockResolvedValue({
+            prismaMock.image.create.mockResolvedValue({
                 id: "img-uploaded",
                 productId: "prod-1",
                 fileId: "ik-file-123",
@@ -467,21 +555,21 @@ describe("Catalog Services and Authorization Unit Tests", () => {
                 createdById: "user-1",
             });
 
-            prismaMock.productImage.findFirst.mockResolvedValue({
+            prismaMock.image.findFirst.mockResolvedValue({
                 id: "img-1",
                 productId: "prod-1",
                 fileId: "ik-file-999",
                 url: "https://ik.imagekit.io/demo/products/prod-1/img.jpg",
             });
 
-            prismaMock.productImage.delete.mockResolvedValue({
+            prismaMock.image.delete.mockResolvedValue({
                 id: "img-1",
             });
 
             const result = await productService.deleteImage("prod-1", "img-1", userContext);
 
             expect(imagekitMock.deleteFromImageKit).toHaveBeenCalledWith("ik-file-999");
-            expect(prismaMock.productImage.delete).toHaveBeenCalledWith({
+            expect(prismaMock.image.delete).toHaveBeenCalledWith({
                 where: { id: "img-1" },
             });
             expect(result.deleted).toBe(true);
@@ -501,7 +589,7 @@ describe("Catalog Services and Authorization Unit Tests", () => {
                 createdById: "user-1",
             });
 
-            prismaMock.productImage.findMany.mockResolvedValue([
+            prismaMock.image.findMany.mockResolvedValue([
                 { id: "img-1", productId: "prod-1", sortOrder: 0 },
                 { id: "img-2", productId: "prod-1", sortOrder: 1 },
             ]);

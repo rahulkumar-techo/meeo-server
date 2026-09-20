@@ -39,6 +39,8 @@ model Order {
 
   couponUsages CouponUsage[]
 
+  promotionUsages PromotionUsage[]
+
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([userId, status, createdAt])

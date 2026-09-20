@@ -15,17 +15,18 @@
 2. [Discount Rules & Calculation Engine](#discount-rules--calculation-engine)
 3. [Endpoints Summary](#endpoints-summary)
 4. [Customer & Public Endpoints](#customer--public-endpoints)
-   - [1. Preview & Validate Coupon (`POST /validate`)](#1-preview--validate-coupon-post-validate)
-   - [2. My Coupon Redemption History (`GET /my-history`)](#2-my-coupon-redemption-history-get-my-history)
+   - [1. List Available Active Coupons (`GET /active`)](#1-list-available-active-coupons-get-active)
+   - [2. Preview & Validate Coupon (`POST /validate`)](#2-preview--validate-coupon-post-validate)
+   - [3. My Coupon Redemption History (`GET /my-history`)](#3-my-coupon-redemption-history-get-my-history)
 5. [Administrative Endpoints](#administrative-endpoints)
-   - [3. List Promotional Coupons (`GET /`)](#3-list-promotional-coupons-get-)
-   - [4. Coupon Performance Analytics (`GET /metrics`)](#4-coupon-performance-analytics-get-metrics)
-   - [5. Get Coupon Details (`GET /:id`)](#5-get-coupon-details-get-id)
-   - [6. Create Promotional Coupon (`POST /`)](#6-create-promotional-coupon-post-)
-   - [7. Update Existing Coupon (`PUT /:id`)](#7-update-existing-coupon-put-id)
-   - [8. Toggle Status (`PATCH /:id/status`)](#8-toggle-status-patch-idstatus)
-   - [9. Delete or Archive Coupon (`DELETE /:id`)](#9-delete-or-archive-coupon-delete-id)
-   - [10. Coupon Redemption Audit Log (`GET /:id/usages`)](#10-coupon-redemption-audit-log-get-idusages)
+   - [4. List Promotional Coupons (`GET /`)](#4-list-promotional-coupons-get-)
+   - [5. Coupon Performance Analytics (`GET /metrics`)](#5-coupon-performance-analytics-get-metrics)
+   - [6. Get Coupon Details (`GET /:id`)](#6-get-coupon-details-get-id)
+   - [7. Create Promotional Coupon (`POST /`)](#7-create-promotional-coupon-post-)
+   - [8. Update Existing Coupon (`PUT /:id`)](#8-update-existing-coupon-put-id)
+   - [9. Toggle Status (`PATCH /:id/status`)](#9-toggle-status-patch-idstatus)
+   - [10. Delete or Archive Coupon (`DELETE /:id`)](#10-delete-or-archive-coupon-delete-id)
+   - [11. Coupon Redemption Audit Log (`GET /:id/usages`)](#11-coupon-redemption-audit-log-get-idusages)
 6. [Flow Diagrams](#flow-diagrams)
    - [Checkout Coupon Validation Flow](#checkout-coupon-validation-flow)
    - [Atomic Order Placement & Usage Recording](#atomic-order-placement--usage-recording)
@@ -71,7 +72,7 @@ The Coupons & Promotions module delivers high-performance discount calculations,
 ## Endpoints Summary
 
 | Method | Endpoint | Access Level | Description |
-|---|---|---|---|
+| `GET` | `/api/v1/coupons/active` | Public / Customer | List currently active and available promotional coupons |
 | `POST` | `/api/v1/coupons/validate` | Public / Customer (`optionalAuthenticate`) | Preview discount calculation for a given cart subtotal |
 | `GET` | `/api/v1/coupons/my-history` | Authenticated Customer | View personal redemption history across previous orders |
 | `GET` | `/api/v1/coupons` | Admin (`coupon:read`) | Search and paginate promotional coupons |
@@ -89,7 +90,46 @@ The Coupons & Promotions module delivers high-performance discount calculations,
 
 ---
 
-### 1. Preview & Validate Coupon (`POST /validate`)
+### 1. List Available Active Coupons (`GET /active`)
+
+Retrieves list of all currently active and unexpired promotional coupons for storefront display (e.g., checkout promo cards, banner listings). Also accessible via alias `/available`.
+
+- **Method**: `GET`
+- **URL**: `/api/v1/coupons/active` (or `/api/v1/coupons/available`)
+- **Authentication**: Public
+
+#### Response Example (`200 OK`)
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": "c7a8b9c0-1111-2222-3333-444455556666",
+      "code": "SUMMER20",
+      "type": "PERCENTAGE",
+      "value": "20.00",
+      "minimumOrderAmount": "50.00",
+      "maximumDiscountAmount": "100.00",
+      "startsAt": "2026-06-01T00:00:00.000Z",
+      "expiresAt": "2026-09-30T23:59:59.000Z"
+    },
+    {
+      "id": "d8b9c0d1-2222-3333-4444-555566667777",
+      "code": "FREESHIP",
+      "type": "FREE_SHIPPING",
+      "value": "0.00",
+      "minimumOrderAmount": "150.00",
+      "maximumDiscountAmount": null,
+      "startsAt": null,
+      "expiresAt": null
+    }
+  ]
+}
+```
+
+---
+
+### 2. Preview & Validate Coupon (`POST /validate`)
 
 Validates a coupon code against business constraints and calculates the exact discount amount, updated subtotal, and free shipping status for a given cart subtotal.
 
@@ -183,7 +223,7 @@ Validates a coupon code against business constraints and calculates the exact di
 
 ---
 
-### 2. My Coupon Redemption History (`GET /my-history`)
+### 3. My Coupon Redemption History (`GET /my-history`)
 
 Returns a paginated list of all coupons redeemed by the authenticated user across their orders.
 
@@ -193,7 +233,7 @@ Returns a paginated list of all coupons redeemed by the authenticated user acros
 
 #### Scenarios
 
-##### Scenario 2.A: Success (`200 OK`)
+##### Scenario 3.A: Success (`200 OK`)
 ```json
 {
   "status": "success",
@@ -236,28 +276,38 @@ Returns a paginated list of all coupons redeemed by the authenticated user acros
 
 *(For detailed schemas, filters, and admin scenario walkthroughs, refer to [`ADMIN_COUPONS.README.md`](file:///e:/e-com/server/src/modules/coupons/ADMIN_COUPONS.README.md))*
 
-### 3. List Promotional Coupons (`GET /`)
+### 4. List Promotional Coupons (`GET /`)
 - **Permission**: `coupon:read`
 - **URL**: `/api/v1/coupons?search=SUMMER&status=ACTIVE&page=1&limit=20`
 
-### 4. Coupon Performance Analytics (`GET /metrics`)
+### 5. Coupon Performance Analytics (`GET /metrics`)
 - **Permission**: `coupon:read`
 - **URL**: `/api/v1/coupons/metrics`
 - **Returns**: Total coupons, active/inactive distribution, total discount dollars, average discount, top 5 redeemed coupons.
 
-### 5. Get Coupon Details (`GET /:id`)
+### 6. Get Coupon Details (`GET /:id`)
 - **Permission**: `coupon:read`
 - **URL**: `/api/v1/coupons/:id`
 
-### 6. Create Promotional Coupon (`POST /`)
+### 7. Create Promotional Coupon (`POST /`)
 - **Permission**: `coupon:create`
 - **URL**: `/api/v1/coupons`
 
-### 7. Update Existing Coupon (`PUT /:id`)
+### 8. Update Existing Coupon (`PUT /:id`)
 - **Permission**: `coupon:update`
 - **URL**: `/api/v1/coupons/:id`
 
-### 8. Toggle Status (`PATCH /:id/status`)
+### 9. Toggle Status (`PATCH /:id/status`)
+- **Permission**: `coupon:update`
+- **URL**: `/api/v1/coupons/:id/status`
+
+### 10. Delete or Archive Coupon (`DELETE /:id`)
+- **Permission**: `coupon:delete`
+- **URL**: `/api/v1/coupons/:id`
+
+### 11. Coupon Redemption Audit Log (`GET /:id/usages`)
+- **Permission**: `coupon:read`
+- **URL**: `/api/v1/coupons/:id/usages`
 - **Permission**: `coupon:update`
 - **URL**: `/api/v1/coupons/:id/status`
 

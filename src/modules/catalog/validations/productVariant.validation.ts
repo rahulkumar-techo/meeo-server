@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { productStatusEnum } from "./category.validation.js";
+import { productImageInputSchema, type ProductImageInput } from "./product.validation.js";
 
 /** Regex for SKU format: Uppercase alphanumeric with hyphens, underscores, or dots */
 export const skuRegex = /^[A-Za-z0-9._-]+$/;
@@ -68,6 +69,11 @@ export const createProductVariantSchema = z.object({
         .min(0, "Reorder level cannot be negative")
         .nullable()
         .optional(),
+
+    images: z
+        .array(productImageInputSchema)
+        .optional()
+        .default([]),
 }).strict().refine(
     (data) => {
         if (data.compareAtPrice !== null && data.compareAtPrice !== undefined) {
@@ -129,6 +135,10 @@ export const updateProductVariantSchema = z.object({
     attributeValueIds: z
         .array(z.string().uuid("Invalid attribute value ID"))
         .optional(),
+
+    images: z
+        .array(productImageInputSchema)
+        .optional(),
 }).strict().refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided for update",
 });
@@ -165,6 +175,7 @@ export type CreateProductVariantInput = {
     attributeValueIds?: string[] | undefined;
     initialStock?: number | undefined;
     reorderLevel?: number | null | undefined;
+    images?: ProductImageInput[] | undefined;
 };
 
 export type UpdateProductVariantInput = {
@@ -175,6 +186,7 @@ export type UpdateProductVariantInput = {
     costPrice?: number | null | undefined;
     status?: "DRAFT" | "ACTIVE" | "INACTIVE" | "ARCHIVED" | undefined;
     attributeValueIds?: string[] | undefined;
+    images?: ProductImageInput[] | undefined;
 };
 
 export type BatchCreateVariantsInput = {
@@ -189,3 +201,4 @@ export type ProductVariantQueryInput = {
     sortBy?: "sku" | "price" | "createdAt" | "updatedAt" | "status" | undefined;
     sortOrder?: "asc" | "desc" | undefined;
 };
+

@@ -16,6 +16,7 @@ export class EmailProvider {
         const sender = from || process.env.SMTP_FROM || '"E-Commerce Store" <no-reply@store.com>';
 
         try {
+            console.log(`[SMTP-Notification] 📤 Dispatching email notification to: ${to} | Subject: "${content.subject}"`);
             const info = await mailTransporter.sendMail({
                 from: sender,
                 to,
@@ -24,12 +25,14 @@ export class EmailProvider {
                 html: content.html,
             });
 
+            console.log(`[SMTP-Notification] ✅ Notification email delivered to ${to} | Message ID: ${info?.messageId}`);
+
             return {
                 messageId: info?.messageId || `mock-mail-${Date.now()}`,
                 success: true,
             };
         } catch (err: any) {
-            console.error(`[EmailProvider] Failed to send email to ${to}:`, err.message);
+            console.error(`[SMTP-Notification] ❌ Failed to send email to ${to}:`, err.message);
             throw err;
         }
     }

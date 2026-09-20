@@ -68,6 +68,78 @@ export default async function productVariantRouter(app: FastifyInstance) {
         },
         productVariantController.deleteVariant.bind(productVariantController),
     );
+
+    // ----------------------------------------------------
+    // Variant Images Endpoints (ImageKit & Image Management)
+    // ----------------------------------------------------
+    app.post(
+        "/:id/images/upload",
+        {
+            preHandler: [app.authenticate],
+            schema: {
+                tags: ["Catalog - Variants"],
+                summary: "[Creator OR Admin: product:update] Upload & attach variant image",
+                description: "Uploads an image to ImageKit and attaches it to the specific product variant. Permitted for product creator OR users with `product:update` permission.",
+                security: [{ bearerAuth: [] }],
+                params: catalogSchemas.variantParams,
+            },
+        },
+        productVariantController.uploadVariantImage.bind(productVariantController),
+    );
+
+    app.post(
+        "/:id/images",
+        {
+            preHandler: [app.authenticate],
+            schema: {
+                tags: ["Catalog - Variants"],
+                summary: "[Creator OR Admin: product:update] Attach image URL to variant",
+                description: "Attaches an existing hosted image URL to the product variant. Permitted for product creator OR users with `product:update` permission.",
+                security: [{ bearerAuth: [] }],
+                params: catalogSchemas.variantParams,
+                body: catalogSchemas.addImage,
+            },
+        },
+        productVariantController.addVariantImage.bind(productVariantController),
+    );
+
+    app.delete(
+        "/:id/images/:imageId",
+        {
+            preHandler: [app.authenticate],
+            schema: {
+                tags: ["Catalog - Variants"],
+                summary: "[Creator OR Admin: product:update] Delete variant image",
+                description: "Deletes an image from a variant. Permitted for product creator OR users with `product:update` permission.",
+                security: [{ bearerAuth: [] }],
+                params: {
+                    type: "object",
+                    required: ["id", "imageId"],
+                    properties: {
+                        id: { type: "string", format: "uuid" },
+                        imageId: { type: "string", format: "uuid" },
+                    },
+                },
+            },
+        },
+        productVariantController.deleteVariantImage.bind(productVariantController),
+    );
+
+    app.put(
+        "/:id/images/reorder",
+        {
+            preHandler: [app.authenticate],
+            schema: {
+                tags: ["Catalog - Variants"],
+                summary: "[Creator OR Admin: product:update] Reorder variant images",
+                description: "Reorders image gallery display sequence for a variant. Permitted for product creator OR users with `product:update` permission.",
+                security: [{ bearerAuth: [] }],
+                params: catalogSchemas.variantParams,
+                body: catalogSchemas.reorderImages,
+            },
+        },
+        productVariantController.reorderVariantImages.bind(productVariantController),
+    );
 }
 
 /**

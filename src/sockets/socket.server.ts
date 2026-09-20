@@ -7,9 +7,14 @@ import { SOCKET_ROOMS, canJoinAdminRoom, canJoinOrderRoom } from "./socket.rooms
 import { SOCKET_EVENTS, createSocketPayload, type SocketEventType } from "./socket.events.js";
 import { prisma } from "@/lib/prisma.js";
 
+import { randomUUID } from "node:crypto";
+
 export const REDIS_REALTIME_CHANNEL = "ecommerce:realtime:events";
 
+const SERVER_INSTANCE_ID = randomUUID();
+
 interface RedisPubSubMessage {
+    originServerId: string;
     targetRoom: string;
     event: SocketEventType;
     data: unknown;
@@ -163,6 +168,10 @@ function setupRedisSubscriber(): void {
 
             try {
                 const parsed: RedisPubSubMessage = JSON.parse(message);
+                // Avoid duplicate emit if this instance already broadcasted locally
+                if (parsed.originServerId === SERVER_INSTANCE_ID) {
+                    return;
+                }
                 const payload = createSocketPayload(parsed.event, parsed.data);
                 ioInstance.to(parsed.targetRoom).emit(parsed.event, payload);
             } catch (err) {
@@ -201,6 +210,7 @@ export async function publishRealtimeEvent<T>(
     try {
         if (redis.status === "ready" || redis.status === "connect") {
             const message: RedisPubSubMessage = {
+                originServerId: SERVER_INSTANCE_ID,
                 targetRoom,
                 event,
                 data,

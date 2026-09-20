@@ -30,6 +30,15 @@ const { prismaMock } = vi.hoisted(() => ({
             create: vi.fn(),
             count: vi.fn(),
         },
+        promotion: {
+            findUnique: vi.fn().mockResolvedValue(null),
+            findMany: vi.fn().mockResolvedValue([]),
+            count: vi.fn().mockResolvedValue(0),
+        },
+        promotionUsage: {
+            create: vi.fn().mockResolvedValue({}),
+            count: vi.fn().mockResolvedValue(0),
+        },
         idempotencyKey: {
             findUnique: vi.fn(),
             create: vi.fn(),

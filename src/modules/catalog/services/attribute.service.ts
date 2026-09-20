@@ -24,6 +24,14 @@ export class AttributeService {
             };
         }
 
+        if (query.isGlobal !== undefined) {
+            where.isGlobal = query.isGlobal;
+        }
+
+        if (query.status) {
+            where.status = query.status;
+        }
+
         const [items, total] = await Promise.all([
             prisma.productAttribute.findMany({
                 where,
@@ -106,6 +114,8 @@ export class AttributeService {
 
         const data: Prisma.ProductAttributeCreateInput = {
             name: normalizedName,
+            isGlobal: input.isGlobal ?? true,
+            status: input.status ?? "ACTIVE",
         };
 
         if (uniqueValues.length > 0) {
@@ -167,7 +177,16 @@ export class AttributeService {
             }
         }
 
-        // 2. Add / Sync new values if provided
+        // 2. Update isGlobal / status if provided
+        if (input.isGlobal !== undefined) {
+            data.isGlobal = input.isGlobal;
+        }
+
+        if (input.status !== undefined) {
+            data.status = input.status;
+        }
+
+        // 3. Add / Sync new values if provided
         if (input.values && input.values.length > 0) {
             const newValues = Array.from(
                 new Set(input.values.map((v) => v.trim()).filter(Boolean)),

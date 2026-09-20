@@ -440,6 +440,9 @@ CREATE TABLE products (
     seo_title VARCHAR(255),
     seo_description TEXT,
 
+    banner_image JSONB,
+    specifications JSONB,
+
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
 
@@ -566,8 +569,11 @@ CREATE TABLE product_attributes (
     id UUID PRIMARY KEY,
 
     name VARCHAR(100) UNIQUE NOT NULL,
+    is_global BOOLEAN NOT NULL DEFAULT TRUE,
+    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
 
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 ```
 

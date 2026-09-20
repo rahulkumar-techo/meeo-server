@@ -1,6 +1,26 @@
 import { z } from "zod";
 
 /**
+ * Validation schema for a single review image asset (supports string URL or full ImageKit object).
+ */
+export const reviewImageInputSchema = z.union([
+    z.string().url("Each review image must be a valid URL").transform((url) => ({
+        url,
+        fileId: undefined as string | undefined,
+        thumbnailUrl: undefined as string | undefined,
+        altText: undefined as string | undefined,
+        sortOrder: 0,
+    })),
+    z.object({
+        url: z.string().trim().url("Invalid image URL"),
+        fileId: z.string().trim().nullable().optional(),
+        thumbnailUrl: z.string().trim().url("Invalid thumbnail URL").nullable().optional(),
+        altText: z.string().trim().max(200, "Alt text cannot exceed 200 characters").nullable().optional(),
+        sortOrder: z.coerce.number().int().min(0, "Sort order must be a non-negative integer").optional().default(0),
+    }),
+]);
+
+/**
  * Validation schema for creating a new product rating & review.
  */
 export const createReviewSchema = z.object({
@@ -13,7 +33,7 @@ export const createReviewSchema = z.object({
     title: z.string().trim().max(150, "Review title cannot exceed 150 characters").optional().nullable(),
     content: z.string().trim().max(2000, "Review content cannot exceed 2000 characters").optional().nullable(),
     images: z
-        .array(z.string().url("Each review image must be a valid URL"))
+        .array(reviewImageInputSchema)
         .max(5, "Cannot attach more than 5 images per review")
         .default([]),
 });
@@ -31,7 +51,7 @@ export const updateReviewSchema = z.object({
     title: z.string().trim().max(150, "Review title cannot exceed 150 characters").optional().nullable(),
     content: z.string().trim().max(2000, "Review content cannot exceed 2000 characters").optional().nullable(),
     images: z
-        .array(z.string().url("Each review image must be a valid URL"))
+        .array(reviewImageInputSchema)
         .max(5, "Cannot attach more than 5 images per review")
         .optional(),
 });
@@ -102,6 +122,7 @@ export const resolveReportSchema = z.object({
     action: z.enum(["APPROVE_REVIEW", "REJECT_REVIEW", "DELETE_REVIEW", "NO_ACTION"]).optional().default("NO_ACTION"),
 });
 
+export type ReviewImageInput = z.infer<typeof reviewImageInputSchema>;
 export type CreateReviewInput = z.infer<typeof createReviewSchema>;
 export type UpdateReviewInput = z.infer<typeof updateReviewSchema>;
 export type ReviewQueryInput = z.infer<typeof reviewQuerySchema>;

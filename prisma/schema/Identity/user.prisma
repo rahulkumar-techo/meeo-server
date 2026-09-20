@@ -43,6 +43,8 @@ model User {
   createdCategories Category[]  @relation("CategoryCreatedBy")
   createdBrands     Brand[]     @relation("BrandCreatedBy")
   createdProducts   Product[]   @relation("ProductCreatedBy")
+  createdPromotions Promotion[] @relation("PromotionCreatedBy")
+  promotionUsages   PromotionUsage[]
   auditLogs         AuditLog[]  @relation("AuditActor")
 
   // Indexes.

@@ -115,6 +115,19 @@ export const catalogSchemas = {
             isFeatured: { type: "boolean", default: false },
             seoTitle: { type: ["string", "null"] },
             seoDescription: { type: ["string", "null"] },
+            bannerImage: {
+                type: ["object", "null"],
+                properties: {
+                    fileId: { type: ["string", "null"] },
+                    url: { type: "string", format: "uri" },
+                    thumbnailUrl: { type: ["string", "null"], format: "uri" },
+                    altText: { type: ["string", "null"] },
+                },
+            },
+            specifications: {
+                type: ["object", "array", "null"],
+                description: "Dynamic JSONB specifications (Flipkart / Amazon style key-value groups or attribute maps)",
+            },
             images: {
                 type: "array",
                 items: {
@@ -122,6 +135,8 @@ export const catalogSchemas = {
                     required: ["url"],
                     properties: {
                         url: { type: "string", format: "uri" },
+                        fileId: { type: ["string", "null"] },
+                        thumbnailUrl: { type: ["string", "null"], format: "uri" },
                         altText: { type: ["string", "null"] },
                         sortOrder: { type: "integer", default: 0 },
                     },
@@ -142,6 +157,19 @@ export const catalogSchemas = {
             isFeatured: { type: "boolean" },
             seoTitle: { type: ["string", "null"] },
             seoDescription: { type: ["string", "null"] },
+            bannerImage: {
+                type: ["object", "null"],
+                properties: {
+                    fileId: { type: ["string", "null"] },
+                    url: { type: "string", format: "uri" },
+                    thumbnailUrl: { type: ["string", "null"], format: "uri" },
+                    altText: { type: ["string", "null"] },
+                },
+            },
+            specifications: {
+                type: ["object", "array", "null"],
+                description: "Dynamic JSONB specifications (Flipkart / Amazon style)",
+            },
         },
     },
 
@@ -170,13 +198,13 @@ export const catalogSchemas = {
         },
     },
 
-    uploadImage: {
+    uploadImagePayload: {
         type: "object",
-        description: "Upload an image payload (base64 data URI, image URL, or multipart/form-data with file)",
+        required: ["file"],
         properties: {
-            file: { type: "string", description: "Base64 data URI, remote image URL, or binary via multipart/form-data" },
-            fileName: { type: "string", description: "Optional custom filename for ImageKit" },
-            altText: { type: ["string", "null"], description: "Accessibility alt text" },
+            file: { type: "string", description: "Base64 encoded file data string OR direct remote image URL" },
+            fileName: { type: "string", description: "Optional destination file name" },
+            altText: { type: ["string", "null"], description: "Accessibility alternative text" },
             sortOrder: { type: "integer", description: "Display sort order index" },
         },
     },
@@ -187,6 +215,7 @@ export const catalogSchemas = {
         properties: {
             fileId: { type: ["string", "null"], description: "ImageKit file ID" },
             url: { type: "string", format: "uri" },
+            thumbnailUrl: { type: ["string", "null"], format: "uri" },
             altText: { type: ["string", "null"] },
             sortOrder: { type: "integer" },
         },
@@ -252,6 +281,20 @@ export const catalogSchemas = {
                 items: { type: "string", format: "uuid" },
                 description: "Array of ProductAttributeValue IDs",
             },
+            images: {
+                type: "array",
+                items: {
+                    type: "object",
+                    required: ["url"],
+                    properties: {
+                        url: { type: "string", format: "uri" },
+                        fileId: { type: ["string", "null"] },
+                        thumbnailUrl: { type: ["string", "null"], format: "uri" },
+                        altText: { type: ["string", "null"] },
+                        sortOrder: { type: "integer", default: 0 },
+                    },
+                },
+            },
             initialStock: { type: "integer", default: 0, description: "Initial available inventory quantity" },
             reorderLevel: { type: ["integer", "null"], description: "Stock reorder notification threshold" },
         },
@@ -269,6 +312,20 @@ export const catalogSchemas = {
             attributeValueIds: {
                 type: "array",
                 items: { type: "string", format: "uuid" },
+            },
+            images: {
+                type: "array",
+                items: {
+                    type: "object",
+                    required: ["url"],
+                    properties: {
+                        url: { type: "string", format: "uri" },
+                        fileId: { type: ["string", "null"] },
+                        thumbnailUrl: { type: ["string", "null"], format: "uri" },
+                        altText: { type: ["string", "null"] },
+                        sortOrder: { type: "integer", default: 0 },
+                    },
+                },
             },
         },
     },
@@ -292,6 +349,20 @@ export const catalogSchemas = {
                         attributeValueIds: {
                             type: "array",
                             items: { type: "string", format: "uuid" },
+                        },
+                        images: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                required: ["url"],
+                                properties: {
+                                    url: { type: "string", format: "uri" },
+                                    fileId: { type: ["string", "null"] },
+                                    thumbnailUrl: { type: ["string", "null"], format: "uri" },
+                                    altText: { type: ["string", "null"] },
+                                    sortOrder: { type: "integer", default: 0 },
+                                },
+                            },
                         },
                         initialStock: { type: "integer", default: 0 },
                         reorderLevel: { type: ["integer", "null"] },

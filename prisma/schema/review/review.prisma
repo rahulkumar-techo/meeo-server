@@ -10,7 +10,7 @@ model Review {
 
   title   String?
   content String?
-  images  String[] @default([])
+  images  Image[] @relation("ReviewImages")
 
   isVerifiedPurchase Boolean @default(false)
 

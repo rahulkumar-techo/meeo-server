@@ -100,6 +100,7 @@ class AuthController {
             data: {
                 user: result.user,
                 accessToken: result.accessToken,
+                refreshToken:result.refreshToken
             },
         });
     }
@@ -160,6 +161,7 @@ class AuthController {
             message: "Token refreshed successfully",
             data: {
                 accessToken: result.accessToken,
+                 refreshToken: result.refreshToken,
             },
         });
     }

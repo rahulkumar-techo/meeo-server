@@ -25,6 +25,30 @@ export default async function couponRouter(app: FastifyInstance) {
     );
 
     app.get(
+        "/active",
+        {
+            schema: {
+                tags: ["Coupons & Promotions"],
+                summary: "[Public / Customer] List active and available coupons",
+                description: "Retrieves list of all currently active and unexpired promotional coupons for storefront display.",
+            },
+        },
+        couponController.getActiveCoupons.bind(couponController),
+    );
+
+    app.get(
+        "/available",
+        {
+            schema: {
+                tags: ["Coupons & Promotions"],
+                summary: "[Public / Customer] Alias: List active and available coupons",
+                description: "Retrieves list of all currently active and unexpired promotional coupons for storefront display.",
+            },
+        },
+        couponController.getActiveCoupons.bind(couponController),
+    );
+
+    app.get(
         "/my-history",
         {
             preHandler: [app.authenticate],

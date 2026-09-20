@@ -15,6 +15,7 @@ import paymentRouter from "./modules/payments/routes/payment.route.js";
 import outboxRouter from "./modules/outbox/routes/outbox.route.js";
 import notificationRouter from "./modules/notifications/routes/notification.route.js";
 import couponRouter from "./modules/coupons/routes/coupon.route.js";
+import promotionRouter from "./modules/promotions/routes/promotion.route.js";
 import reviewRouter from "./modules/reviews/routes/review.route.js";
 import { searchRouter, discoveryRouter } from "./modules/search/routes/search.route.js";
 import dashboardRouter from "./modules/dashboard/routes/dashboard.route.js";
@@ -227,6 +228,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
     // --- Marketing, Discovery & Engagement ---
     app.register(couponRouter, { prefix: "/api/v1/coupons" });
+    app.register(promotionRouter, { prefix: "/api/v1/promotions" });
     app.register(reviewRouter, { prefix: "/api/v1/reviews" });
     app.register(searchRouter, { prefix: "/api/v1/search" });
     app.register(discoveryRouter, { prefix: "/api/v1/discovery" });

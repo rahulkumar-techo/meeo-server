@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
+import { deleteFromImageKit } from "@/lib/imagekit.js";
 import { VerifiedPurchaseService } from "./verifiedPurchase.service.js";
+import { reviewQueryService } from "./reviewQuery.service.js";
 import type {
     CreateReviewInput,
     UpdateReviewInput,
@@ -40,6 +42,19 @@ export class ReviewService {
             input.productId,
         );
 
+        const imagesData = input.images?.map((img, index) => {
+            if (typeof img === "string") {
+                return { url: img, sortOrder: index };
+            }
+            return {
+                url: img.url,
+                fileId: img.fileId ?? null,
+                thumbnailUrl: img.thumbnailUrl ?? null,
+                altText: img.altText ?? null,
+                sortOrder: img.sortOrder ?? index,
+            };
+        }) ?? [];
+
         return prisma.review.create({
             data: {
                 userId,
@@ -47,11 +62,12 @@ export class ReviewService {
                 rating: input.rating,
                 title: input.title ?? null,
                 content: input.content ?? null,
-                images: input.images ?? [],
                 isVerifiedPurchase,
                 status: "PENDING",
+                ...(imagesData.length > 0 ? { images: { create: imagesData } } : {}),
             },
             include: {
+                images: { orderBy: { sortOrder: "asc" } },
                 user: {
                     select: {
                         id: true,
@@ -103,12 +119,35 @@ export class ReviewService {
         if (input.rating !== undefined) updateData.rating = input.rating;
         if (input.title !== undefined) updateData.title = input.title;
         if (input.content !== undefined) updateData.content = input.content;
-        if (input.images !== undefined) updateData.images = input.images;
+
+        if (input.images !== undefined) {
+            await prisma.image.deleteMany({
+                where: { reviewId },
+            });
+            const imagesData = input.images.map((img, index) => {
+                if (typeof img === "string") {
+                    return { url: img, sortOrder: index };
+                }
+                return {
+                    url: img.url,
+                    fileId: img.fileId ?? null,
+                    thumbnailUrl: img.thumbnailUrl ?? null,
+                    altText: img.altText ?? null,
+                    sortOrder: img.sortOrder ?? index,
+                };
+            });
+            if (imagesData.length > 0) {
+                updateData.images = {
+                    create: imagesData,
+                };
+            }
+        }
 
         return prisma.review.update({
             where: { id: reviewId },
             data: updateData,
             include: {
+                images: { orderBy: { sortOrder: "asc" } },
                 user: {
                     select: {
                         id: true,
@@ -134,6 +173,7 @@ export class ReviewService {
     async deleteReview(reviewId: string, userId: string, isAdmin: boolean = false) {
         const review = await prisma.review.findUnique({
             where: { id: reviewId },
+            include: { images: true },
         });
 
         if (!review) {
@@ -142,6 +182,12 @@ export class ReviewService {
 
         if (!isAdmin && review.userId !== userId) {
             throw new AppError("You can only delete your own reviews", 403);
+        }
+
+        for (const img of review.images) {
+            if (img.fileId) {
+                await deleteFromImageKit(img.fileId);
+            }
         }
 
         await prisma.review.delete({
@@ -158,6 +204,7 @@ export class ReviewService {
         const review = await prisma.review.findUnique({
             where: { id: reviewId },
             include: {
+                images: { orderBy: { sortOrder: "asc" } },
                 user: {
                     select: {
                         id: true,
@@ -221,6 +268,7 @@ export class ReviewService {
                 take: limit,
                 orderBy,
                 include: {
+                    images: { orderBy: { sortOrder: "asc" } },
                     user: {
                         select: {
                             id: true,
@@ -251,148 +299,21 @@ export class ReviewService {
      * Aggregates average rating, total count, and star distribution breakdown (1-5 stars).
      */
     async getProductRatingSummary(productId: string) {
-        const approvedReviews = await prisma.review.findMany({
-            where: {
-                productId,
-                status: "APPROVED",
-            },
-            select: {
-                rating: true,
-                isVerifiedPurchase: true,
-            },
-        });
-
-        const totalReviews = approvedReviews.length;
-        const distribution: Record<number, number> = {
-            1: 0,
-            2: 0,
-            3: 0,
-            4: 0,
-            5: 0,
-        };
-
-        let verifiedPurchaseCount = 0;
-        let sumRating = 0;
-
-        for (const r of approvedReviews) {
-            sumRating += r.rating;
-            if (r.rating in distribution) {
-                distribution[r.rating] = (distribution[r.rating] || 0) + 1;
-            }
-            if (r.isVerifiedPurchase) {
-                verifiedPurchaseCount++;
-            }
-        }
-
-        const averageRating = totalReviews > 0 ? Number((sumRating / totalReviews).toFixed(1)) : 0;
-
-        return {
-            productId,
-            averageRating,
-            totalReviews,
-            verifiedPurchaseCount,
-            starDistribution: distribution,
-        };
+        return reviewQueryService.getProductRatingSummary(productId);
     }
 
     /**
      * Get review history written by a specific user.
      */
     async getUserReviews(userId: string, query: ReviewQueryInput) {
-        const page = query.page ?? 1;
-        const limit = query.limit ?? 20;
-        const skip = (page - 1) * limit;
-
-        const where: any = { userId };
-        if (query.status) {
-            where.status = query.status;
-        }
-
-        const [items, total] = await Promise.all([
-            prisma.review.findMany({
-                where,
-                skip,
-                take: limit,
-                orderBy: { createdAt: "desc" },
-                include: {
-                    product: {
-                        select: {
-                            id: true,
-                            name: true,
-                            slug: true,
-                            images: true,
-                        },
-                    },
-                },
-            }),
-            prisma.review.count({ where }),
-        ]);
-
-        return {
-            items,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit) || 1,
-            },
-        };
+        return reviewQueryService.getUserReviews(userId, query);
     }
 
     /**
      * Admin query for all reviews across the platform with filtering by status, product, rating, etc.
      */
     async listAllReviews(query: ReviewQueryInput) {
-        const page = query.page ?? 1;
-        const limit = query.limit ?? 20;
-        const skip = (page - 1) * limit;
-
-        const where: any = {};
-        if (query.productId) where.productId = query.productId;
-        if (query.userId) where.userId = query.userId;
-        if (query.status) where.status = query.status;
-        if (query.rating) where.rating = query.rating;
-        if (query.isVerifiedPurchase !== undefined) where.isVerifiedPurchase = query.isVerifiedPurchase;
-
-        const [items, total] = await Promise.all([
-            prisma.review.findMany({
-                where,
-                skip,
-                take: limit,
-                orderBy: { createdAt: "desc" },
-                include: {
-                    user: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            email: true,
-                        },
-                    },
-                    product: {
-                        select: {
-                            id: true,
-                            name: true,
-                            slug: true,
-                        },
-                    },
-                    _count: {
-                        select: { reports: true },
-                    },
-                },
-            }),
-            prisma.review.count({ where }),
-        ]);
-
-        return {
-            items,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit) || 1,
-            },
-        };
+        return reviewQueryService.listAllReviews(query);
     }
 }
 

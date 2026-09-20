@@ -217,6 +217,43 @@ export class CouponService {
             data: { status: input.status },
         });
     }
+
+    /**
+     * Public / Customer: Retrieves all currently active and unexpired coupons.
+     */
+    async getActiveCoupons() {
+        const now = new Date();
+        const coupons = await prisma.coupon.findMany({
+            where: {
+                status: "ACTIVE",
+                OR: [
+                    { startsAt: null },
+                    { startsAt: { lte: now } },
+                ],
+                AND: [
+                    {
+                        OR: [
+                            { expiresAt: null },
+                            { expiresAt: { gte: now } },
+                        ],
+                    },
+                ],
+            },
+            select: {
+                id: true,
+                code: true,
+                type: true,
+                value: true,
+                minimumOrderAmount: true,
+                maximumDiscountAmount: true,
+                startsAt: true,
+                expiresAt: true,
+            },
+            orderBy: { createdAt: "desc" },
+        });
+
+        return coupons;
+    }
 }
 
 export const couponService = new CouponService();

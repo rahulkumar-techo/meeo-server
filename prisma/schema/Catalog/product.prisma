@@ -26,7 +26,10 @@ model Product {
   brand    Brand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
   creator  User?     @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  images   ProductImage[]
+  bannerImage    Json?
+  specifications Json?
+
+  images   Image[] @relation("ProductImages")
   variants ProductVariant[]
 
   reviews Review[]
@@ -45,23 +48,33 @@ model Product {
   @@map("products")
 }
 
-// Stores images associated with a product and their display order.
-model ProductImage {
-  id String @id @default(uuid()) @db.Uuid
+// Unified image storage for Products, Product Variants, and Reviews with ImageKit metadata.
+model Image {
+  id               String          @id @default(uuid()) @db.Uuid
 
-  productId String @db.Uuid
+  fileId           String?
+  url              String
+  thumbnailUrl     String?
+  altText          String?
+  sortOrder        Int             @default(0)
+  width            Int?
+  height           Int?
+  size             Int?
 
-  fileId  String?
-  url     String
-  altText String?
+  productId        String?         @db.Uuid
+  productVariantId String?         @db.Uuid
+  reviewId         String?         @db.Uuid
 
-  sortOrder Int @default(0)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
-  createdAt DateTime @default(now())
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product          Product?        @relation("ProductImages", fields: [productId], references: [id], onDelete: Cascade)
+  productVariant   ProductVariant? @relation("VariantImages", fields: [productVariantId], references: [id], onDelete: Cascade)
+  review           Review?         @relation("ReviewImages", fields: [reviewId], references: [id], onDelete: Cascade)
 
   @@index([productId])
-  @@map("product_images")
+  @@index([productVariantId])
+  @@index([reviewId])
+  @@map("images")
 }
 

@@ -1,13 +1,31 @@
 import { z } from "zod";
 import { productStatusEnum, slugRegex } from "./category.validation.js";
 
-/** Validation schema for an image item attached to a product. */
+/** Validation schema for a single ImageKit banner asset. */
+export const bannerImageSchema = z.object({
+    fileId: z.string().trim().nullable().optional(),
+    url: z.string().trim().url("Invalid banner image URL"),
+    thumbnailUrl: z.string().trim().url("Invalid thumbnail URL").nullable().optional(),
+    altText: z.string().trim().max(200, "Alt text cannot exceed 200 characters").nullable().optional(),
+}).strict();
+
+/** Validation schema for an image item attached to a product or variant. */
 export const productImageInputSchema = z.object({
-    fileId: z.string().trim().optional().nullable(),
+    fileId: z.string().trim().nullable().optional(),
     url: z.string().trim().url("Invalid image URL"),
+    thumbnailUrl: z.string().trim().url("Invalid thumbnail URL").nullable().optional(),
     altText: z.string().trim().max(200, "Alt text cannot exceed 200 characters").nullable().optional(),
     sortOrder: z.coerce.number().int().min(0, "Sort order must be a non-negative integer").optional().default(0),
+    width: z.coerce.number().int().positive().nullable().optional(),
+    height: z.coerce.number().int().positive().nullable().optional(),
+    size: z.coerce.number().int().positive().nullable().optional(),
 });
+
+/** Validation schema for dynamic Flipkart/Amazon-style product specifications stored as JSONB. */
+export const productSpecificationsSchema = z.union([
+    z.record(z.string(), z.unknown()),
+    z.array(z.record(z.string(), z.unknown())),
+]);
 
 /** Validation schema for creating a product. */
 export const createProductSchema = z.object({
@@ -20,6 +38,8 @@ export const createProductSchema = z.object({
     isFeatured: z.boolean().optional().default(false),
     seoTitle: z.string().trim().max(70, "SEO title should not exceed 70 characters").nullable().optional(),
     seoDescription: z.string().trim().max(160, "SEO description should not exceed 160 characters").nullable().optional(),
+    bannerImage: bannerImageSchema.nullable().optional(),
+    specifications: productSpecificationsSchema.nullable().optional(),
     images: z.array(productImageInputSchema).optional().default([]),
 }).strict();
 
@@ -34,6 +54,8 @@ export const updateProductSchema = z.object({
     isFeatured: z.boolean().optional(),
     seoTitle: z.string().trim().max(70, "SEO title should not exceed 70 characters").nullable().optional(),
     seoDescription: z.string().trim().max(160, "SEO description should not exceed 160 characters").nullable().optional(),
+    bannerImage: bannerImageSchema.nullable().optional(),
+    specifications: productSpecificationsSchema.nullable().optional(),
 }).strict().refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided for update",
 });
@@ -83,6 +105,7 @@ export const reorderProductImagesSchema = z.object({
     })).min(1, "At least one image order must be specified"),
 }).strict();
 
+export type BannerImageInput = z.infer<typeof bannerImageSchema>;
 export type ProductImageInput = z.infer<typeof productImageInputSchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
@@ -90,4 +113,5 @@ export type ProductQueryInput = z.infer<typeof productQuerySchema>;
 export type AddProductImageInput = z.infer<typeof addProductImageSchema>;
 export type UploadProductImagePayloadInput = z.infer<typeof uploadProductImagePayloadSchema>;
 export type ReorderProductImagesInput = z.infer<typeof reorderProductImagesSchema>;
+
 

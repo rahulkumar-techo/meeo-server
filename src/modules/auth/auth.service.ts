@@ -1,4 +1,5 @@
-import { prisma } from "@/lib/prisma.js";
+import { authRegistrationService } from "./authRegistration.service.js";
+import { authSessionService } from "./authSession.service.js";
 import type {
     AuthLoginOption,
     AuthRegisterInput,
@@ -8,561 +9,67 @@ import type {
     AuthOtpVerification,
     GoogleLoginInput,
 } from "./auth.validation.js";
-import argon2 from "argon2";
-import { AppError } from "@/common/errors/app-error.js";
-import { generateOtp } from "@/common/utils/generateOtp.js";
-import redis from "@/lib/redis.js";
-import { Keys } from "@/const/keys.js";
-import { generateAccessToken, generateRefreshToken, hashToken, verifyRefreshToken } from "@/common/utils/token.js";
-import crypto from "crypto";
-import { getAuthContext, invalidateAuthContext, setAuthContext } from "@/common/utils/auth-cache.js";
-import { verifyGoogleIdToken } from "./googleAuth.service.js";
 
-interface SessionCreationOptions {
-    deviceId?: string | undefined;
-    deviceName?: string | undefined;
-    metadata?: { ipAddress?: string | undefined; userAgent?: string | undefined } | undefined;
-}
+export { authRegistrationService } from "./authRegistration.service.js";
+export { authSessionService } from "./authSession.service.js";
 
-class AuthService {
-    private async assertOtp(key: string, otp: string) {
-        const storedOtp = await redis.get(key);
-
-        if (!storedOtp || storedOtp !== otp) {
-            throw new AppError("OTP is invalid or expired", 400);
-        }
+/**
+ * Unified AuthService orchestrating:
+ * - authRegistrationService (Registration, OTP verification, Password resets)
+ * - authSessionService (Login, JWT token rotation, Session lifecycle, Google OAuth, Profile resolution)
+ */
+export class AuthService {
+    register(payload: AuthRegisterInput) {
+        return authRegistrationService.register(payload);
     }
 
-    private async createOtp(key: string) {
-        const otp = generateOtp(4);
-        await redis.set(key, otp, "EX", 60 * 5);
-        return otp;
+    verifyOtp(payload: AuthOtpVerification) {
+        return authRegistrationService.verifyOtp(payload);
     }
 
-    // Register user through email and password
-    async register(payload: AuthRegisterInput) {
-        const { firstName, lastName, email, password } = payload;
-
-
-
-        // Hash password
-        const passwordHash = await argon2.hash(password);
-
-        // create a new user
-        const user = await prisma.user.create({
-            data: {
-                firstName,
-                lastName,
-                email,
-                passwordHash,
-            },
-
-            // Only return safe fields
-            select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                createdAt: true,
-                updatedAt: true,
-            },
-        });
-
-        if (!user) {
-            throw new AppError("User Not Created", 404);
-        }
-
-
-        const registerOtp = await this.createOtp(Keys.USER_OTP(user.email!));
-
-        // await mailService.sendMail({
-        //     to: user.email!,
-        //     subject: "Welcome to Hungrilla",
-        //     text: "Your account has been created successfully.",
-        //     html: generateOtpEmail({ firstName: user?.firstName!, lastName: user?.lastName!, otpCode: registerOtp, appName: "Meeo" }).html
-        // });
-
-
-        return { user, tempOtp: registerOtp };
-    };
-
-    async verifyOtp({ email, otp }: AuthOtpVerification) {
-        await this.assertOtp(Keys.USER_OTP(email), otp);
-        await prisma.user.update({
-            where: { email },
-            data: { emailVerified: true },
-        });
-        await redis.del(Keys.USER_OTP(email));
-
-        return { verified: true };
+    resendOtp(payload: ResendOtpInput) {
+        return authRegistrationService.resendOtp(payload);
     }
 
-    async resendOtp({ email }: ResendOtpInput) {
-        const user = await prisma.user.findUnique({
-            where: { email },
-            select: { email: true, emailVerified: true },
-        });
-
-        if (!user || user.emailVerified) {
-            return {};
-        }
-
-        const tempOtp = await this.createOtp(Keys.USER_OTP(email));
-
-        // Future email delivery:
-        // await mailService.sendMail({ ... });
-
-        return { tempOtp };
+    forgotPassword(payload: ForgotPasswordInput) {
+        return authRegistrationService.forgotPassword(payload);
     }
 
-    async forgotPassword({ email }: ForgotPasswordInput) {
-        const user = await prisma.user.findUnique({
-            where: { email },
-            select: { email: true },
-        });
-
-        if (!user) {
-            return {};
-        }
-
-        const tempOtp = await this.createOtp(Keys.PASSWORD_RESET_OTP(email));
-
-        // Future email delivery:
-        // await mailService.sendMail({ ... });
-
-        return { tempOtp };
+    resetPassword(payload: ResetPasswordInput) {
+        return authRegistrationService.resetPassword(payload);
     }
 
-    private async issueUserSessionAndTokens(
-        user: { id: string; email: string; firstName?: string | null | undefined; lastName?: string | null | undefined },
-        options?: SessionCreationOptions
-    ) {
-        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        const sessionId = crypto.randomUUID();
-
-        const refreshToken = generateRefreshToken({
-            userId: user.id,
-            email: user.email,
-            sessionId,
-        });
-
-        const sessionData = {
-            id: sessionId,
-            userId: user.id,
-            refreshTokenHash: hashToken(refreshToken),
-            ...(options?.deviceName ? { deviceName: options.deviceName } : {}),
-            ...(options?.deviceId ? { deviceId: options.deviceId } : {}),
-            ...(options?.metadata?.ipAddress ? { ipAddress: options.metadata.ipAddress } : {}),
-            ...(options?.metadata?.userAgent ? { userAgent: options.metadata.userAgent } : {}),
-            expiresAt,
-        };
-
-        await prisma.userSession.create({
-            data: sessionData,
-        });
-
-        const accessToken = generateAccessToken({
-            userId: user.id,
-            email: user.email,
-            sessionId,
-        });
-
-        return {
-            user: {
-                id: user.id,
-                firstName: user.firstName ?? null,
-                lastName: user.lastName ?? null,
-                email: user.email,
-            },
-            accessToken,
-            refreshToken,
-        };
+    login(payload: AuthLoginOption, metadata?: { ipAddress?: string; userAgent?: string }) {
+        return authSessionService.login(payload, metadata);
     }
 
-    async login(payload: AuthLoginOption, metadata?: { ipAddress?: string; userAgent?: string }) {
-        const { email, password, deviceName, deviceId } = payload;
-
-        // Find user
-        const user = await prisma.user.findUnique({
-            where: {
-                email,
-            },
-        });
-
-        // Don't reveal whether the email exists
-        if (!user) {
-            throw new AppError("Invalid email or password", 401);
-        }
-
-        // Compare password
-        const isPasswordValid = await argon2.verify(
-            user.passwordHash,
-            password,
-        );
-
-        if (!isPasswordValid) {
-            throw new AppError("Invalid email or password", 401);
-        }
-
-        // Optional: Check email verification
-        if (!user.emailVerified) {
-            throw new AppError(
-                "Please verify your email before logging in",
-                403,
-            );
-        }
-
-        if (user.status !== "ACTIVE") {
-            throw new AppError(`Account is ${user.status.toLowerCase().replaceAll("_", " ")}`, 403);
-        }
-
-        return this.issueUserSessionAndTokens(
-            { id: user.id, email: user.email!, firstName: user.firstName, lastName: user.lastName },
-            { deviceId, deviceName, metadata }
-        );
-    };
-
-    async resetPassword({ email, otp, password }: ResetPasswordInput) {
-        await this.assertOtp(Keys.PASSWORD_RESET_OTP(email), otp);
-        const passwordHash = await argon2.hash(password);
-
-        const user = await prisma.user.findUnique({
-            where: { email },
-            select: { id: true },
-        });
-
-        if (!user) {
-            throw new AppError("Unable to reset password", 400);
-        }
-
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { passwordHash },
-        });
-
-        // Password changes invalidate every existing login session.
-        await prisma.userSession.deleteMany({
-            where: { userId: user.id },
-        });
-        await redis.del(Keys.PASSWORD_RESET_OTP(email));
-
-        return { reset: true };
-    };
-
-
-    async refreshToken(refreshToken: string) {
-        let payload: ReturnType<typeof verifyRefreshToken>;
-
-        try {
-            payload = verifyRefreshToken(refreshToken);
-        } catch {
-            throw new AppError(
-                "Invalid or expired refresh token",
-                401,
-            );
-        }
-
-        const tokenHash = hashToken(refreshToken);
-
-        const session = await prisma.userSession.findUnique({
-            where: {
-                id: payload.sessionId,
-            },
-        });
-
-        if (!session || session.userId !== payload.userId || session.revokedAt) {
-            throw new AppError(
-                "Invalid refresh token",
-                401,
-            );
-        }
-
-        if (session.refreshTokenHash !== tokenHash) {
-            await prisma.userSession.deleteMany({
-                where: {
-                    id: session.id,
-                },
-            });
-
-            throw new AppError(
-                "Refresh token is invalid",
-                401,
-            );
-        }
-
-        if (session.expiresAt < new Date()) {
-            await prisma.userSession.deleteMany({
-                where: {
-                    id: session.id,
-                },
-            });
-
-            throw new AppError(
-                "Session expired",
-                401,
-            );
-        }
-
-        const newRefreshToken = generateRefreshToken({
-            userId: payload.userId,
-            email: payload.email,
-            sessionId: session.id,
-        });
-
-        const rotation = await prisma.userSession.updateMany({
-            where: {
-                id: session.id,
-                refreshTokenHash: tokenHash,
-                revokedAt: null,
-            },
-            data: {
-                refreshTokenHash: hashToken(newRefreshToken),
-                lastUsedAt: new Date(),
-            },
-        });
-
-        if (rotation.count !== 1) {
-            throw new AppError("Refresh token is invalid", 401);
-        }
-
-        const accessToken = generateAccessToken({
-            userId: payload.userId,
-            email: payload.email,
-            sessionId: session.id,
-        });
-
-        return {
-            accessToken,
-            refreshToken: newRefreshToken,
-        };
-    };
-
-    async logout(userId: string, sessionId: string) {
-        if (!sessionId) return;
-
-        await prisma.userSession.updateMany({
-            where: { id: sessionId, revokedAt: null },
-            data: { revokedAt: new Date() },
-        });
-        await invalidateAuthContext(userId, sessionId);
+    refreshToken(refreshToken: string) {
+        return authSessionService.refreshToken(refreshToken);
     }
 
-    async listSessions(userId: string) {
-        return prisma.userSession.findMany({
-            where: { userId },
-            orderBy: { createdAt: "desc" },
-            select: {
-                id: true,
-                deviceName: true,
-                deviceId: true,
-                ipAddress: true,
-                userAgent: true,
-                expiresAt: true,
-                lastUsedAt: true,
-                revokedAt: true,
-                createdAt: true,
-            },
-        });
+    logout(userId: string, sessionId: string) {
+        return authSessionService.logout(userId, sessionId);
     }
 
-    async revokeSession(userId: string, sessionId: string) {
-        const result = await prisma.userSession.updateMany({
-            where: { id: sessionId, userId, revokedAt: null },
-            data: { revokedAt: new Date() },
-        });
-
-        if (result.count !== 1) throw new AppError("Session not found", 404);
-        await invalidateAuthContext(userId, sessionId);
-        return { revoked: true };
+    listSessions(userId: string) {
+        return authSessionService.listSessions(userId);
     }
 
-    async revokeAllSessions(userId: string) {
-        const result = await prisma.userSession.updateMany({
-            where: { userId, revokedAt: null },
-            data: { revokedAt: new Date() },
-        });
-
-        await invalidateAuthContext(userId);
-        return { revoked: result.count };
+    revokeSession(userId: string, sessionId: string) {
+        return authSessionService.revokeSession(userId, sessionId);
     }
 
-    /// ===========================================GET CURRENT USERS DETAILS===============================
-    private formatUserResponse(profile: any) {
-        const roles: string[] = profile.roles ?? [];
-
-        // Dynamic check: Standard customer / guest has no roles or only the standard "CUSTOMER" role
-        const isStandardCustomer = roles.length === 0 || (roles.length === 1 && roles[0]?.toUpperCase() === "CUSTOMER");
-
-        if (isStandardCustomer) {
-            // Keep the consumer payload ultra-lightweight by omitting verbose permissions and roleDetails
-            const { permissions: _p, roleDetails: _r, ...leanCustomerPayload } = profile;
-            return leanCustomerPayload;
-        }
-
-        // All other dynamic roles (Admin, Seller, Manager, Support, etc.) receive the full payload
-        return profile;
+    revokeAllSessions(userId: string) {
+        return authSessionService.revokeAllSessions(userId);
     }
 
-    async getCurrentUser(userId: string, sessionId?: string) {
-        // 1. Fast path: Single source of truth from unified AuthContext in Redis
-        const cached = await getAuthContext(userId, sessionId);
-        if (cached) {
-            return this.formatUserResponse(cached);
-        }
-
-        // 2. Database query on cache miss
-        const user = await prisma.user.findFirst({
-            where: {
-                id: userId,
-                deletedAt: null,
-            },
-            select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                phone: true,
-                avatarUrl: true,
-                emailVerified: true,
-                phoneVerified: true,
-                status: true,
-                createdAt: true,
-                updatedAt: true,
-                // get roles and permissions 
-                roles: {
-                    select: {
-                        role: {
-                            select: {
-                                id: true,
-                                name: true,
-                                description: true,
-                                permissions: {
-                                    select: {
-                                        permission: {
-                                            select: {
-                                                id: true,
-                                                name: true,
-                                                description: true,
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-        });
-
-        if (!user) {
-            throw new AppError("User not found", 404);
-        }
-
-        const roles = (user.roles ?? []).map((r) => r.role?.name).filter(Boolean) as string[];
-        const permissions = Array.from(
-            new Set(
-                (user.roles ?? []).flatMap((r) =>
-                    (r.role?.permissions ?? []).map((p) => p.permission?.name).filter(Boolean)
-                )
-            )
-        ) as string[];
-
-        const profileResult = {
-            id: user.id,
-            userId: user.id,
-            firstName: user.firstName ?? null,
-            lastName: user.lastName ?? null,
-            email: user.email ?? null,
-            phone: user.phone ?? null,
-            avatarUrl: user.avatarUrl ?? null,
-            emailVerified: Boolean(user.emailVerified),
-            phoneVerified: Boolean(user.phoneVerified),
-            status: user.status ?? "ACTIVE",
-            createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : new Date().toISOString(),
-            updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : new Date().toISOString(),
-            roles,
-            permissions,
-            roleDetails: (user.roles ?? []).map((r) => ({
-                id: r.role?.id,
-                name: r.role?.name,
-                description: r.role?.description ?? null,
-                permissions: (r.role?.permissions ?? []).map((p) => ({
-                    id: p.permission?.id,
-                    name: p.permission?.name,
-                    description: p.permission?.description ?? null,
-                })),
-            })),
-            ...(sessionId ? { sessionId } : {}),
-        };
-
-        // 3. Save to Redis as single source of truth (complete RBAC data for server-side guards)
-        await setAuthContext(profileResult);
-
-        // 4. Return dynamically optimized payload based on role
-        return this.formatUserResponse(profileResult);
+    getCurrentUser(userId: string, sessionId?: string) {
+        return authSessionService.getCurrentUser(userId, sessionId);
     }
 
-
-    async authenticateWithGoogle(
-        payload: GoogleLoginInput,
-        metadata?: { ipAddress?: string; userAgent?: string }
-    ) {
-        const { idToken, deviceName, deviceId } = payload;
-
-        // 1. Verify token cryptographically on server
-        const googleUser = await verifyGoogleIdToken(idToken);
-
-        // 2. Check if user already exists with this email
-        let user = await prisma.user.findFirst({
-            where: { email: googleUser.email, deletedAt: null },
-        });
-
-        if (user) {
-            if (user.status !== "ACTIVE") {
-                throw new AppError(`Account is ${user.status.toLowerCase().replaceAll("_", " ")}`, 403);
-            }
-
-            // Sync verification & avatar if missing
-            if (!user.emailVerified || (!user.avatarUrl && googleUser.avatarUrl)) {
-                user = await prisma.user.update({
-                    where: { id: user.id },
-                    data: {
-                        emailVerified: true,
-                        ...(user.avatarUrl ? {} : { avatarUrl: googleUser.avatarUrl }),
-                        lastLoginAt: new Date(),
-                    },
-                });
-            } else {
-                await prisma.user.update({
-                    where: { id: user.id },
-                    data: { lastLoginAt: new Date() },
-                });
-            }
-        } else {
-            // 3. New user registration via Google (generate un-guessable passwordHash)
-            const randomPasswordHash = await argon2.hash(crypto.randomBytes(32).toString("hex"));
-
-            user = await prisma.user.create({
-                data: {
-                    email: googleUser.email,
-                    firstName: googleUser.firstName,
-                    lastName: googleUser.lastName,
-                    avatarUrl: googleUser.avatarUrl,
-                    emailVerified: true,
-                    passwordHash: randomPasswordHash,
-                    status: "ACTIVE",
-                    lastLoginAt: new Date(),
-                },
-            });
-        }
-
-        // 4. Issue session and tokens (reusable logic)
-        return this.issueUserSessionAndTokens(
-            { id: user.id, email: user.email!, firstName: user.firstName, lastName: user.lastName },
-            { deviceId, deviceName, metadata }
-        );
+    authenticateWithGoogle(payload: GoogleLoginInput, metadata?: { ipAddress?: string; userAgent?: string }) {
+        return authSessionService.authenticateWithGoogle(payload, metadata);
     }
-
 }
 
 export const authService = new AuthService();

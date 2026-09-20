@@ -155,6 +155,18 @@ export class CouponController {
             data: result,
         });
     }
+
+    /**
+     * Public / Customer: Lists available active coupons for storefront users.
+     */
+    async getActiveCoupons(_req: FastifyRequest, reply: FastifyReply) {
+        const result = await couponService.getActiveCoupons();
+
+        return reply.status(200).send({
+            status: "success",
+            data: result,
+        });
+    }
 }
 
 export const couponController = new CouponController();

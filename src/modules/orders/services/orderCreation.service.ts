@@ -4,6 +4,8 @@ import { orderValidationService } from "./orderValidation.service.js";
 import { orderCouponService } from "./orderCoupon.service.js";
 import { orderInventoryService } from "./orderInventory.service.js";
 import { idempotencyService } from "./idempotency.service.js";
+import { promotionService } from "@/modules/promotions/services/promotion.service.js";
+import { promotionUsageService } from "@/modules/promotions/services/promotionUsage.service.js";
 import type { CheckoutInput } from "../validations/order.validation.js";
 
 export class OrderCreationService {
@@ -25,14 +27,31 @@ export class OrderCreationService {
             input?.billingAddress,
         );
 
-        const { coupon, discountAmount, isFreeShipping } = await orderCouponService.validateAndCalculateDiscount(
-            input?.couponCode,
-            subtotal,
+        // 1. Coupon calculation
+        const { coupon, discountAmount: couponDiscount, isFreeShipping: couponFreeShipping } =
+            await orderCouponService.validateAndCalculateDiscount(input?.couponCode, subtotal, userId);
+
+        // 2. Promotion evaluation (automatic + promoCode)
+        const promoResult = await promotionService.previewCart(
+            {
+                promoCode: input?.promoCode,
+                shippingFee: 0,
+                items: items.map((i) => ({
+                    productId: i.productId,
+                    variantId: i.variantId,
+                    productName: i.productName,
+                    unitPrice: i.unitPrice,
+                    quantity: i.quantity,
+                })),
+            },
             userId,
         );
 
+        const totalDiscount = Number(Math.min(subtotal, couponDiscount + promoResult.discountSubtotal).toFixed(2));
+        const isFreeShipping = couponFreeShipping || promoResult.isFreeShipping;
+
         const { shippingTotal, taxTotal } = orderValidationService.calculateFees(subtotal, isFreeShipping);
-        const grandTotal = Number((subtotal - discountAmount + shippingTotal + taxTotal).toFixed(2));
+        const grandTotal = Number((subtotal - totalDiscount + shippingTotal + taxTotal).toFixed(2));
 
         return {
             isValid: true,
@@ -40,13 +59,14 @@ export class OrderCreationService {
                 itemCount: items.length,
                 totalUnits: items.reduce((acc, i) => acc + i.quantity, 0),
                 subtotal,
-                discountTotal: discountAmount,
+                discountTotal: totalDiscount,
                 shippingTotal,
                 taxTotal,
                 grandTotal: Math.max(0, grandTotal),
                 currency: input?.currency || "INR",
             },
-            coupon: coupon ? { code: coupon.code, type: coupon.type, discountAmount } : null,
+            coupon: coupon ? { code: coupon.code, type: coupon.type, discountAmount: couponDiscount } : null,
+            promotions: promoResult.appliedPromotions,
             shippingAddress,
             billingAddress,
             items,
@@ -85,16 +105,31 @@ export class OrderCreationService {
                 input?.billingAddress,
             );
 
-            // 4. Validate & Calculate Coupon Discount
-            const { coupon, discountAmount, isFreeShipping } = await orderCouponService.validateAndCalculateDiscount(
-                input?.couponCode,
-                subtotal,
+            // 4. Validate & Calculate Coupon and Promotion Discounts
+            const { coupon, discountAmount: couponDiscount, isFreeShipping: couponFreeShipping } =
+                await orderCouponService.validateAndCalculateDiscount(input?.couponCode, subtotal, userId);
+
+            const promoResult = await promotionService.previewCart(
+                {
+                    promoCode: input?.promoCode,
+                    shippingFee: 0,
+                    items: items.map((i) => ({
+                        productId: i.productId,
+                        variantId: i.variantId,
+                        productName: i.productName,
+                        unitPrice: i.unitPrice,
+                        quantity: i.quantity,
+                    })),
+                },
                 userId,
             );
 
+            const totalDiscount = Number(Math.min(subtotal, couponDiscount + promoResult.discountSubtotal).toFixed(2));
+            const isFreeShipping = couponFreeShipping || promoResult.isFreeShipping;
+
             // 5. Calculate Shipping, Taxes, and Grand Total
             const { shippingTotal, taxTotal } = orderValidationService.calculateFees(subtotal, isFreeShipping);
-            const grandTotal = Number((subtotal - discountAmount + shippingTotal + taxTotal).toFixed(2));
+            const grandTotal = Number((subtotal - totalDiscount + shippingTotal + taxTotal).toFixed(2));
             const orderNumber = orderNumberService.generateOrderNumber();
 
             // 6. Execute atomic database transaction
@@ -107,7 +142,7 @@ export class OrderCreationService {
                         status: "PENDING",
                         currency: input?.currency || "INR",
                         subtotal,
-                        discountTotal: discountAmount,
+                        discountTotal: totalDiscount,
                         taxTotal,
                         shippingTotal,
                         grandTotal: Math.max(0, grandTotal),
@@ -166,29 +201,21 @@ export class OrderCreationService {
                 await orderInventoryService.reserveItemsForOrder(
                     tx,
                     createdOrder.id,
-                    items.map((i) => ({
-                        variantId: i.variantId,
-                        productName: i.productName,
-                        sku: i.sku,
-                        quantity: i.quantity,
-                    })),
+                    items.map((i) => ({ variantId: i.variantId, productName: i.productName, sku: i.sku, quantity: i.quantity })),
                 );
 
                 // F. Record coupon usage if coupon applied
                 if (coupon) {
-                    await orderCouponService.recordUsage(
-                        tx,
-                        coupon.id,
-                        createdOrder.id,
-                        discountAmount,
-                        userId,
-                    );
+                    await orderCouponService.recordUsage(tx, coupon.id, createdOrder.id, couponDiscount, userId);
                 }
 
-                // G. Clear shopping cart
-                await tx.cartItem.deleteMany({
-                    where: { cartId },
-                });
+                // G. Record promotion usages
+                for (const promo of promoResult.appliedPromotions) {
+                    await promotionUsageService.recordUsage(tx, promo.id, createdOrder.id, promo.discountAmount, userId);
+                }
+
+                // H. Clear shopping cart
+                await tx.cartItem.deleteMany({ where: { cartId } });
 
                 return createdOrder;
             });
@@ -200,9 +227,8 @@ export class OrderCreationService {
                     items: true,
                     address: true,
                     statusHistory: { orderBy: { createdAt: "desc" } },
-                    couponUsages: {
-                        include: { coupon: { select: { code: true, type: true } } },
-                    },
+                    couponUsages: { include: { coupon: { select: { code: true, type: true } } } },
+                    promotionUsages: { include: { promotion: { select: { name: true, code: true, type: true } } } },
                     reservations: { select: { id: true, status: true, expiresAt: true } },
                 },
             });
@@ -244,18 +270,16 @@ export class OrderCreationService {
             notes: order.notes,
             createdAt: order.createdAt,
             updatedAt: order.updatedAt,
-            shippingAddress: order.address
-                ? {
-                    recipientName: order.address.recipientName,
-                    phone: order.address.phone,
-                    addressLine1: order.address.addressLine1,
-                    addressLine2: order.address.addressLine2,
-                    city: order.address.city,
-                    state: order.address.state,
-                    postalCode: order.address.postalCode,
-                    country: order.address.country,
-                }
-                : null,
+            shippingAddress: order.address ? {
+                recipientName: order.address.recipientName,
+                phone: order.address.phone,
+                addressLine1: order.address.addressLine1,
+                addressLine2: order.address.addressLine2,
+                city: order.address.city,
+                state: order.address.state,
+                postalCode: order.address.postalCode,
+                country: order.address.country,
+            } : null,
             items: (order.items || []).map((item: any) => ({
                 id: item.id,
                 productId: item.productId,
@@ -269,13 +293,18 @@ export class OrderCreationService {
                 total: Number(item.total),
                 variantSnapshot: item.variantSnapshot,
             })),
-            coupon: order.couponUsages?.[0]
-                ? {
-                    code: order.couponUsages[0].coupon.code,
-                    type: order.couponUsages[0].coupon.type,
-                    discountAmount: Number(order.couponUsages[0].discountAmount),
-                }
-                : null,
+            coupon: order.couponUsages?.[0] ? {
+                code: order.couponUsages[0].coupon.code,
+                type: order.couponUsages[0].coupon.type,
+                discountAmount: Number(order.couponUsages[0].discountAmount),
+            } : null,
+            promotions: (order.promotionUsages || []).map((pu: any) => ({
+                id: pu.promotionId,
+                name: pu.promotion?.name,
+                code: pu.promotion?.code,
+                type: pu.promotion?.type,
+                discountAmount: Number(pu.discountAmount),
+            })),
             statusHistory: (order.statusHistory || []).map((sh: any) => ({
                 id: sh.id,
                 previousStatus: sh.previousStatus,

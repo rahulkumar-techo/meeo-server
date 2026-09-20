@@ -4,30 +4,17 @@ import { PERMISSIONS } from "@/modules/authorization/permission.constants.js";
 import type { AuthorizationContext } from "@/plugins/auth.plugin.js";
 import { verifyCatalogOwnershipOrPermission } from "../catalog-auth.helper.js";
 import { slugify } from "../utils/slug.util.js";
+import { categoryHierarchyService, type CategoryTreeNode } from "./categoryHierarchy.service.js";
 import type { CreateCategoryInput, UpdateCategoryInput, CategoryQueryInput } from "../validations/category.validation.js";
 import type { Prisma, ProductStatus } from "@/generated/prisma/client.js";
 import { cacheService } from "@/common/cache/cache.service.js";
 import { CACHE_KEYS, CACHE_TTL } from "@/common/cache/cache.keys.js";
 
-export interface CategoryTreeNode {
-    id: string;
-    parentId: string | null;
-    createdById: string | null;
-    name: string;
-    slug: string;
-    description: string | null;
-    imageUrl: string | null;
-    status: ProductStatus;
-    sortOrder: number;
-    createdAt: Date;
-    updatedAt: Date;
-    children: CategoryTreeNode[];
-}
+export { categoryHierarchyService, type CategoryTreeNode } from "./categoryHierarchy.service.js";
 
 export class CategoryService {
     /**
      * Creates a new category.
-     * Automatically generates a slug if not provided, and verifies parent existence.
      */
     async createCategory(input: CreateCategoryInput, creatorId?: string) {
         const slug = input.slug || slugify(input.name);
@@ -36,7 +23,6 @@ export class CategoryService {
             throw new AppError("Category name must contain valid alphanumeric characters for slug generation", 400);
         }
 
-        // Check for slug uniqueness
         const existingWithSlug = await prisma.category.findUnique({
             where: { slug },
         });
@@ -45,7 +31,6 @@ export class CategoryService {
             throw new AppError(`A category with slug '${slug}' already exists`, 409);
         }
 
-        // Verify parent category if specified
         if (input.parentId) {
             const parent = await prisma.category.findUnique({
                 where: { id: input.parentId },
@@ -73,13 +58,12 @@ export class CategoryService {
             },
         });
 
-        await this.invalidateCategoryCache();
+        await categoryHierarchyService.invalidateCategoryCache();
         return result;
     }
 
     /**
      * Updates an existing category.
-     * Enforces authorization, slug uniqueness, and prevents cyclical parent-child hierarchies.
      */
     async updateCategory(id: string, input: UpdateCategoryInput, user?: AuthorizationContext) {
         const existing = await prisma.category.findUnique({
@@ -90,7 +74,6 @@ export class CategoryService {
             throw new AppError("Category not found", 404);
         }
 
-        // Check ownership or RBAC permission
         verifyCatalogOwnershipOrPermission(
             existing.createdById,
             user,
@@ -111,7 +94,6 @@ export class CategoryService {
             }
         }
 
-        // Validate parent changes and guard against cycles
         if (input.parentId !== undefined && input.parentId !== existing.parentId) {
             if (input.parentId === id) {
                 throw new AppError("A category cannot be its own parent", 400);
@@ -125,8 +107,7 @@ export class CategoryService {
                     throw new AppError("Parent category not found", 404);
                 }
 
-                // Check if target parent is a descendant of this category
-                const isDescendant = await this.isDescendantOf(input.parentId, id);
+                const isDescendant = await categoryHierarchyService.isDescendantOf(input.parentId, id);
                 if (isDescendant) {
                     throw new AppError("Cannot set a descendant category as the parent (circular hierarchy detected)", 400);
                 }
@@ -152,14 +133,12 @@ export class CategoryService {
             },
         });
 
-        await this.invalidateCategoryCache(id, existing.slug, updated.slug);
+        await categoryHierarchyService.invalidateCategoryCache(id, existing.slug, updated.slug);
         return updated;
     }
 
     /**
-     * Deletes a category.
-     * Prevents deletion if products are currently assigned to this category.
-     * Reassigns child categories to the deleted category's parent (or root).
+     * Deletes a category and reassigns children to parent.
      */
     async deleteCategory(id: string, user?: AuthorizationContext) {
         const existing = await prisma.category.findUnique({
@@ -175,7 +154,6 @@ export class CategoryService {
             throw new AppError("Category not found", 404);
         }
 
-        // Check ownership or RBAC permission
         verifyCatalogOwnershipOrPermission(
             existing.createdById,
             user,
@@ -189,7 +167,6 @@ export class CategoryService {
             );
         }
 
-        // Reassign child categories to parent (prevent orphaned subtree)
         const result = await prisma.$transaction(async (tx) => {
             if (existing._count.children > 0) {
                 await tx.category.updateMany({
@@ -205,7 +182,7 @@ export class CategoryService {
             return { id, name: existing.name, deleted: true };
         });
 
-        await this.invalidateCategoryCache(id, existing.slug);
+        await categoryHierarchyService.invalidateCategoryCache(id, existing.slug);
         return result;
     }
 
@@ -220,12 +197,8 @@ export class CategoryService {
                     where: { id },
                     include: {
                         parent: true,
-                        children: {
-                            orderBy: { sortOrder: "asc" },
-                        },
-                        _count: {
-                            select: { products: true },
-                        },
+                        children: { orderBy: { sortOrder: "asc" } },
+                        _count: { select: { products: true } },
                     },
                 });
 
@@ -250,12 +223,8 @@ export class CategoryService {
                     where: { slug },
                     include: {
                         parent: true,
-                        children: {
-                            orderBy: { sortOrder: "asc" },
-                        },
-                        _count: {
-                            select: { products: true },
-                        },
+                        children: { orderBy: { sortOrder: "asc" } },
+                        _count: { select: { products: true } },
                     },
                 });
 
@@ -322,93 +291,8 @@ export class CategoryService {
         };
     }
 
-    /**
-     * Builds and returns a complete hierarchical category tree.
-     * Recursively nests children inside parent nodes.
-     */
-    async getCategoryTree(statusFilter?: ProductStatus): Promise<CategoryTreeNode[]> {
-        return cacheService.getOrSet(
-            CACHE_KEYS.CATEGORY.TREE(statusFilter),
-            async () => {
-                const where: Prisma.CategoryWhereInput = statusFilter ? { status: statusFilter } : {};
-                const categories = await prisma.category.findMany({
-                    where,
-                    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-                });
-
-                const categoryMap = new Map<string, CategoryTreeNode>();
-                const rootNodes: CategoryTreeNode[] = [];
-
-                // 1. Initialize all nodes with an empty children array
-                for (const cat of categories) {
-                    categoryMap.set(cat.id, {
-                        ...cat,
-                        children: [],
-                    });
-                }
-
-                // 2. Link child nodes to their respective parents
-                for (const cat of categories) {
-                    const node = categoryMap.get(cat.id)!;
-                    if (cat.parentId && categoryMap.has(cat.parentId)) {
-                        categoryMap.get(cat.parentId)!.children.push(node);
-                    } else {
-                        rootNodes.push(node);
-                    }
-                }
-
-                return rootNodes;
-            },
-            CACHE_TTL.CATEGORY_TREE,
-        );
-    }
-
-    /**
-     * Invalidates category caches and discovery feeds.
-     */
-    private async invalidateCategoryCache(id?: string, ...slugs: (string | undefined)[]) {
-        const promises: Promise<any>[] = [
-            cacheService.invalidatePattern("cache:category:*"),
-            cacheService.invalidatePattern("cache:discovery:*"),
-        ];
-
-        if (id) {
-            promises.push(cacheService.del(CACHE_KEYS.CATEGORY.BY_ID(id)));
-        }
-        for (const slug of slugs) {
-            if (slug) {
-                promises.push(cacheService.del(CACHE_KEYS.CATEGORY.BY_SLUG(slug)));
-            }
-        }
-
-        await Promise.allSettled(promises);
-    }
-
-    /**
-     * Helper to detect if potentialDescendantId is currently a descendant of potentialAncestorId.
-     */
-    private async isDescendantOf(potentialDescendantId: string, potentialAncestorId: string): Promise<boolean> {
-        let currentId: string | null = potentialDescendantId;
-        const visited = new Set<string>();
-
-        while (currentId) {
-            if (currentId === potentialAncestorId) {
-                return true;
-            }
-            if (visited.has(currentId)) {
-                break;
-            }
-            visited.add(currentId);
-
-            const cat: { parentId: string | null } | null = await prisma.category.findUnique({
-                where: { id: currentId },
-                select: { parentId: true },
-            });
-
-            currentId = cat?.parentId ?? null;
-        }
-
-        return false;
+    getCategoryTree(statusFilter?: ProductStatus) {
+        return categoryHierarchyService.getCategoryTree(statusFilter);
     }
 }
 

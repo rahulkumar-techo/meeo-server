@@ -139,6 +139,45 @@ describe("Master Product Attribute HTTP Routes Integration Tests", () => {
             expect(attributeServiceMock.createAttribute).toHaveBeenCalledWith({
                 name: "Material",
                 values: ["Cotton", "Polyester"],
+                isGlobal: true,
+                status: "ACTIVE",
+            });
+        });
+
+        it("creates attribute with initial values, isGlobal, and status (authenticated)", async () => {
+            const app = await createTestApp();
+            attributeServiceMock.createAttribute.mockResolvedValue({
+                id: "attr-new-2",
+                name: "storage_capacity",
+                isGlobal: true,
+                status: "APPROVED",
+                values: [
+                    { id: "val-1", value: "256GB" },
+                    { id: "val-2", value: "512GB" },
+                    { id: "val-3", value: "1TB" },
+                    { id: "val-4", value: "2TB" },
+                ],
+            });
+
+            const res = await app.inject({
+                method: "POST",
+                url: "/api/v1/attributes",
+                headers: createAuthHeaders(),
+                payload: {
+                    name: "storage_capacity",
+                    values: ["256GB", "512GB", "1TB", "2TB"],
+                    isGlobal: true,
+                    status: "APPROVED",
+                },
+            });
+
+            expect(res.statusCode).toBe(201);
+            expect(res.json().success).toBe(true);
+            expect(attributeServiceMock.createAttribute).toHaveBeenCalledWith({
+                name: "storage_capacity",
+                values: ["256GB", "512GB", "1TB", "2TB"],
+                isGlobal: true,
+                status: "APPROVED",
             });
         });
 
@@ -181,6 +220,32 @@ describe("Master Product Attribute HTTP Routes Integration Tests", () => {
             expect(attributeServiceMock.updateAttribute).toHaveBeenCalledWith("attr-1", {
                 name: "Primary Color",
                 values: ["Purple"],
+            });
+        });
+
+        it("updates attribute status and isGlobal (authenticated)", async () => {
+            const app = await createTestApp();
+            attributeServiceMock.updateAttribute.mockResolvedValue({
+                id: "attr-1",
+                name: "storage_capacity",
+                isGlobal: false,
+                status: "INACTIVE",
+            });
+
+            const res = await app.inject({
+                method: "PATCH",
+                url: "/api/v1/attributes/attr-1",
+                headers: createAuthHeaders(),
+                payload: {
+                    isGlobal: false,
+                    status: "INACTIVE",
+                },
+            });
+
+            expect(res.statusCode).toBe(200);
+            expect(attributeServiceMock.updateAttribute).toHaveBeenCalledWith("attr-1", {
+                isGlobal: false,
+                status: "INACTIVE",
             });
         });
     });

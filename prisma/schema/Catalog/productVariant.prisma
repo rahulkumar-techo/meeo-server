@@ -29,6 +29,8 @@ model ProductVariant {
 
   attributeValues VariantAttributeValue[]
 
+  images Image[] @relation("VariantImages")
+
   @@index([productId])
   @@index([productId, status])
   @@map("product_variants")

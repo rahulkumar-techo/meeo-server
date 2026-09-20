@@ -20,8 +20,23 @@ export const reviewSwaggerSchemas = {
             images: {
                 type: "array",
                 maxItems: 5,
-                items: { type: "string", format: "uri" },
-                description: "Attached photo URLs demonstrating product experience",
+                items: {
+                    oneOf: [
+                        { type: "string", format: "uri" },
+                        {
+                            type: "object",
+                            required: ["url"],
+                            properties: {
+                                url: { type: "string", format: "uri" },
+                                fileId: { type: ["string", "null"] },
+                                thumbnailUrl: { type: ["string", "null"], format: "uri" },
+                                altText: { type: ["string", "null"] },
+                                sortOrder: { type: "integer" },
+                            },
+                        },
+                    ],
+                },
+                description: "Attached photo URLs or ImageKit asset objects demonstrating product experience",
             },
         },
     },
@@ -35,7 +50,22 @@ export const reviewSwaggerSchemas = {
             images: {
                 type: "array",
                 maxItems: 5,
-                items: { type: "string", format: "uri" },
+                items: {
+                    oneOf: [
+                        { type: "string", format: "uri" },
+                        {
+                            type: "object",
+                            required: ["url"],
+                            properties: {
+                                url: { type: "string", format: "uri" },
+                                fileId: { type: ["string", "null"] },
+                                thumbnailUrl: { type: ["string", "null"], format: "uri" },
+                                altText: { type: ["string", "null"] },
+                                sortOrder: { type: "integer" },
+                            },
+                        },
+                    ],
+                },
             },
         },
     },

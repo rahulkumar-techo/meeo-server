@@ -143,3 +143,47 @@ enum IdempotencyStatus {
   COMPLETED
   FAILED
 }
+
+enum PromotionStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  PAUSED
+  EXPIRED
+  ARCHIVED
+}
+
+enum PromotionType {
+  PERCENTAGE
+  FIXED_DISCOUNT
+  BUY_X_GET_Y
+  FREE_SHIPPING
+  PRODUCT_DISCOUNT
+  CATEGORY_DISCOUNT
+  BRAND_DISCOUNT
+  FLASH_SALE
+}
+
+enum PromotionStackingRule {
+  EXCLUSIVE
+  STACKABLE_WITH_OTHERS
+  STACKABLE_WITH_COUPONS
+}
+
+enum CustomerSegment {
+  ALL
+  FIRST_TIME_BUYER
+  VIP
+  RETURNING
+  REGISTERED
+}
+
+enum AttributeStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+

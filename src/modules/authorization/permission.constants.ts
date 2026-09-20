@@ -43,6 +43,11 @@ export const PERMISSIONS = {
     COUPON_UPDATE: "coupon:update",
     COUPON_DELETE: "coupon:delete",
 
+    PROMOTION_READ: "promotion:read",
+    PROMOTION_CREATE: "promotion:create",
+    PROMOTION_UPDATE: "promotion:update",
+    PROMOTION_DELETE: "promotion:delete",
+
     REVIEW_READ: "review:read",
     REVIEW_MODERATE: "review:moderate",
     REVIEW_DELETE: "review:delete",

@@ -141,10 +141,18 @@ export class ProductController {
     async deleteProduct(request: FastifyRequest, reply: FastifyReply) {
         const { id } = request.params as IdParam;
         const permanent = (request.query as { permanent?: string }).permanent === "true";
-        const result = await productService.deleteProduct(id, request.user, permanent);
+        if (permanent) {
+            const result = await productService.deleteProduct(id, request.user);
+            return sendOk({
+                reply,
+                message: "Product deleted permanently",
+                data: result,
+            });
+        }
+        const result = await productService.archiveProduct(id, request.user);
         return sendOk({
             reply,
-            message: result.permanent ? "Product deleted permanently" : "Product archived / soft-deleted successfully",
+            message: "Product archived / soft-deleted successfully",
             data: result,
         });
     }
