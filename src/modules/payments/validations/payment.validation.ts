@@ -10,6 +10,24 @@ export const CreatePaymentIntentSchema = z.object({
 
 export type CreatePaymentIntentInput = z.infer<typeof CreatePaymentIntentSchema>;
 
+export const VerifyPaymentSchema = z.object({
+    orderId: z.string().uuid({ message: "Invalid orderId format (UUID required)" }),
+    razorpayOrderId: z.string().min(1, "Razorpay orderId is required"),
+    razorpayPaymentId: z.string().min(1, "Razorpay paymentId is required"),
+    razorpaySignature: z.string().min(1, "Razorpay signature is required"),
+});
+
+export type VerifyPaymentInput = z.infer<typeof VerifyPaymentSchema>;
+
+export const RecordPaymentFailureSchema = z.object({
+    orderId: z.string().uuid({ message: "Invalid orderId format (UUID required)" }),
+    failureCode: z.string().optional(),
+    failureMessage: z.string().optional(),
+    providerPaymentId: z.string().optional(),
+});
+
+export type RecordPaymentFailureInput = z.infer<typeof RecordPaymentFailureSchema>;
+
 export const RetryPaymentSchema = z.object({
     paymentId: z.string().uuid({ message: "Invalid paymentId format (UUID required)" }),
     paymentMethod: z.string().min(1).max(50).optional(),

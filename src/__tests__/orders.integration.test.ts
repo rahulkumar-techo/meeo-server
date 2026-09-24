@@ -103,6 +103,7 @@ describe("Order HTTP Routes Integration Tests", () => {
 
     it("previews checkout calculation via validate-checkout", async () => {
         const app = await createTestApp();
+        const { token, userId } = mockCustomerUser();
         orderServiceMock.validateCheckout.mockResolvedValue({
             isValid: true,
             summary: {
@@ -121,6 +122,9 @@ describe("Order HTTP Routes Integration Tests", () => {
         const response = await app.inject({
             method: "POST",
             url: "/api/orders/validate-checkout",
+            headers: {
+                authorization: `Bearer ${token}`,
+            },
             payload: {
                 shippingAddressId: "a4175ef3-b1d6-4449-9f70-349f7e915570",
                 couponCode: "SAVE10",
@@ -131,6 +135,13 @@ describe("Order HTTP Routes Integration Tests", () => {
         const payload = JSON.parse(response.payload);
         expect(payload.success).toBe(true);
         expect(payload.data.summary.grandTotal).toBe(147);
+        expect(orderServiceMock.validateCheckout).toHaveBeenCalledWith(
+            userId,
+            expect.objectContaining({
+                shippingAddressId: "a4175ef3-b1d6-4449-9f70-349f7e915570",
+                couponCode: "SAVE10",
+            }),
+        );
     });
 
     it("executes checkout and places order with 201 status", async () => {
@@ -181,7 +192,6 @@ describe("Order HTTP Routes Integration Tests", () => {
                 shippingAddress: expect.objectContaining({ recipientName: "Jane Doe" }),
             }),
             "idemp-key-12345",
-            undefined,
         );
     });
 

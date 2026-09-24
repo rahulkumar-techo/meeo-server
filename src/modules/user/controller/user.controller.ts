@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import userService from "../services/user.service.js";
 import {
     addressSchema,
+    updateAddressSchema,
     phoneOtpRequestSchema,
     phoneVerificationSchema,
     profileSchema,
@@ -69,20 +70,30 @@ class UserController {
         return sendOk({ reply, message: "Profile updated successfully", data: result });
     }
 
+    /// get all saved addresses
+    async getAddresses(request: FastifyRequest, reply: FastifyReply) {
+        const userId = request.user.id ?? request.user.userId;
+        const result = await userService.getAddresses(userId);
+
+        return sendOk({ reply, message: "Addresses fetched successfully", data: result });
+    }
+
     /// create a new address
     async createAddress(request: FastifyRequest, reply: FastifyReply) {
         const data = addressSchema.parse(request.body);
-        const result = await userService.saveAddress(false, request.user.userId, data);
+        const userId = request.user.id ?? request.user.userId;
+        const result = await userService.saveAddress(false, userId, data);
 
         return sendCreated({ reply, message: "Address created successfully", data: result });
     }
 
     /// update an existing address
     async updateAddress(request: FastifyRequest<{ Params: { addressId: string } }>, reply: FastifyReply) {
-        const data = addressSchema.parse(request.body);
+        const data = updateAddressSchema.parse(request.body);
+        const userId = request.user.id ?? request.user.userId;
         const result = await userService.saveAddress(
             true,
-            request.user.userId,
+            userId,
             data,
             request.params.addressId,
         );
@@ -92,7 +103,8 @@ class UserController {
 
     /// delete an existing address
     async deleteAddress(request: FastifyRequest<{ Params: { addressId: string } }>, reply: FastifyReply) {
-        const result = await userService.deleteAddress(request.user.userId, request.params.addressId);
+        const userId = request.user.id ?? request.user.userId;
+        const result = await userService.deleteAddress(userId, request.params.addressId);
 
         return sendOk({ reply, message: result.message });
     }

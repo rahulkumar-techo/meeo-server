@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
 import { paymentProviderRegistry } from "../providers/paymentProvider.registry.js";
 import { paymentTransactionService } from "./paymentTransaction.service.js";
+import crypto from "crypto";
+import type { VerifyPaymentInput, RecordPaymentFailureInput } from "../validations/payment.validation.js";
 
 export class PaymentWebhookService {
     /**
@@ -243,14 +245,16 @@ export class PaymentWebhookService {
                 },
             });
 
-            // G. Update Webhook record to COMPLETED
-            await tx.paymentWebhook.update({
-                where: { id: webhookId },
-                data: {
-                    processingStatus: "COMPLETED",
-                    processedAt: new Date(),
-                },
-            });
+            // G. Update Webhook record to COMPLETED if webhookId provided
+            if (webhookId) {
+                await tx.paymentWebhook.update({
+                    where: { id: webhookId },
+                    data: {
+                        processingStatus: "COMPLETED",
+                        processedAt: new Date(),
+                    },
+                });
+            }
         });
     }
 
@@ -309,14 +313,122 @@ export class PaymentWebhookService {
                 },
             });
 
-            await tx.paymentWebhook.update({
-                where: { id: webhookId },
-                data: {
-                    processingStatus: "COMPLETED",
-                    processedAt: new Date(),
-                },
-            });
+            if (webhookId) {
+                await tx.paymentWebhook.update({
+                    where: { id: webhookId },
+                    data: {
+                        processingStatus: "COMPLETED",
+                        processedAt: new Date(),
+                    },
+                });
+            }
         });
+    }
+
+    /**
+     * Direct synchronous payment verification for client SDKs (Mobile / Web).
+     */
+    async verifyClientPayment(input: VerifyPaymentInput) {
+        const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = input;
+        const keySecret = process.env.RAZORPAY_TEST_SECRET_KEY || process.env.RAZORPAY_KEY_SECRET || "";
+
+        // Verify cryptographic signature
+        if (keySecret) {
+            const expectedSignature = crypto
+                .createHmac("sha256", keySecret)
+                .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+                .digest("hex");
+
+            const sigBuf = Buffer.from(razorpaySignature);
+            const expBuf = Buffer.from(expectedSignature);
+            if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+                throw new AppError("Invalid payment signature verification", 400);
+            }
+        }
+
+        // Find target payment
+        const payment = await prisma.payment.findFirst({
+            where: { orderId },
+            include: { order: true, attempts: { orderBy: { attemptNumber: "desc" }, take: 1 } },
+        });
+
+        if (!payment) {
+            throw new AppError(`No payment found for order ${orderId}`, 404);
+        }
+
+        if (payment.status === "SUCCESS") {
+            return {
+                verified: true,
+                paymentId: payment.id,
+                orderId: payment.orderId,
+                status: "SUCCESS",
+                message: "Payment already verified",
+            };
+        }
+
+        // Atomic transaction to mark paid, confirm inventory, and confirm order
+        await this.handlePaymentSuccess(
+            payment,
+            {
+                amount: Number(payment.amount),
+                providerEventId: razorpayPaymentId,
+                rawPayload: { razorpayOrderId, razorpayPaymentId, razorpaySignature },
+            },
+            ""
+        );
+
+        return {
+            verified: true,
+            paymentId: payment.id,
+            orderId: payment.orderId,
+            status: "SUCCESS",
+            message: "Payment verified and order confirmed successfully",
+        };
+    }
+
+    /**
+     * Direct recording of client SDK payment failure/cancellation.
+     */
+    async recordClientPaymentFailure(input: RecordPaymentFailureInput) {
+        const { orderId, failureCode, failureMessage, providerPaymentId } = input;
+
+        const payment = await prisma.payment.findFirst({
+            where: { orderId },
+            include: { order: true, attempts: { orderBy: { attemptNumber: "desc" }, take: 1 } },
+        });
+
+        if (!payment) {
+            throw new AppError(`No payment found for order ${orderId}`, 404);
+        }
+
+        if (payment.status === "SUCCESS") {
+            return {
+                recorded: false,
+                paymentId: payment.id,
+                orderId: payment.orderId,
+                status: "SUCCESS",
+                message: "Payment was already completed successfully",
+            };
+        }
+
+        await this.handlePaymentFailure(
+            payment,
+            {
+                amount: Number(payment.amount),
+                providerEventId: providerPaymentId || `fail_${crypto.randomBytes(6).toString("hex")}`,
+                failureCode: failureCode || "CLIENT_PAYMENT_FAILED",
+                failureMessage: failureMessage || "Payment failed or cancelled on client device",
+            },
+            ""
+        );
+
+        return {
+            recorded: true,
+            paymentId: payment.id,
+            orderId: payment.orderId,
+            status: "FAILED",
+            message: "Payment failure recorded. Order is eligible for payment retry.",
+        };
     }
 }
 

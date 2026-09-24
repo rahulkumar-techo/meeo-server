@@ -7,6 +7,8 @@ import { paymentReconciliationService } from "./paymentReconciliation.service.js
 import { paymentQueryService } from "./paymentQuery.service.js";
 import type {
     CreatePaymentIntentInput,
+    VerifyPaymentInput,
+    RecordPaymentFailureInput,
     RetryPaymentInput,
     CreateRefundInput,
     QueryPaymentsInput,
@@ -31,6 +33,14 @@ export class PaymentService {
         return paymentWebhookService.processWebhook(provider, rawPayload, headers);
     }
 
+    async verifyPayment(input: VerifyPaymentInput) {
+        return paymentWebhookService.verifyClientPayment(input);
+    }
+
+    async failPayment(input: RecordPaymentFailureInput) {
+        return paymentWebhookService.recordClientPaymentFailure(input);
+    }
+
     // Refunds
     async processRefund(userId?: string, input?: CreateRefundInput) {
         return paymentRefundService.processRefund(userId, input);
@@ -42,8 +52,8 @@ export class PaymentService {
     }
 
     // Queries
-    async getPaymentById(paymentId: string, userId?: string) {
-        return paymentQueryService.getPaymentById(paymentId, userId);
+    async getPaymentById(paymentId: string, userId?: string, roles?: string[]) {
+        return paymentQueryService.getPaymentById(paymentId, userId, roles);
     }
 
     async listPayments(query: QueryPaymentsInput) {

@@ -1,6 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { userController } from "./controller/user.controller.js";
-import { addressSchema, errorResponse, successResponse, userSchemas } from "@/common/docs/swagger.js";
+import {
+    addressSchema,
+    addressResponseSchema,
+    addressListResponseSchema,
+    errorResponse,
+    successResponse,
+    userSchemas,
+} from "@/common/docs/swagger.js";
 import { PERMISSIONS } from "@/modules/authorization/permission.constants.js";
 
 const authenticated = (summary: string, description: string, body?: object) => ({
@@ -113,6 +120,20 @@ const userRouter = (app: FastifyInstance) => {
     );
 
     // Address management
+    app.get(
+        "/addresses",
+        {
+            schema: {
+                ...authenticated(
+                    "[Authenticated User] Get all addresses",
+                    "Retrieve all shipping and billing addresses saved by the authenticated user.",
+                ),
+                response: { 200: successResponse(addressListResponseSchema), ...commonErrors },
+            },
+        },
+        userController.getAddresses.bind(userController),
+    );
+
     app.post(
         "/addresses",
         {
@@ -122,7 +143,7 @@ const userRouter = (app: FastifyInstance) => {
                     "Add a new shipping or billing address to the authenticated user's address book.",
                     addressSchema,
                 ),
-                response: { 201: successResponse(), ...commonErrors },
+                response: { 201: successResponse(addressResponseSchema), ...commonErrors },
             },
         },
         userController.createAddress.bind(userController),
@@ -138,7 +159,7 @@ const userRouter = (app: FastifyInstance) => {
                     addressSchema,
                 ),
                 params: { type: "object", required: ["addressId"], properties: { addressId: { type: "string" } } },
-                response: { 200: successResponse(), ...commonErrors },
+                response: { 200: successResponse(addressResponseSchema), ...commonErrors },
             },
         },
         userController.updateAddress.bind(userController),

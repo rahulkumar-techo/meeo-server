@@ -13,18 +13,13 @@ export default async function orderRouter(app: FastifyInstance) {
     app.post(
         "/validate-checkout",
         {
-            preHandler: [app.optionalAuthenticate],
+            preHandler: [app.authenticate],
             schema: {
                 tags: ["Orders & Fulfillment"],
-                summary: "[Public / User] Preview checkout breakdown",
+                summary: "[User] Preview checkout breakdown",
                 description: "Validates cart items, verifies stock availability, checks coupon code eligibility, and calculates shipping, taxes, and grand totals without creating an order.",
+                security: [{ bearerAuth: [] }],
                 body: orderSwaggerSchemas.checkout,
-                headers: {
-                    type: "object",
-                    properties: {
-                        "x-session-id": { type: "string", description: "Optional guest session identifier" },
-                    },
-                },
             },
         },
         orderController.validateCheckout.bind(orderController),
@@ -33,17 +28,17 @@ export default async function orderRouter(app: FastifyInstance) {
     app.post(
         "/checkout",
         {
-            preHandler: [app.optionalAuthenticate],
+            preHandler: [app.authenticate],
             schema: {
                 tags: ["Orders & Fulfillment"],
-                summary: "[Public / User] Transactional Checkout & Order Creation",
+                summary: "[User] Transactional Checkout & Order Creation",
                 description: "Atomically creates an order within a database transaction: validates live canonical prices, checks stock, creates inventory reservations, applies coupons, snapshots item and address data, logs status history, and clears the cart. Supports duplicate request deduplication via `Idempotency-Key` header.",
+                security: [{ bearerAuth: [] }],
                 body: orderSwaggerSchemas.checkout,
                 headers: {
                     type: "object",
                     properties: {
                         "idempotency-key": { type: "string", description: "Unique UUID or token to prevent duplicate order placements" },
-                        "x-session-id": { type: "string", description: "Optional guest session identifier" },
                     },
                 },
             },

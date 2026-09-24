@@ -9,7 +9,7 @@ const { authServiceMock, userServiceMock, prismaMock } = vi.hoisted(() => ({
         forgotPassword: vi.fn(), resetPassword: vi.fn(), refreshToken: vi.fn(), getCurrentUser: vi.fn(),
     },
     userServiceMock: {
-        updateProfile: vi.fn(), saveAddress: vi.fn(), deleteAddress: vi.fn(),
+        updateProfile: vi.fn(), getAddresses: vi.fn(), saveAddress: vi.fn(), deleteAddress: vi.fn(),
         requestPhoneOtp: vi.fn(), verifyPhone: vi.fn(),
     },
     prismaMock: {

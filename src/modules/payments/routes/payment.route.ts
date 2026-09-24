@@ -36,7 +36,7 @@ export default async function paymentRouter(app: FastifyInstance) {
     app.post(
         "/initialize",
         {
-            preHandler: [app.optionalAuthenticate],
+            preHandler: [app.authenticate],
             schema: {
                 tags: ["Payments & Transactions"],
                 summary: "[User / Public] Initialize Payment Intent",
@@ -46,11 +46,39 @@ export default async function paymentRouter(app: FastifyInstance) {
         },
         paymentController.initializePayment.bind(paymentController),
     );
+    /// verify on payment success and mark as paid 
+    app.post(
+        "/verify",
+        {
+            preHandler: [app.authenticate],
+            schema: {
+                tags: ["Payments & Transactions"],
+                summary: "[User / Public] Verify Payment Signature",
+                description: "Directly verifies Razorpay payment signature from client SDK and marks payment and order as CONFIRMED atomically.",
+                body: paymentSwaggerSchemas.verifyPayment,
+            },
+        },
+        paymentController.verifyPayment.bind(paymentController),
+    );
+
+    app.post(
+        "/fail",
+        {
+            preHandler: [app.authenticate],
+            schema: {
+                tags: ["Payments & Transactions"],
+                summary: "[User / Public] Record Payment Failure / Cancellation",
+                description: "Records payment failure or user cancellation from client SDK and marks attempt/payment as FAILED while keeping the order eligible for retry.",
+                body: paymentSwaggerSchemas.recordPaymentFailure,
+            },
+        },
+        paymentController.failPayment.bind(paymentController),
+    );
 
     app.post(
         "/retry",
         {
-            preHandler: [app.optionalAuthenticate],
+            preHandler: [app.authenticate],
             schema: {
                 tags: ["Payments & Transactions"],
                 summary: "[User / Public] Retry Failed Payment",
@@ -67,7 +95,7 @@ export default async function paymentRouter(app: FastifyInstance) {
     app.get(
         "/:id",
         {
-            preHandler: [app.optionalAuthenticate],
+            preHandler: [app.authenticate],
             schema: {
                 tags: ["Payments & Transactions"],
                 summary: "[User / Public] Get Payment Details",

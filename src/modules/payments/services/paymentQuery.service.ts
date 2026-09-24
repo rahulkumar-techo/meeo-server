@@ -4,9 +4,9 @@ import type { QueryPaymentsInput } from "../validations/payment.validation.js";
 
 export class PaymentQueryService {
     /**
-     * Retrieves payment details by ID, ensuring customer ownership if userId is passed.
+     * Retrieves payment details by ID, ensuring customer ownership or admin access.
      */
-    async getPaymentById(paymentId: string, userId?: string) {
+    async getPaymentById(paymentId: string, userId?: string, roles: string[] = []) {
         const payment = await prisma.payment.findUnique({
             where: { id: paymentId },
             include: {
@@ -30,7 +30,10 @@ export class PaymentQueryService {
             throw new AppError("Payment record not found", 404);
         }
 
-        if (userId && payment.order.userId && payment.order.userId !== userId) {
+        const isAdmin = roles.some((r) => ["ADMIN", "SUPER_ADMIN", "STAFF"].includes(String(r).toUpperCase()));
+
+        // Customer can only view their own payment; Admins can view any payment
+        if (!isAdmin && userId && payment.order?.userId && payment.order.userId !== userId) {
             throw new AppError("Forbidden: You cannot view this payment", 403);
         }
 

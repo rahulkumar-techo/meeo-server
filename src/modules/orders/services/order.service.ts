@@ -29,17 +29,16 @@ export { idempotencyService } from "./idempotency.service.js";
  * Unified OrderService orchestrator facade delegating to modular domain sub-services.
  */
 export class OrderService {
-    validateCheckout(userId?: string, input?: CheckoutInput, sessionId?: string) {
-        return orderCreationService.validateCheckout(userId, input, sessionId);
+    validateCheckout(userId: string, input?: CheckoutInput) {
+        return orderCreationService.validateCheckout(userId, input);
     }
 
     createOrder(
-        userId?: string,
+        userId: string,
         input?: CheckoutInput,
         idempotencyKey?: string,
-        sessionId?: string,
     ) {
-        return orderCreationService.createOrder(userId, input, idempotencyKey, sessionId);
+        return orderCreationService.createOrder(userId, input, idempotencyKey);
     }
 
     listUserOrders(userId: string, query: OrderQueryInput) {

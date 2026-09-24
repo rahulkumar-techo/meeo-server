@@ -11,6 +11,28 @@ export const paymentSwaggerSchemas = {
         },
     },
 
+    verifyPayment: {
+        type: "object",
+        required: ["orderId", "razorpayOrderId", "razorpayPaymentId", "razorpaySignature"],
+        properties: {
+            orderId: { type: "string", format: "uuid", description: "Order ID to verify" },
+            razorpayOrderId: { type: "string", description: "Razorpay Order ID" },
+            razorpayPaymentId: { type: "string", description: "Razorpay Payment ID" },
+            razorpaySignature: { type: "string", description: "Razorpay cryptographic signature" },
+        },
+    },
+
+    recordPaymentFailure: {
+        type: "object",
+        required: ["orderId"],
+        properties: {
+            orderId: { type: "string", format: "uuid", description: "Order ID" },
+            failureCode: { type: "string", description: "Gateway error code" },
+            failureMessage: { type: "string", description: "Failure description or cancellation note" },
+            providerPaymentId: { type: "string", description: "Razorpay Payment/Attempt ID if available" },
+        },
+    },
+
     retryPayment: {
         type: "object",
         required: ["paymentId"],

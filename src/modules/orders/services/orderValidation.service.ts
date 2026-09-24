@@ -32,12 +32,11 @@ export class OrderValidationService {
     /**
      * Resolves and validates the shopping cart, re-calculating canonical pricing directly from the database.
      */
-    async validateCartAndItems(userId?: string, cartId?: string, sessionId?: string): Promise<{ cartId: string; items: ValidatedCartItem[]; subtotal: number }> {
+    async validateCartAndItems(userId: string, cartId?: string): Promise<{ cartId: string; items: ValidatedCartItem[]; subtotal: number }> {
         const cart = await prisma.cart.findFirst({
             where: {
                 ...(cartId ? { id: cartId } : {}),
-                ...(userId ? { userId } : {}),
-                ...(!userId && sessionId ? { sessionId } : {}),
+                userId,
             },
             include: {
                 items: {

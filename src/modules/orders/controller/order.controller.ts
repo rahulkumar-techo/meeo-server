@@ -20,12 +20,10 @@ export class OrderController {
      * Previews checkout calculations, shipping, taxes, and coupon discounts without creating an order.
      */
     async validateCheckout(request: FastifyRequest, reply: FastifyReply) {
-        const userId = request.user?.id;
-        const sessionId = (request.headers["x-session-id"] as string | undefined) ||
-            (request.headers["session-id"] as string | undefined);
+        const userId = request.user.id ?? request.user.userId;
         const input = validateCheckoutSchema.parse(request.body || {});
 
-        const result = await orderService.validateCheckout(userId, input, sessionId);
+        const result = await orderService.validateCheckout(userId, input);
 
         return sendOk({
             reply,
@@ -38,15 +36,13 @@ export class OrderController {
      * Executes atomic checkout and creates order with item snapshots and inventory reservations.
      */
     async checkout(request: FastifyRequest, reply: FastifyReply) {
-        const userId = request.user?.id;
-        const sessionId = (request.headers["x-session-id"] as string | undefined) ||
-            (request.headers["session-id"] as string | undefined);
+        const userId = request.user.id ?? request.user.userId;
         const idempotencyKey = (request.headers["idempotency-key"] as string | undefined) ||
             (request.headers["x-idempotency-key"] as string | undefined);
 
         const input = checkoutSchema.parse(request.body || {});
 
-        const result = await orderService.createOrder(userId, input, idempotencyKey, sessionId);
+        const result = await orderService.createOrder(userId, input, idempotencyKey);
 
         return sendCreated({
             reply,

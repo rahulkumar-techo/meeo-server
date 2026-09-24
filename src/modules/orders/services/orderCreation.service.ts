@@ -12,11 +12,10 @@ export class OrderCreationService {
     /**
      * Previews checkout breakdown and validation without modifying the database or reserving stock.
      */
-    async validateCheckout(userId?: string, input?: CheckoutInput, sessionId?: string) {
+    async validateCheckout(userId: string, input?: CheckoutInput) {
         const { items, subtotal } = await orderValidationService.validateCartAndItems(
             userId,
             input?.cartId,
-            sessionId,
         );
 
         const { shippingAddress, billingAddress } = await orderValidationService.resolveAddresses(
@@ -77,10 +76,9 @@ export class OrderCreationService {
      * Transactionally creates an order, snapshots items and address, reserves stock, applies coupons, and clears cart.
      */
     async createOrder(
-        userId?: string,
+        userId: string,
         input?: CheckoutInput,
         idempotencyKey?: string,
-        sessionId?: string,
     ) {
         // 1. Idempotency Check & Lock
         const idempotency = await idempotencyService.resolveOrLockKey(idempotencyKey, userId);
@@ -93,7 +91,6 @@ export class OrderCreationService {
             const { cartId, items, subtotal } = await orderValidationService.validateCartAndItems(
                 userId,
                 input?.cartId,
-                sessionId,
             );
 
             // 3. Resolve & Validate Addresses

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { prismaMock, redisMock } = vi.hoisted(() => ({
     prismaMock: {
         user: { findFirst: vi.fn(), update: vi.fn() },
-        address: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+        address: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findMany: vi.fn() },
     },
     redisMock: { set: vi.fn(), get: vi.fn(), del: vi.fn() },
 }));
@@ -52,6 +52,44 @@ describe("UserService", () => {
                 firstName: true,
                 lastName: true,
             },
+        });
+    });
+
+    it("fetches all saved addresses for a user", async () => {
+        const mockAddresses = [
+            {
+                id: "addr-1",
+                recipientName: "John Doe",
+                phone: "+919876543210",
+                label: "Home",
+                addressLine1: "123 Main St",
+                addressLine2: null,
+                city: "Bengaluru",
+                state: "Karnataka",
+                postalCode: "560001",
+                country: "India",
+                isDefault: true,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            },
+        ];
+        prismaMock.address.findMany.mockResolvedValue(mockAddresses);
+
+        const result = await userService.getAddresses("user-001");
+
+        expect(result).toEqual(mockAddresses);
+        expect(prismaMock.address.findMany).toHaveBeenCalledWith({
+            where: { userId: "user-001" },
+            orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
+            select: expect.objectContaining({
+                id: true,
+                recipientName: true,
+                addressLine1: true,
+                city: true,
+                state: true,
+                postalCode: true,
+                country: true,
+            }),
         });
     });
 });

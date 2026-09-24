@@ -23,7 +23,9 @@ export const phoneVerificationSchema = phoneOtpRequestSchema.extend({
 });
 
 export const addressSchema = z.object({
-    recipientName:z.string(),
+    recipientName: z.string().trim().min(1, { message: "Recipient name is required" }),
+    phone: z.string().trim().regex(/^\+?[1-9]\d{7,14}$/, "Invalid phone number").optional(),
+    label: z.string().trim().max(30, { message: "Label is too long" }).optional(),
     addressLine1: z
         .string()
         .trim()
@@ -65,7 +67,59 @@ export const addressSchema = z.object({
         .min(2, { message: "Country is required" })
         .max(56, { message: "Country name is too long" }) // 56 characters covers the longest official short-form country name
         .regex(/^[a-zA-Z\s.-]+$/, { message: "Invalid characters in country name" }),
+
+    isDefault: z.boolean().optional(),
 }).strict(); // Rejects any extra, unmapped fields injected into the request body
+
+export const updateAddressSchema = z.object({
+    recipientName: z.string().trim().min(1, { message: "Recipient name is required" }).optional(),
+    phone: z.string().trim().regex(/^\+?[1-9]\d{7,14}$/, "Invalid phone number").optional(),
+    label: z.string().trim().max(30, { message: "Label is too long" }).optional(),
+    addressLine1: z
+        .string()
+        .trim()
+        .min(1, { message: "Address Line 1 is required" })
+        .max(100, { message: "Address is too long" })
+        .transform((val) => val.replace(/</g, "&lt;").replace(/>/g, "&gt;"))
+        .optional(),
+    addressLine2: z
+        .string()
+        .trim()
+        .max(100, { message: "Address Line 2 is too long" })
+        .transform((val) => val?.replace(/</g, "&lt;").replace(/>/g, "&gt;"))
+        .optional(),
+    city: z
+        .string()
+        .trim()
+        .min(1, { message: "City is required" })
+        .max(50, { message: "City name is too long" })
+        .regex(/^[a-zA-Z\s.-]+$/, { message: "Invalid characters in city name" })
+        .optional(),
+    state: z
+        .string()
+        .trim()
+        .min(1, { message: "State/Region is required" })
+        .max(50, { message: "State name is too long" })
+        .regex(/^[a-zA-Z\s.-]+$/, { message: "Invalid characters in state name" })
+        .optional(),
+    postalCode: z
+        .string()
+        .trim()
+        .min(1, { message: "Postal code is required" })
+        .max(12, { message: "Postal code is too long" })
+        .regex(/^[a-zA-Z0-9\s-]+$/, { message: "Invalid postal code format" })
+        .optional(),
+    country: z
+        .string()
+        .trim()
+        .min(2, { message: "Country is required" })
+        .max(56, { message: "Country name is too long" })
+        .regex(/^[a-zA-Z\s.-]+$/, { message: "Invalid characters in country name" })
+        .optional(),
+    isDefault: z.boolean().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, {
+    message: "At least one field is required to update",
+});
 
 
 export const adminUserQuerySchema = z.object({
@@ -96,5 +150,6 @@ export type AdminUserQueryPayload = z.infer<typeof adminUserQuerySchema>;
 export type AdminUserStatusUpdatePayload = z.infer<typeof adminUserStatusUpdateSchema>;
 export type UserIdParamPayload = z.infer<typeof userIdParamSchema>;
 export type UserAddressPayload = z.infer<typeof addressSchema>;
+export type UpdateUserAddressPayload = z.infer<typeof updateAddressSchema>;
 export type PhoneOtpRequestPayload = z.infer<typeof phoneOtpRequestSchema>;
 export type PhoneVerificationPayload = z.infer<typeof phoneVerificationSchema>;

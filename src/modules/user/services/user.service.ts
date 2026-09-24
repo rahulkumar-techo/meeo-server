@@ -6,6 +6,7 @@ import type {
     PhoneOtpRequestPayload,
     PhoneVerificationPayload,
     UserAddressPayload,
+    UpdateUserAddressPayload,
     UserProfilePayload,
     AdminUserUpdatePayload,
     AdminUserQueryPayload,
@@ -44,12 +45,19 @@ export class UserService {
     // ----------------------------------------------------
 
     /**
+     * Retrieves all saved addresses for an authenticated user.
+     */
+    async getAddresses(userId: string) {
+        return userAddressService.getAddresses(userId);
+    }
+
+    /**
      * Creates or updates a delivery/billing address owned by the requesting user.
      */
     async saveAddress(
         isUpdate: boolean,
         userId: string,
-        payload: UserAddressPayload,
+        payload: UserAddressPayload | UpdateUserAddressPayload,
         addressId?: string,
     ) {
         return userAddressService.saveAddress(isUpdate, userId, payload, addressId);

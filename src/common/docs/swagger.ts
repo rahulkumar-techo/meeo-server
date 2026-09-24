@@ -65,13 +65,41 @@ export const addressSchema = {
     required: ["recipientName", "addressLine1", "city", "state", "postalCode", "country"],
     properties: {
         recipientName: { type: "string" },
+        phone: { type: "string" },
+        label: { type: "string" },
         addressLine1: { type: "string" },
         addressLine2: { type: "string" },
         city: { type: "string" },
         state: { type: "string" },
         postalCode: { type: "string" },
         country: { type: "string" },
+        isDefault: { type: "boolean" },
     },
+};
+
+export const addressResponseSchema = {
+    type: "object",
+    properties: {
+        id: { type: "string" },
+        recipientName: { type: "string" },
+        phone: { type: ["string", "null"] },
+        label: { type: ["string", "null"] },
+        addressLine1: { type: "string" },
+        addressLine2: { type: ["string", "null"] },
+        city: { type: "string" },
+        state: { type: "string" },
+        postalCode: { type: "string" },
+        country: { type: "string" },
+        isDefault: { type: "boolean" },
+        createdAt: { type: "string" },
+        updatedAt: { type: "string" },
+    },
+    additionalProperties: true,
+};
+
+export const addressListResponseSchema = {
+    type: "array",
+    items: addressResponseSchema,
 };
 
 export const successResponse = (data?: object) => ({
@@ -79,8 +107,12 @@ export const successResponse = (data?: object) => ({
     properties: {
         success: { type: "boolean", example: true },
         message: { type: "string" },
-        ...(data ? { data } : {}),
+        data: data ?? {
+            type: ["object", "array", "null", "string", "number", "boolean"],
+            additionalProperties: true,
+        },
     },
+    additionalProperties: true,
 });
 
 export const errorResponse = {
