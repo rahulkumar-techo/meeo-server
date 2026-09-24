@@ -2,6 +2,7 @@ import { z } from "zod";
 
 /**
  * Zod validations for Shopping Cart operations.
+ * All cart endpoints strictly require authentication.
  */
 
 export const addCartItemSchema = z.object({
@@ -17,11 +18,6 @@ export const cartItemParamSchema = z.object({
     itemId: z.string().uuid("Invalid cart item ID format"),
 });
 
-export const mergeCartSchema = z.object({
-    sessionId: z.string().min(1, "Guest session ID is required"),
-});
-
 export type AddCartItemInput = z.infer<typeof addCartItemSchema>;
 export type UpdateCartItemInput = z.infer<typeof updateCartItemSchema>;
 export type CartItemParamInput = z.infer<typeof cartItemParamSchema>;
-export type MergeCartInput = z.infer<typeof mergeCartSchema>;

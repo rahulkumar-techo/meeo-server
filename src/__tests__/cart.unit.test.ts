@@ -51,12 +51,12 @@ describe("CartService Unit Tests", () => {
             const mockCart = { id: "cart-1", userId, items: [] };
             prismaMock.cart.findFirst.mockResolvedValue(mockCart);
 
-            const result = await service.getOrCreateCart({ userId });
+            const result = await service.getOrCreateCart(userId);
 
             expect(prismaMock.cart.findFirst).toHaveBeenCalledWith(
                 expect.objectContaining({ where: { userId } }),
             );
-            expect(result.cart.id).toBe("cart-1");
+            expect(result.id).toBe("cart-1");
         });
 
         it("creates new user cart when none exists", async () => {
@@ -64,56 +64,12 @@ describe("CartService Unit Tests", () => {
             prismaMock.cart.findFirst.mockResolvedValue(null);
             prismaMock.cart.create.mockResolvedValue({ id: "new-cart", userId, items: [] });
 
-            const result = await service.getOrCreateCart({ userId });
+            const result = await service.getOrCreateCart(userId);
 
             expect(prismaMock.cart.create).toHaveBeenCalledWith(
                 expect.objectContaining({ data: { userId } }),
             );
-            expect(result.cart.id).toBe("new-cart");
-        });
-
-        it("creates new guest cart with expiresAt when guest sessionId is provided", async () => {
-            const sessionId = "guest-sess-1";
-            prismaMock.cart.findFirst.mockResolvedValue(null);
-            prismaMock.cart.create.mockResolvedValue({
-                id: "guest-cart-1",
-                sessionId,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-                items: [],
-            });
-
-            const result = await service.getOrCreateCart({ sessionId });
-
-            expect(prismaMock.cart.create).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    data: expect.objectContaining({ sessionId }),
-                }),
-            );
-            expect(result.cart.id).toBe("guest-cart-1");
-        });
-
-        it("deletes and recreates expired guest cart", async () => {
-            const sessionId = "expired-sess-1";
-            const expiredCart = {
-                id: "exp-cart",
-                sessionId,
-                expiresAt: new Date(Date.now() - 10000),
-                items: [],
-            };
-            prismaMock.cart.findFirst.mockResolvedValue(expiredCart);
-            prismaMock.cart.delete.mockResolvedValue(expiredCart);
-            prismaMock.cart.create.mockResolvedValue({
-                id: "fresh-cart",
-                sessionId,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-                items: [],
-            });
-
-            const result = await service.getOrCreateCart({ sessionId });
-
-            expect(prismaMock.cart.delete).toHaveBeenCalledWith({ where: { id: "exp-cart" } });
-            expect(prismaMock.cart.create).toHaveBeenCalled();
-            expect(result.cart.id).toBe("fresh-cart");
+            expect(result.id).toBe("new-cart");
         });
     });
 
@@ -153,7 +109,7 @@ describe("CartService Unit Tests", () => {
                 ],
             });
 
-            const result = await service.addItem({ userId }, { variantId, quantity: 2 });
+            const result = await service.addItem(userId, { variantId, quantity: 2 });
 
             expect(prismaMock.cartItem.create).toHaveBeenCalledWith({
                 data: { cartId: "cart-1", variantId, quantity: 2 },
@@ -171,7 +127,7 @@ describe("CartService Unit Tests", () => {
             });
 
             await expect(
-                service.addItem({ userId: "u1" }, { variantId: "var-inactive", quantity: 1 }),
+                service.addItem("u1", { variantId: "var-inactive", quantity: 1 }),
             ).rejects.toThrow(AppError);
         });
 
@@ -190,14 +146,15 @@ describe("CartService Unit Tests", () => {
             });
 
             await expect(
-                service.addItem({ userId: "u1" }, { variantId: "var-low", quantity: 2 }),
+                service.addItem("u1", { variantId: "var-low", quantity: 2 }),
             ).rejects.toThrow(/exceeds available stock/);
         });
     });
 
     describe("updateItemQuantity", () => {
         it("updates item quantity when valid and within stock", async () => {
-            const mockCart = { id: "cart-1", userId: "u1", items: [] };
+            const userId = "u1";
+            const mockCart = { id: "cart-1", userId, items: [] };
             prismaMock.cart.findFirst.mockResolvedValue(mockCart);
             prismaMock.cartItem.findFirst.mockResolvedValue({
                 id: "item-1",
@@ -209,7 +166,7 @@ describe("CartService Unit Tests", () => {
             prismaMock.cartItem.update.mockResolvedValue({ id: "item-1", quantity: 5 });
             prismaMock.cart.findUnique.mockResolvedValue({
                 id: "cart-1",
-                userId: "u1",
+                userId,
                 items: [
                     {
                         id: "item-1",
@@ -225,7 +182,7 @@ describe("CartService Unit Tests", () => {
                 ],
             });
 
-            const result = await service.updateItemQuantity({ userId: "u1" }, "item-1", { quantity: 5 });
+            const result = await service.updateItemQuantity(userId, "item-1", { quantity: 5 });
 
             expect(prismaMock.cartItem.update).toHaveBeenCalledWith({
                 where: { id: "item-1" },
@@ -235,16 +192,17 @@ describe("CartService Unit Tests", () => {
         });
 
         it("deletes item when quantity is updated to 0", async () => {
-            const mockCart = { id: "cart-1", userId: "u1", items: [] };
+            const userId = "u1";
+            const mockCart = { id: "cart-1", userId, items: [] };
             prismaMock.cart.findFirst.mockResolvedValue(mockCart);
             prismaMock.cartItem.findFirst.mockResolvedValue({
                 id: "item-1",
                 cartId: "cart-1",
                 variant: { inventory: { availableQuantity: 10 } },
             });
-            prismaMock.cart.findUnique.mockResolvedValue({ id: "cart-1", userId: "u1", items: [] });
+            prismaMock.cart.findUnique.mockResolvedValue({ id: "cart-1", userId, items: [] });
 
-            await service.updateItemQuantity({ userId: "u1" }, "item-1", { quantity: 0 });
+            await service.updateItemQuantity(userId, "item-1", { quantity: 0 });
 
             expect(prismaMock.cartItem.delete).toHaveBeenCalledWith({ where: { id: "item-1" } });
         });
@@ -252,107 +210,36 @@ describe("CartService Unit Tests", () => {
 
     describe("removeItem", () => {
         it("removes item from cart", async () => {
-            prismaMock.cart.findFirst.mockResolvedValue({ id: "cart-1", userId: "u1", items: [] });
+            const userId = "u1";
+            prismaMock.cart.findFirst.mockResolvedValue({ id: "cart-1", userId, items: [] });
             prismaMock.cartItem.findFirst.mockResolvedValue({ id: "item-1", cartId: "cart-1" });
-            prismaMock.cart.findUnique.mockResolvedValue({ id: "cart-1", userId: "u1", items: [] });
+            prismaMock.cart.findUnique.mockResolvedValue({ id: "cart-1", userId, items: [] });
 
-            await service.removeItem({ userId: "u1" }, "item-1");
+            await service.removeItem(userId, "item-1");
 
             expect(prismaMock.cartItem.delete).toHaveBeenCalledWith({ where: { id: "item-1" } });
         });
 
         it("throws 404 AppError if item not in cart", async () => {
-            prismaMock.cart.findFirst.mockResolvedValue({ id: "cart-1", userId: "u1", items: [] });
+            const userId = "u1";
+            prismaMock.cart.findFirst.mockResolvedValue({ id: "cart-1", userId, items: [] });
             prismaMock.cartItem.findFirst.mockResolvedValue(null);
 
-            await expect(service.removeItem({ userId: "u1" }, "missing-item")).rejects.toThrow(AppError);
+            await expect(service.removeItem(userId, "missing-item")).rejects.toThrow(AppError);
         });
     });
 
     describe("clearCart", () => {
         it("deletes all items for the cart", async () => {
-            prismaMock.cart.findFirst.mockResolvedValue({ id: "cart-1", userId: "u1", items: [] });
-            prismaMock.cart.findUnique.mockResolvedValue({ id: "cart-1", userId: "u1", items: [] });
+            const userId = "u1";
+            prismaMock.cart.findFirst.mockResolvedValue({ id: "cart-1", userId, items: [] });
+            prismaMock.cart.findUnique.mockResolvedValue({ id: "cart-1", userId, items: [] });
 
-            await service.clearCart({ userId: "u1" });
+            await service.clearCart(userId);
 
             expect(prismaMock.cartItem.deleteMany).toHaveBeenCalledWith({
                 where: { cartId: "cart-1" },
             });
-        });
-    });
-
-    describe("mergeGuestCart", () => {
-        it("merges guest cart items into user cart and deletes guest cart", async () => {
-            const guestSessionId = "guest-sess-merge";
-            const userId = "user-123";
-
-            const guestCart = {
-                id: "guest-cart-id",
-                sessionId: guestSessionId,
-                items: [
-                    {
-                        variantId: "var-1",
-                        quantity: 2,
-                        variant: { inventory: { availableQuantity: 10 } },
-                    },
-                    {
-                        variantId: "var-2",
-                        quantity: 3,
-                        variant: { inventory: { availableQuantity: 5 } },
-                    },
-                ],
-            };
-
-            const userCart = { id: "user-cart-id", userId, items: [] };
-
-            const updatedUserCart = {
-                id: "user-cart-id",
-                userId,
-                items: [
-                    {
-                        id: "item-1",
-                        variantId: "var-1",
-                        quantity: 3,
-                        variant: { sku: "SKU1", price: 10, product: {}, inventory: { availableQuantity: 10 } },
-                    },
-                    {
-                        id: "item-2",
-                        variantId: "var-2",
-                        quantity: 3,
-                        variant: { sku: "SKU2", price: 20, product: {}, inventory: { availableQuantity: 5 } },
-                    },
-                ],
-            };
-
-            prismaMock.cart.findFirst
-                .mockResolvedValueOnce(guestCart)       // find guest cart
-                .mockResolvedValueOnce(userCart);       // getOrCreateCart user cart
-
-            prismaMock.cart.findUnique.mockResolvedValue(updatedUserCart);
-
-            // In transaction:
-            prismaMock.cartItem.findUnique
-                .mockResolvedValueOnce({ id: "existing-item-1", quantity: 1 }) // var-1 exists in user cart
-                .mockResolvedValueOnce(null); // var-2 is new in user cart
-
-            const result = await service.mergeGuestCart(userId, guestSessionId);
-
-            expect(prismaMock.cartItem.update).toHaveBeenCalled();
-            expect(prismaMock.cartItem.create).toHaveBeenCalled();
-            expect(prismaMock.cart.delete).toHaveBeenCalledWith({ where: { id: "guest-cart-id" } });
-            expect(result.summary.totalItems).toBe(6);
-        });
-    });
-
-    describe("cleanupExpiredCarts", () => {
-        it("deletes expired carts and returns count", async () => {
-            prismaMock.cart.deleteMany.mockResolvedValue({ count: 4 });
-
-            const result = await service.cleanupExpiredCarts();
-
-            expect(result.deletedCount).toBe(4);
-            expect(prismaMock.cart.deleteMany).toHaveBeenCalled();
         });
     });
 });

@@ -1,18 +1,14 @@
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
-import {
-    cartSessionService,
-    GUEST_CART_EXPIRATION_DAYS,
-    type CartIdentity,
-} from "./cartSession.service.js";
+import { cartSessionService } from "./cartSession.service.js";
 import type { AddCartItemInput, UpdateCartItemInput } from "../validations/cart.validation.js";
 
 export class CartItemService {
     /**
-     * Adds an item / variant to the cart with inventory availability validation.
+     * Adds an item / variant to the user's cart with inventory availability validation.
      */
-    async addItem(identity: CartIdentity, input: AddCartItemInput) {
-        const { cart, sessionId } = await cartSessionService.getOrCreateCart(identity);
+    async addItem(userId: string, input: AddCartItemInput) {
+        const cart = await cartSessionService.getOrCreateCart(userId);
 
         const variant = await prisma.productVariant.findUnique({
             where: { id: input.variantId },
@@ -64,31 +60,19 @@ export class CartItemService {
             });
         }
 
-        if (cart.sessionId) {
-            await prisma.cart.update({
-                where: { id: cart.id },
-                data: {
-                    expiresAt: new Date(Date.now() + GUEST_CART_EXPIRATION_DAYS * 24 * 60 * 60 * 1000),
-                },
-            });
-        }
-
         const updatedCart = await prisma.cart.findUnique({
             where: { id: cart.id },
             include: cartSessionService.getCartInclude(),
         });
 
-        return {
-            sessionId: updatedCart?.sessionId ?? sessionId,
-            ...cartSessionService.formatCart(updatedCart!),
-        };
+        return cartSessionService.formatCart(updatedCart ?? cart);
     }
 
     /**
-     * Updates an existing item's quantity in the cart.
+     * Updates an existing item's quantity in the user's cart.
      */
-    async updateItemQuantity(identity: CartIdentity, itemId: string, input: UpdateCartItemInput) {
-        const { cart, sessionId } = await cartSessionService.getOrCreateCart(identity);
+    async updateItemQuantity(userId: string, itemId: string, input: UpdateCartItemInput) {
+        const cart = await cartSessionService.getOrCreateCart(userId);
 
         const item = await prisma.cartItem.findFirst({
             where: {
@@ -133,17 +117,14 @@ export class CartItemService {
             include: cartSessionService.getCartInclude(),
         });
 
-        return {
-            sessionId: updatedCart?.sessionId ?? sessionId,
-            ...cartSessionService.formatCart(updatedCart!),
-        };
+        return cartSessionService.formatCart(updatedCart ?? cart);
     }
 
     /**
-     * Removes an item from the cart.
+     * Removes an item from the user's cart.
      */
-    async removeItem(identity: CartIdentity, itemId: string) {
-        const { cart, sessionId } = await cartSessionService.getOrCreateCart(identity);
+    async removeItem(userId: string, itemId: string) {
+        const cart = await cartSessionService.getOrCreateCart(userId);
 
         const item = await prisma.cartItem.findFirst({
             where: {
@@ -165,17 +146,14 @@ export class CartItemService {
             include: cartSessionService.getCartInclude(),
         });
 
-        return {
-            sessionId: updatedCart?.sessionId ?? sessionId,
-            ...cartSessionService.formatCart(updatedCart!),
-        };
+        return cartSessionService.formatCart(updatedCart ?? cart);
     }
 
     /**
-     * Clears all items in the cart.
+     * Clears all items in the user's cart.
      */
-    async clearCart(identity: CartIdentity) {
-        const { cart, sessionId } = await cartSessionService.getOrCreateCart(identity);
+    async clearCart(userId: string) {
+        const cart = await cartSessionService.getOrCreateCart(userId);
 
         await prisma.cartItem.deleteMany({
             where: { cartId: cart.id },
@@ -186,10 +164,7 @@ export class CartItemService {
             include: cartSessionService.getCartInclude(),
         });
 
-        return {
-            sessionId: updatedCart?.sessionId ?? sessionId,
-            ...cartSessionService.formatCart(updatedCart!),
-        };
+        return cartSessionService.formatCart(updatedCart ?? cart);
     }
 }
 

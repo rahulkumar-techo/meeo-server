@@ -201,8 +201,9 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 
 		try {
 			await app.authenticate(request);
-		} catch {
+		} catch (err: any) {
 			// Token invalid or expired: proceed as unauthenticated guest
+			request.log.warn({ message: err?.message }, "[optionalAuthenticate] Token validation failed, falling back to guest");
 			request.user = null as unknown as AuthorizationContext;
 		}
 	});

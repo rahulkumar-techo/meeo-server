@@ -5,7 +5,7 @@
 export const cartTags = [
     {
         name: "Cart - Shopping Bag",
-        description: "🛒 Guest & User Shopping Bag: Add items, update quantities, real-time stock checks, guest-to-user cart merge, and TTL expiration",
+        description: "🛒 User Shopping Bag: Add items, update quantities, real-time stock checks, and manage cart items for authenticated users",
     },
     {
         name: "Wishlist - Saved Products",
@@ -54,17 +54,6 @@ export const cartSwaggerSchemas = {
                 type: "string",
                 format: "uuid",
                 description: "Cart item UUID",
-            },
-        },
-    },
-
-    mergeCart: {
-        type: "object",
-        required: ["sessionId"],
-        properties: {
-            sessionId: {
-                type: "string",
-                description: "Guest session ID from the x-session-id header",
             },
         },
     },

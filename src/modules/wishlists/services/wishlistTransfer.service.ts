@@ -38,7 +38,7 @@ export class WishlistTransferService {
         const quantity = input?.quantity ?? 1;
 
         // Add to cart using cartService
-        const cart = await cartService.addItem({ userId }, {
+        const cart = await cartService.addItem(userId, {
             variantId: targetVariant.id,
             quantity,
         });

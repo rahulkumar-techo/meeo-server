@@ -1,84 +1,23 @@
 import { prisma } from "@/lib/prisma.js";
-import { randomUUID } from "node:crypto";
-
-export interface CartIdentity {
-    userId?: string | undefined;
-    sessionId?: string | undefined;
-}
-
-export const GUEST_CART_EXPIRATION_DAYS = 7;
 
 export class CartSessionService {
     /**
-     * Resolves or creates a cart based on authenticated userId or guest sessionId.
+     * Resolves or creates a permanent shopping cart for the authenticated user.
      */
-    async getOrCreateCart(identity: CartIdentity) {
-        const now = new Date();
-
-        if (identity.userId) {
-            let cart = await prisma.cart.findFirst({
-                where: { userId: identity.userId },
-                include: this.getCartInclude(),
-            });
-
-            if (!cart) {
-                cart = await prisma.cart.create({
-                    data: {
-                        userId: identity.userId,
-                    },
-                    include: this.getCartInclude(),
-                });
-            }
-
-            return { cart, sessionId: identity.sessionId };
-        }
-
-        const guestSessionId = identity.sessionId || randomUUID();
-        identity.sessionId = guestSessionId;
-
+    async getOrCreateCart(userId: string) {
         let cart = await prisma.cart.findFirst({
-            where: { sessionId: guestSessionId },
+            where: { userId },
             include: this.getCartInclude(),
         });
 
-        if (cart) {
-            if (cart.expiresAt && cart.expiresAt < now) {
-                await prisma.cart.delete({ where: { id: cart.id } });
-                cart = null;
-            }
-        }
-
         if (!cart) {
-            const expiresAt = new Date(Date.now() + GUEST_CART_EXPIRATION_DAYS * 24 * 60 * 60 * 1000);
             cart = await prisma.cart.create({
-                data: {
-                    sessionId: guestSessionId,
-                    expiresAt,
-                },
+                data: { userId },
                 include: this.getCartInclude(),
             });
         }
 
-        return { cart, sessionId: guestSessionId };
-    }
-
-    /**
-     * Deletes all expired guest carts.
-     */
-    async cleanupExpiredCarts() {
-        const result = await prisma.cart.deleteMany({
-            where: {
-                expiresAt: {
-                    not: null,
-                    lt: new Date(),
-                },
-            },
-        });
-
-        return {
-            deletedCount: result.count,
-            cleanedAt: new Date().toISOString(),
-        };
+        return cart;
     }
 
     /**
@@ -126,12 +65,12 @@ export class CartSessionService {
         let subtotal = 0;
 
         const items = (cart.items || []).map((item: any) => {
-            const price = Number(item.variant.price);
-            const compareAtPrice = item.variant.compareAtPrice ? Number(item.variant.compareAtPrice) : null;
+            const price = Number(item.variant?.price ?? 0);
+            const compareAtPrice = item.variant?.compareAtPrice ? Number(item.variant.compareAtPrice) : null;
             const lineTotal = Number((price * item.quantity).toFixed(2));
-            const availableStock = item.variant.inventory ? item.variant.inventory.availableQuantity : 0;
-            const isAvailable = item.variant.status === "ACTIVE" &&
-                (!item.variant.product || item.variant.product.status === "ACTIVE") &&
+            const availableStock = item.variant?.inventory ? item.variant.inventory.availableQuantity : 0;
+            const isAvailable = item.variant?.status === "ACTIVE" &&
+                (!item.variant?.product || item.variant.product.status === "ACTIVE") &&
                 availableStock >= item.quantity;
 
             totalItems += item.quantity;
@@ -149,20 +88,20 @@ export class CartSessionService {
                 stockInfo: {
                     availableStock,
                     isAvailable,
-                    isLowStock: item.variant.inventory ? availableStock <= (item.variant.inventory.reorderLevel ?? 5) : false,
+                    isLowStock: item.variant?.inventory ? availableStock <= (item.variant.inventory.reorderLevel ?? 5) : false,
                 },
                 product: {
-                    id: item.variant.product?.id,
-                    name: item.variant.product?.name ?? "Unknown Product",
-                    slug: item.variant.product?.slug,
-                    thumbnail: item.variant.product?.images?.[0]?.url ?? null,
-                    category: item.variant.product?.category ?? null,
-                    brand: item.variant.product?.brand ?? null,
+                    id: item.variant?.product?.id,
+                    name: item.variant?.product?.name ?? "Unknown Product",
+                    slug: item.variant?.product?.slug,
+                    thumbnail: item.variant?.product?.images?.[0]?.url ?? null,
+                    category: item.variant?.product?.category ?? null,
+                    brand: item.variant?.product?.brand ?? null,
                 },
                 variant: {
-                    sku: item.variant.sku,
-                    barcode: item.variant.barcode,
-                    attributes: (item.variant.attributeValues || []).map((av: any) => ({
+                    sku: item.variant?.sku,
+                    barcode: item.variant?.barcode,
+                    attributes: (item.variant?.attributeValues || []).map((av: any) => ({
                         attribute: av.attributeValue?.attribute?.name ?? "Attribute",
                         value: av.attributeValue?.value ?? "",
                     })),
@@ -173,8 +112,6 @@ export class CartSessionService {
         return {
             id: cart.id,
             userId: cart.userId,
-            isGuest: !cart.userId,
-            expiresAt: cart.expiresAt,
             createdAt: cart.createdAt,
             updatedAt: cart.updatedAt,
             summary: {

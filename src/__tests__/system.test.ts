@@ -24,10 +24,6 @@ const { authServiceMock, userServiceMock, prismaMock } = vi.hoisted(() => ({
 vi.mock("../modules/auth/auth.service.js", () => ({ authService: authServiceMock }));
 vi.mock("../modules/user/services/user.service.js", () => ({ default: userServiceMock }));
 vi.mock("../lib/prisma.js", () => ({ prisma: prismaMock }));
-vi.mock("graphql-yoga", () => ({
-    // Yoga is outside the auth/user workflow and can cause duplicate GraphQL realms in Vitest.
-    createYoga: () => ({ fetch: async () => new Response("ok") }),
-}));
 
 import { generateAccessToken } from "../common/utils/token.js";
 import { buildApp } from "../app.js";

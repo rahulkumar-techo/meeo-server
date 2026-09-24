@@ -26,8 +26,6 @@ import { sanitizeInput } from "./common/security/sanitizer.js";
 import { generateCsrfToken, setCsrfCookie } from "./common/security/csrf.js";
 import cookie from "@fastify/cookie";
 import authPlugin from "./plugins/auth.plugin.js";
-import { createYoga } from "graphql-yoga";
-import { graphqlSchema } from "./graphql/schema.js";
 import { preetyLogger, formatHttpLog } from "./const/logger.config.js";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
@@ -94,6 +92,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         return reply.type("text/html").send(docsDescriptionHtml);
     });
 
+    const isDev = process.env.NODE_ENV !== "production";
     const allowedOrigins = process.env.CORS_ORIGIN
         ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
         : [
@@ -105,13 +104,13 @@ export async function buildApp(): Promise<FastifyInstance> {
             "https://meeo-server.onrender.com",
             "http://127.0.0.1:5000",
             "http://localhost:3001",
-            "https://meeo-web.vercel.app"
-
+            "https://meeo-web.vercel.app",
         ];
 
     await app.register(cors, {
         origin: (origin, cb) => {
-            if (!origin) return cb(null, true);
+            // Allow all requests in development or if origin is not present (e.g. mobile apps / Postman)
+            if (isDev || !origin) return cb(null, true);
             if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
                 return cb(null, true);
             }
@@ -263,42 +262,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         return reply.status(200).send("Awake");
     });
 
-    const yoga = createYoga({
-        schema: graphqlSchema,
-        graphqlEndpoint: "/graphql",
-        landingPage: true,
-    });
-
     app.setErrorHandler(errorHandler);
-
-    /// Bind to the Yoga's endpoint to avoid rendering on any path
-    app.route({
-        url: "/graphql",
-        method: ["GET", "POST", "OPTIONS"],
-
-        handler: async (request, reply) => {
-            const headers = new Headers();
-            for (const [key, value] of Object.entries(request.headers)) {
-                if (typeof value === "string") {
-                    headers.set(key, value);
-                }
-            }
-
-            const requestInit: RequestInit = {
-                method: request.method,
-                headers,
-            };
-            if (request.method !== "GET") {
-                requestInit.body = JSON.stringify(request.body);
-            }
-
-            const yogaRequest = new Request(`http://${request.hostname}${request.url}`, requestInit);
-            const response = await yoga.fetch(yogaRequest);
-
-            response.headers.forEach((value, key) => reply.header(key, value));
-            return reply.status(response.status).send(await response.text());
-        },
-    });
 
     return app;
 }

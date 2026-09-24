@@ -196,7 +196,7 @@ describe("WishlistService Unit Tests", () => {
             const result = await service.moveToCart(userId, productId, { variantId, quantity: 2 });
 
             expect(cartServiceMock.addItem).toHaveBeenCalledWith(
-                { userId },
+                userId,
                 { variantId, quantity: 2 },
             );
             expect(prismaMock.wishlistItem.delete).toHaveBeenCalled();

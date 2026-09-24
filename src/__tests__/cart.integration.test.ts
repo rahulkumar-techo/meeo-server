@@ -11,8 +11,6 @@ const { cartServiceMock, authPrismaMock } = vi.hoisted(() => ({
         updateItemQuantity: vi.fn(),
         removeItem: vi.fn(),
         clearCart: vi.fn(),
-        mergeGuestCart: vi.fn(),
-        cleanupExpiredCarts: vi.fn(),
     },
     authPrismaMock: {
         user: { findUnique: vi.fn() },
@@ -63,11 +61,24 @@ describe("Cart HTTP Routes Integration Tests", () => {
         return { userId, token };
     };
 
-    it("allows guest access to retrieve shopping cart via session header", async () => {
+    it("rejects unauthenticated requests with 401 Unauthorized", async () => {
         const app = await createTestApp();
+
+        const response = await app.inject({
+            method: "GET",
+            url: "/api/cart",
+        });
+
+        expect(response.statusCode).toBe(401);
+    });
+
+    it("retrieves authenticated shopping cart", async () => {
+        const app = await createTestApp();
+        const { token, userId } = mockUser();
+
         cartServiceMock.getCart.mockResolvedValue({
-            id: "cart-guest",
-            sessionId: "guest-session-123",
+            id: "cart-user-1",
+            userId,
             summary: { itemCount: 0, totalItems: 0, subtotal: 0, currency: "INR" },
             items: [],
         });
@@ -75,24 +86,24 @@ describe("Cart HTTP Routes Integration Tests", () => {
         const response = await app.inject({
             method: "GET",
             url: "/api/cart",
-            headers: { "x-session-id": "guest-session-123" },
+            headers: { authorization: `Bearer ${token}` },
         });
 
         expect(response.statusCode).toBe(200);
         const payload = JSON.parse(response.payload);
         expect(payload.success).toBe(true);
-        expect(payload.data.id).toBe("cart-guest");
-        expect(cartServiceMock.getCart).toHaveBeenCalledWith(
-            expect.objectContaining({ sessionId: "guest-session-123" }),
-        );
+        expect(payload.data.id).toBe("cart-user-1");
+        expect(cartServiceMock.getCart).toHaveBeenCalledWith(userId);
     });
 
-    it("adds item to cart with validation", async () => {
+    it("adds item to cart for authenticated user", async () => {
         const app = await createTestApp();
+        const { token, userId } = mockUser();
         const variantId = "6a405364-cfa6-4071-8bc6-adbb5d70f035";
 
         cartServiceMock.addItem.mockResolvedValue({
             id: "cart-1",
+            userId,
             summary: { itemCount: 1, totalItems: 2, subtotal: 100, currency: "INR" },
             items: [{ id: "item-1", variantId, quantity: 2 }],
         });
@@ -100,6 +111,7 @@ describe("Cart HTTP Routes Integration Tests", () => {
         const response = await app.inject({
             method: "POST",
             url: "/api/cart/items",
+            headers: { authorization: `Bearer ${token}` },
             payload: {
                 variantId,
                 quantity: 2,
@@ -110,14 +122,17 @@ describe("Cart HTTP Routes Integration Tests", () => {
         const payload = JSON.parse(response.payload);
         expect(payload.success).toBe(true);
         expect(payload.data.summary.totalItems).toBe(2);
+        expect(cartServiceMock.addItem).toHaveBeenCalledWith(userId, { variantId, quantity: 2 });
     });
 
     it("updates item quantity in cart", async () => {
         const app = await createTestApp();
+        const { token, userId } = mockUser();
         const itemId = "a4175ef3-b1d6-4449-9f70-349f7e915570";
 
         cartServiceMock.updateItemQuantity.mockResolvedValue({
             id: "cart-1",
+            userId,
             summary: { itemCount: 1, totalItems: 4, subtotal: 200, currency: "INR" },
             items: [{ id: itemId, quantity: 4 }],
         });
@@ -125,6 +140,7 @@ describe("Cart HTTP Routes Integration Tests", () => {
         const response = await app.inject({
             method: "PATCH",
             url: `/api/cart/items/${itemId}`,
+            headers: { authorization: `Bearer ${token}` },
             payload: { quantity: 4 },
         });
 
@@ -132,14 +148,17 @@ describe("Cart HTTP Routes Integration Tests", () => {
         const payload = JSON.parse(response.payload);
         expect(payload.success).toBe(true);
         expect(payload.data.summary.totalItems).toBe(4);
+        expect(cartServiceMock.updateItemQuantity).toHaveBeenCalledWith(userId, itemId, { quantity: 4 });
     });
 
     it("removes item from cart", async () => {
         const app = await createTestApp();
+        const { token, userId } = mockUser();
         const itemId = "a4175ef3-b1d6-4449-9f70-349f7e915570";
 
         cartServiceMock.removeItem.mockResolvedValue({
             id: "cart-1",
+            userId,
             summary: { itemCount: 0, totalItems: 0, subtotal: 0, currency: "INR" },
             items: [],
         });
@@ -147,18 +166,22 @@ describe("Cart HTTP Routes Integration Tests", () => {
         const response = await app.inject({
             method: "DELETE",
             url: `/api/cart/items/${itemId}`,
+            headers: { authorization: `Bearer ${token}` },
         });
 
         expect(response.statusCode).toBe(200);
         const payload = JSON.parse(response.payload);
         expect(payload.success).toBe(true);
+        expect(cartServiceMock.removeItem).toHaveBeenCalledWith(userId, itemId);
     });
 
     it("clears cart", async () => {
         const app = await createTestApp();
+        const { token, userId } = mockUser();
 
         cartServiceMock.clearCart.mockResolvedValue({
             id: "cart-1",
+            userId,
             summary: { itemCount: 0, totalItems: 0, subtotal: 0, currency: "INR" },
             items: [],
         });
@@ -166,34 +189,12 @@ describe("Cart HTTP Routes Integration Tests", () => {
         const response = await app.inject({
             method: "DELETE",
             url: "/api/cart",
-        });
-
-        expect(response.statusCode).toBe(200);
-        const payload = JSON.parse(response.payload);
-        expect(payload.success).toBe(true);
-    });
-
-    it("merges guest cart into user cart when authenticated", async () => {
-        const app = await createTestApp();
-        const { token, userId } = mockUser();
-
-        cartServiceMock.mergeGuestCart.mockResolvedValue({
-            id: "cart-user",
-            userId,
-            summary: { itemCount: 2, totalItems: 5, subtotal: 250, currency: "INR" },
-            items: [],
-        });
-
-        const response = await app.inject({
-            method: "POST",
-            url: "/api/cart/merge",
             headers: { authorization: `Bearer ${token}` },
-            payload: { sessionId: "guest-sess-abc" },
         });
 
         expect(response.statusCode).toBe(200);
         const payload = JSON.parse(response.payload);
         expect(payload.success).toBe(true);
-        expect(cartServiceMock.mergeGuestCart).toHaveBeenCalledWith(userId, "guest-sess-abc");
+        expect(cartServiceMock.clearCart).toHaveBeenCalledWith(userId);
     });
 });

@@ -213,28 +213,32 @@ export class ProductQueryService {
 
         const [total, products] = await Promise.all([
             prisma.product.count({ where }),
-            prisma.product.findMany({
-                where,
-                skip,
-                take: limit,
+            await prisma.product.findMany({
+                where, skip, take: limit,
                 orderBy: { [query.sortBy ?? "createdAt"]: query.sortOrder ?? "desc" },
-                include: {
-                    category: { select: { id: true, name: true, slug: true } },
-                    brand: { select: { id: true, name: true, slug: true, logoUrl: true } },
-                    images: { orderBy: { sortOrder: "asc" } },
+                select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                    description: true,
+                    status: true,
+                    isFeatured: true,
+                    seoTitle: true,
+                    createdAt: true,
+                    updatedAt: true,
+                    category: { select: { id: true, name: true } },
+                    brand: { select: { id: true, name: true, slug: true } },
                     variants: {
-                        select: {
-                            id: true,
-                            sku: true,
-                            price: true,
-                            compareAtPrice: true,
-                            status: true,
-                        },
+                        select: { id: true, sku: true, price: true, compareAtPrice: true, status: true },
                         orderBy: { createdAt: "asc" },
                     },
-                    _count: { select: { variants: true } },
-                },
-            }),
+                    images: {
+                        select: { id: true, url: true },
+                        orderBy: { sortOrder: "asc" },
+                        take: 1
+                    }
+                }
+            })
         ]);
 
         return {
