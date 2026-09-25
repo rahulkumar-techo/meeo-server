@@ -112,6 +112,7 @@ export class CustomerMetricsService {
      * Computes total accounts, active customers, repeat purchase rate, and tier distribution.
      */
     async getAdminUserMetrics() {
+        // fix:expensive computations - Select only required lightweight fields and pre-filter cancelled orders
         const [allUsers, orders] = await Promise.all([
             prisma.user.findMany({
                 where: { deletedAt: null },
@@ -122,6 +123,7 @@ export class CustomerMetricsService {
                     phoneVerified: true,
                     createdAt: true,
                     orders: {
+                        where: { status: { notIn: ["CANCELLED", "EXPIRED", "REFUNDED"] } },
                         select: { id: true, status: true, grandTotal: true },
                     },
                 },
@@ -185,7 +187,6 @@ export class CustomerMetricsService {
             statusDistribution[u.status] = (statusDistribution[u.status] || 0) + 1;
 
             const userSpend = u.orders
-                .filter((o: any) => o.status !== "CANCELLED" && o.status !== "EXPIRED" && o.status !== "REFUNDED")
                 .reduce((sum: number, o: any) => sum + Number(o.grandTotal || 0), 0);
 
             if (userSpend >= 5000) tierDistribution.PLATINUM++;

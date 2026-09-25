@@ -94,73 +94,57 @@ export class DashboardAnalyticsService {
         const dateFilter = this.resolveDateRange(query.period);
         const limit = query.limit ?? 10;
 
-        const orderItems = await prisma.orderItem.findMany({
+        // fix:expensive computations - Aggregate top sellers at the DB level instead of loading all line items into memory
+        const groupedItems = await prisma.orderItem.groupBy({
+            by: ["productId"],
             where: {
                 order: {
                     status: { in: ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"] },
                     ...(dateFilter.gte ? { createdAt: dateFilter } : {}),
                 },
+                productId: { not: null },
             },
-            select: {
-                productId: true,
-                productName: true,
+            _sum: {
                 quantity: true,
                 total: true,
-                variant: {
-                    select: {
-                        id: true,
-                        sku: true,
-                        product: {
-                            select: {
-                                id: true,
-                                name: true,
-                                slug: true,
-                                images: { take: 1, select: { url: true } },
-                            },
-                        },
-                    },
+            },
+            orderBy: {
+                _sum: {
+                    quantity: "desc",
                 },
             },
+            take: limit,
         });
 
-        const productSales: Record<
-            string,
-            {
-                productId: string;
-                name: string;
-                slug: string;
-                thumbnail: string | null;
-                unitsSold: number;
-                totalRevenue: number;
-            }
-        > = {};
+        const productIds = groupedItems
+            .map((g) => g.productId)
+            .filter((id): id is string => Boolean(id));
 
-        for (const item of orderItems) {
-            const pid = item.productId ?? item.variant?.product?.id ?? "unknown";
-            if (!productSales[pid]) {
-                productSales[pid] = {
-                    productId: pid,
-                    name: item.variant?.product?.name ?? item.productName,
-                    slug: item.variant?.product?.slug ?? "",
-                    thumbnail: item.variant?.product?.images[0]?.url ?? null,
-                    unitsSold: 0,
-                    totalRevenue: 0,
-                };
-            }
-            const rec = productSales[pid]!;
-            rec.unitsSold += item.quantity;
-            rec.totalRevenue += Number(item.total);
-        }
+        const products = productIds.length > 0
+            ? await prisma.product.findMany({
+                where: { id: { in: productIds } },
+                select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                    images: { take: 1, select: { url: true } },
+                },
+            })
+            : [];
 
-        const topSellers = Object.values(productSales)
-            .sort((a, b) => b.unitsSold - a.unitsSold || b.totalRevenue - a.totalRevenue)
-            .slice(0, limit)
-            .map((p) => ({
-                ...p,
-                totalRevenue: Number(p.totalRevenue.toFixed(2)),
-            }));
+        const productMap = new Map(products.map((p) => [p.id, p]));
 
-        return topSellers;
+        return groupedItems.map((g) => {
+            const prod = g.productId ? productMap.get(g.productId) : undefined;
+            return {
+                productId: g.productId ?? "unknown",
+                name: prod?.name ?? "Unknown Product",
+                slug: prod?.slug ?? "",
+                thumbnail: prod?.images[0]?.url ?? null,
+                unitsSold: g._sum.quantity ?? 0,
+                totalRevenue: Number(Number(g._sum.total ?? 0).toFixed(2)),
+            };
+        });
     }
 }
 

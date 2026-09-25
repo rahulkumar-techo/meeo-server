@@ -46,16 +46,27 @@ export class UserAdminService {
         const { page = 1, limit = 20, search, status, tier, riskFlagOnly, sortBy = "createdAt", sortOrder = "desc" } = query;
         const skip = (page - 1) * limit;
 
+        const trimmedSearch = search?.trim();
+
+        // fix:expensive computations - Push risk flag and status filtering directly to SQL WHERE clause to fix in-memory pagination drift
         const where: Prisma.UserWhereInput = {
             deletedAt: null,
             ...(status ? { status } : {}),
-            ...(search
+            ...(trimmedSearch
                 ? {
                     OR: [
-                        { email: { contains: search, mode: "insensitive" } },
-                        { firstName: { contains: search, mode: "insensitive" } },
-                        { lastName: { contains: search, mode: "insensitive" } },
-                        { phone: { contains: search, mode: "insensitive" } },
+                        { email: { contains: trimmedSearch, mode: "insensitive" } },
+                        { firstName: { contains: trimmedSearch, mode: "insensitive" } },
+                        { lastName: { contains: trimmedSearch, mode: "insensitive" } },
+                        { phone: { contains: trimmedSearch, mode: "insensitive" } },
+                    ],
+                }
+                : {}),
+            ...(riskFlagOnly
+                ? {
+                    OR: [
+                        { status: { in: ["SUSPENDED", "BLOCKED"] } },
+                        { emailVerified: false, phoneVerified: false },
                     ],
                 }
                 : {}),
@@ -70,6 +81,7 @@ export class UserAdminService {
                 include: {
                     roles: { select: { role: { select: { id: true, name: true } } } },
                     orders: {
+                        where: { status: { notIn: ["CANCELLED", "EXPIRED", "REFUNDED"] } },
                         select: { id: true, status: true, grandTotal: true, createdAt: true },
                     },
                 },
@@ -79,12 +91,9 @@ export class UserAdminService {
 
         let items: CustomerSummary[] = users.map((u: any) => this.computeCustomerMetrics(u));
 
-        // In-memory filters for computed tier and risk flags
+        // In-memory filters for computed tier if requested
         if (tier && tier !== "ALL") {
             items = items.filter((item) => item.tier === tier);
-        }
-        if (riskFlagOnly) {
-            items = items.filter((item) => item.riskFlag);
         }
 
         // Handle computed sort keys

@@ -17,6 +17,8 @@ vi.mock("@/lib/prisma.js", () => ({
             create: vi.fn(),
             findUnique: vi.fn(),
             findMany: vi.fn(),
+            aggregate: vi.fn(),
+            groupBy: vi.fn(),
             update: vi.fn(),
             updateMany: vi.fn(),
             delete: vi.fn(),
@@ -166,12 +168,16 @@ describe("Reviews & Ratings Unit Tests", () => {
         });
 
         it("calculates product rating summary and star distribution correctly", async () => {
-            vi.mocked(prisma.review.findMany).mockResolvedValue([
-                { rating: 5, isVerifiedPurchase: true },
-                { rating: 5, isVerifiedPurchase: false },
-                { rating: 4, isVerifiedPurchase: true },
-                { rating: 2, isVerifiedPurchase: true },
+            vi.mocked(prisma.review.aggregate).mockResolvedValue({
+                _avg: { rating: 4.0 },
+                _count: { _all: 4 },
+            } as any);
+            vi.mocked(prisma.review.groupBy).mockResolvedValue([
+                { rating: 5, _count: { _all: 2 } },
+                { rating: 4, _count: { _all: 1 } },
+                { rating: 2, _count: { _all: 1 } },
             ] as any);
+            vi.mocked(prisma.review.count).mockResolvedValue(3);
 
             const summary = await reviewService.getProductRatingSummary("p-1");
 

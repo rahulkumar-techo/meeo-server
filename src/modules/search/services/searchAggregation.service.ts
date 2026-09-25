@@ -7,19 +7,32 @@ export class SearchAggregationService {
      * Resolves all descendant category IDs recursively.
      */
     async getAllChildCategoryIds(parentId: string): Promise<string[]> {
+        // fix:expensive computations - Single query to fetch active category tree avoiding N+1 database round-trips
+        const allCategories = await prisma.category.findMany({
+            where: { status: "ACTIVE" },
+            select: { id: true, parentId: true },
+        });
+
+        const childrenMap = new Map<string, string[]>();
+        for (const cat of allCategories) {
+            if (cat.parentId) {
+                const list = childrenMap.get(cat.parentId) || [];
+                list.push(cat.id);
+                childrenMap.set(cat.parentId, list);
+            }
+        }
+
         const categoryIds: string[] = [parentId];
         const queue: string[] = [parentId];
 
         while (queue.length > 0) {
             const currentId = queue.shift()!;
-            const children = await prisma.category.findMany({
-                where: { parentId: currentId },
-                select: { id: true },
-            });
-
-            for (const child of children) {
-                categoryIds.push(child.id);
-                queue.push(child.id);
+            const children = childrenMap.get(currentId);
+            if (children) {
+                for (const childId of children) {
+                    categoryIds.push(childId);
+                    queue.push(childId);
+                }
             }
         }
 

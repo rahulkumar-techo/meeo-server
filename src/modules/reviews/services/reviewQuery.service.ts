@@ -6,18 +6,36 @@ export class ReviewQueryService {
      * Aggregates average rating, total count, and star distribution breakdown (1-5 stars).
      */
     async getProductRatingSummary(productId: string) {
-        const approvedReviews = await prisma.review.findMany({
-            where: {
-                productId,
-                status: "APPROVED",
-            },
-            select: {
-                rating: true,
-                isVerifiedPurchase: true,
-            },
-        });
+        // fix:expensive computations - Run SQL-level aggregation and groupBy instead of fetching all reviews into Node.js memory
+        const [ratingAgg, distributionGroups, verifiedPurchaseCount] = await Promise.all([
+            prisma.review.aggregate({
+                where: {
+                    productId,
+                    status: "APPROVED",
+                },
+                _avg: { rating: true },
+                _count: { _all: true },
+            }),
+            prisma.review.groupBy({
+                by: ["rating"],
+                where: {
+                    productId,
+                    status: "APPROVED",
+                },
+                _count: { _all: true },
+            }),
+            prisma.review.count({
+                where: {
+                    productId,
+                    status: "APPROVED",
+                    isVerifiedPurchase: true,
+                },
+            }),
+        ]);
 
-        const totalReviews = approvedReviews.length;
+        const totalReviews = ratingAgg._count._all;
+        const averageRating = ratingAgg._avg.rating ? Number(ratingAgg._avg.rating.toFixed(1)) : 0;
+
         const distribution: Record<number, number> = {
             1: 0,
             2: 0,
@@ -26,20 +44,11 @@ export class ReviewQueryService {
             5: 0,
         };
 
-        let verifiedPurchaseCount = 0;
-        let sumRating = 0;
-
-        for (const r of approvedReviews) {
-            sumRating += r.rating;
-            if (r.rating in distribution) {
-                distribution[r.rating] = (distribution[r.rating] || 0) + 1;
-            }
-            if (r.isVerifiedPurchase) {
-                verifiedPurchaseCount++;
+        for (const g of distributionGroups) {
+            if (g.rating in distribution) {
+                distribution[g.rating] = g._count._all;
             }
         }
-
-        const averageRating = totalReviews > 0 ? Number((sumRating / totalReviews).toFixed(1)) : 0;
 
         return {
             productId,

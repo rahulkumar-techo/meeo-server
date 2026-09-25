@@ -2,15 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { prismaMock } = vi.hoisted(() => ({
     prismaMock: {
+        $queryRaw: vi.fn(),
         order: {
             findMany: vi.fn(),
+            groupBy: vi.fn(),
             count: vi.fn(),
         },
         user: {
             count: vi.fn(),
+            groupBy: vi.fn(),
         },
         paymentAttempt: {
             findMany: vi.fn(),
+            groupBy: vi.fn(),
             count: vi.fn(),
         },
         refund: {
@@ -18,13 +22,19 @@ const { prismaMock } = vi.hoisted(() => ({
         },
         inventory: {
             findMany: vi.fn(),
+            aggregate: vi.fn(),
             count: vi.fn(),
         },
         orderItem: {
             findMany: vi.fn(),
+            groupBy: vi.fn(),
+        },
+        product: {
+            findMany: vi.fn(),
         },
         review: {
             count: vi.fn(),
+            groupBy: vi.fn(),
             aggregate: vi.fn(),
         },
         reviewReport: {
@@ -230,38 +240,22 @@ describe("DashboardService Unit Tests", () => {
 
     describe("getTopSellingProducts", () => {
         it("returns ranked top-selling products by units sold", async () => {
-            prismaMock.orderItem.findMany.mockResolvedValue([
+            prismaMock.orderItem.groupBy.mockResolvedValue([
+                { productId: "prod-1", _sum: { quantity: 10, total: 20000 } },
+                { productId: "prod-2", _sum: { quantity: 5, total: 15000 } },
+            ]);
+            prismaMock.product.findMany.mockResolvedValue([
                 {
-                    productId: "prod-1",
-                    productName: "Premium Wireless Earbuds",
-                    quantity: 10,
-                    total: 20000,
-                    variant: {
-                        id: "var-1",
-                        sku: "SKU-V1",
-                        product: {
-                            id: "prod-1",
-                            name: "Premium Wireless Earbuds",
-                            slug: "premium-wireless-earbuds",
-                            images: [{ url: "https://ik.imagekit.io/v1.jpg" }],
-                        },
-                    },
+                    id: "prod-1",
+                    name: "Premium Wireless Earbuds",
+                    slug: "premium-wireless-earbuds",
+                    images: [{ url: "https://ik.imagekit.io/v1.jpg" }],
                 },
                 {
-                    productId: "prod-2",
-                    productName: "Smart Fitness Watch",
-                    quantity: 5,
-                    total: 15000,
-                    variant: {
-                        id: "var-2",
-                        sku: "SKU-V2",
-                        product: {
-                            id: "prod-2",
-                            name: "Smart Fitness Watch",
-                            slug: "smart-fitness-watch",
-                            images: [],
-                        },
-                    },
+                    id: "prod-2",
+                    name: "Smart Fitness Watch",
+                    slug: "smart-fitness-watch",
+                    images: [],
                 },
             ]);
 

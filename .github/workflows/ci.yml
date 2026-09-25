@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+env:
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+  RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -32,3 +37,67 @@ jobs:
       # Keep local pre-push verification and CI on the same command sequence.
       - name: Generate, typecheck, test, and build
         run: npm run ci:verify
+
+      - name: 🚀 Trigger Render Deployment
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "ℹ️ RENDER_DEPLOY_HOOK_URL secret not set. Skipping Render deploy."
+            exit 0
+          fi
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$RENDER_DEPLOY_HOOK_URL")
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "✅ Render deploy hook triggered successfully (HTTP $HTTP_STATUS)."
+          else
+            echo "❌ Render deploy hook failed with HTTP $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: 📢 Telegram Notification
+        if: always()
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "ℹ️ TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID secret not set. Skipping Telegram notification."
+            exit 0
+          fi
+
+          COMMIT_MSG=$(git log -1 --pretty=%s | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+          COMMIT_AUTHOR=$(git log -1 --pretty=%an | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          JOB_STATUS="${{ job.status }}"
+          IS_MAIN_PUSH="${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}"
+
+          if [ "$JOB_STATUS" = "success" ]; then
+            if [ "$IS_MAIN_PUSH" = "true" ] && [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+              HEADER="🚀 <b>Meeo Server — Deployed to Render</b>"
+              STATUS_LINE="✅ <b>Status:</b> CI Passed &amp; Deployed to Render"
+            else
+              HEADER="🚀 <b>Meeo Server — CI Passed</b>"
+              STATUS_LINE="✅ <b>Status:</b> Success"
+            fi
+          elif [ "$JOB_STATUS" = "failure" ]; then
+            HEADER="🚨 <b>Meeo Server — CI/Deploy Failed</b>"
+            STATUS_LINE="❌ <b>Status:</b> Failed"
+          else
+            HEADER="⚠️ <b>Meeo Server — Cancelled</b>"
+            STATUS_LINE="⚠️ <b>Status:</b> ${JOB_STATUS}"
+          fi
+
+          MSG=$(printf '%s\n\n%s\n📦 <b>Repository:</b> <code>%s</code>\n🌿 <b>Branch:</b> <code>%s</code>\n🔄 <b>Event:</b> %s\n👤 <b>Author:</b> %s\n📝 <b>Commit:</b> %s\n\n🔗 <a href="%s">View Action Run</a>' \
+            "$HEADER" \
+            "$STATUS_LINE" \
+            "${{ github.repository }}" \
+            "${{ github.ref_name }}" \
+            "${{ github.event_name }}" \
+            "$COMMIT_AUTHOR" \
+            "$COMMIT_MSG" \
+            "$RUN_URL")
+
+          PAYLOAD=$(jq -n \
+            --arg chat_id "$TELEGRAM_CHAT_ID" \
+            --arg text "$MSG" \
+            '{chat_id: $chat_id, parse_mode: "HTML", text: $text, disable_web_page_preview: true}')
+
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" > /dev/null || true

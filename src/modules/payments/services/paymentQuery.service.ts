@@ -7,6 +7,7 @@ export class PaymentQueryService {
      * Retrieves payment details by ID, ensuring customer ownership or admin access.
      */
     async getPaymentById(paymentId: string, userId?: string, roles: string[] = []) {
+        // fix:expensive computations - Select specific transaction fields to avoid loading large raw JSON payloads into memory
         const payment = await prisma.payment.findUnique({
             where: { id: paymentId },
             include: {
@@ -21,7 +22,23 @@ export class PaymentQueryService {
                     },
                 },
                 attempts: { orderBy: { attemptNumber: "asc" } },
-                transactions: { orderBy: { createdAt: "desc" } },
+                transactions: {
+                    select: {
+                        id: true,
+                        paymentId: true,
+                        paymentAttemptId: true,
+                        type: true,
+                        status: true,
+                        amount: true,
+                        currency: true,
+                        providerTransactionId: true,
+                        failureCode: true,
+                        failureMessage: true,
+                        createdAt: true,
+                        updatedAt: true,
+                    },
+                    orderBy: { createdAt: "desc" },
+                },
                 refunds: { orderBy: { requestedAt: "desc" } },
             },
         });
@@ -50,8 +67,10 @@ export class PaymentQueryService {
         const where: any = {};
         if (status) where.status = status;
         if (orderId) where.orderId = orderId;
-        if (provider) where.provider = { equals: provider, mode: "insensitive" };
+        // fix:expensive computations - Avoid mode: "insensitive" table scan by matching uppercase normalized provider value
+        if (provider) where.provider = provider.toUpperCase();
 
+        // fix:expensive computations - Use indexed sorting and lean select/include to minimize payload size
         const [payments, total] = await Promise.all([
             prisma.payment.findMany({
                 where,

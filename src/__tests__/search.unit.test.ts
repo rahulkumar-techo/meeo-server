@@ -106,10 +106,11 @@ describe("Search & Discovery Unit Tests", () => {
         it("resolves category hierarchy recursively when filtering by category", async () => {
             // Parent: Electronics -> Children: Audio, Computers
             vi.mocked(prisma.category.findUnique).mockResolvedValue({ id: "cat-electronics" } as any);
-            vi.mocked(prisma.category.findMany)
-                .mockResolvedValueOnce([{ id: "cat-audio" }, { id: "cat-computers" }] as any) // Children of Electronics
-                .mockResolvedValueOnce([]) // Children of Audio
-                .mockResolvedValueOnce([]); // Children of Computers
+            vi.mocked(prisma.category.findMany).mockResolvedValue([
+                { id: "cat-electronics", parentId: null },
+                { id: "cat-audio", parentId: "cat-electronics" },
+                { id: "cat-computers", parentId: "cat-electronics" },
+            ] as any);
 
             vi.mocked(prisma.product.findMany).mockResolvedValue([
                 {

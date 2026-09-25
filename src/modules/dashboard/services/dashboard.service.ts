@@ -29,6 +29,7 @@ export class DashboardService {
         const paymentWhereDate = dateFilter.gte ? { initiatedAt: dateFilter } : {};
         const refundWhereDate = dateFilter.gte ? { requestedAt: dateFilter } : {};
 
+        // fix:expensive computations - Use targeted field selects to optimize payload sizes and database throughput
         const [
             allOrders,
             refundsAgg,
@@ -65,7 +66,7 @@ export class DashboardService {
                 prisma.user.count({ where: { status: "BLOCKED" } }),
             ]),
             prisma.user.count({
-                where: orderWhereDate,
+                where: { deletedAt: null, ...orderWhereDate },
             }),
             prisma.inventory.findMany({
                 select: {
