@@ -35,8 +35,20 @@ export type CachedAuthContext = {
 // Keep the cache optional: local development and tests can authenticate with PostgreSQL alone.
 const cacheEnabled = () => Boolean(process.env.REDIS_URL) && process.env.NODE_ENV !== "test" && !process.env.VITEST;
 
+const authMemoryStore = new Map<string, { value: CachedAuthContext; expiresAt: number }>();
+
 export const getAuthContext = async (userId: string, sessionId?: string): Promise<CachedAuthContext | null> => {
     if (!cacheEnabled()) return null;
+
+    const memKey = `${userId}:${sessionId ?? "account"}`;
+    const now = Date.now();
+    const mem = authMemoryStore.get(memKey);
+    if (mem) {
+        if (mem.expiresAt > now) {
+            return mem.value;
+        }
+        authMemoryStore.delete(memKey);
+    }
 
     try {
         // A session-specific key prevents permissions from one login session being reused by another.
@@ -48,6 +60,8 @@ export const getAuthContext = async (userId: string, sessionId?: string): Promis
         if (sessionId && context.sessionId !== sessionId) return null;
         if (context.sessionExpiresAt && new Date(context.sessionExpiresAt) <= new Date()) return null;
 
+        // Backfill L1
+        authMemoryStore.set(memKey, { value: context, expiresAt: now + AUTH_CONTEXT_TTL_SECONDS * 1000 });
         return context;
     } catch {
         return null;
@@ -57,9 +71,13 @@ export const getAuthContext = async (userId: string, sessionId?: string): Promis
 export const setAuthContext = async (context: CachedAuthContext) => {
     if (!cacheEnabled()) return;
 
+    const userId = context.userId || context.id || "";
+    const memKey = `${userId}:${context.sessionId ?? "account"}`;
+    const now = Date.now();
+    authMemoryStore.set(memKey, { value: context, expiresAt: now + AUTH_CONTEXT_TTL_SECONDS * 1000 });
+
     try {
         // Single Source of Truth: stores complete auth context + profile in 1 pipelined roundtrip
-        const userId = context.userId || context.id || "";
         const key = Keys.AUTH_CONTEXT(userId, context.sessionId);
         const indexKey = Keys.AUTH_CONTEXT_INDEX(userId);
 
@@ -74,6 +92,16 @@ export const setAuthContext = async (context: CachedAuthContext) => {
 };
 
 export const invalidateAuthContext = async (userId: string, sessionId?: string) => {
+    if (sessionId) {
+        authMemoryStore.delete(`${userId}:${sessionId}`);
+    } else {
+        for (const k of authMemoryStore.keys()) {
+            if (k.startsWith(`${userId}:`)) {
+                authMemoryStore.delete(k);
+            }
+        }
+    }
+
     if (!cacheEnabled()) return;
 
     try {

@@ -4,6 +4,7 @@ import { CACHE_TTL } from "./cache.keys.js";
 
 export class CacheService {
     private client: Redis;
+    private memoryStore = new Map<string, { value: any; expiresAt: number }>();
 
     constructor(client: Redis = redis) {
         this.client = client;
@@ -17,10 +18,22 @@ export class CacheService {
     }
 
     /**
-     * Retrieves a cached item and parses JSON.
-     * If Redis is down, disconnected, or throws an error, returns null to trigger DB query fallback.
+     * Retrieves a cached item. Checks L1 in-memory cache first (in non-test env), then L2 Redis.
      */
     async get<T>(key: string): Promise<T | null> {
+        const isTest = process.env.NODE_ENV === "test" || Boolean(process.env.VITEST);
+        const now = Date.now();
+
+        if (!isTest) {
+            const mem = this.memoryStore.get(key);
+            if (mem) {
+                if (mem.expiresAt > now) {
+                    return mem.value as T;
+                }
+                this.memoryStore.delete(key);
+            }
+        }
+
         if (!this.isReady()) {
             return null;
         }
@@ -28,20 +41,28 @@ export class CacheService {
         try {
             const data = await this.client.get(key);
             if (!data) return null;
-            return JSON.parse(data) as T;
+            const parsed = JSON.parse(data) as T;
+            // Backfill L1 memory cache for 60 seconds
+            this.memoryStore.set(key, { value: parsed, expiresAt: now + 60000 });
+            return parsed;
         } catch (error) {
-            // Fault-tolerant fallback: Redis downtime never breaks API requests
             console.warn(`[CacheService] Failed to GET key "${key}":`, (error as Error).message);
             return null;
         }
     }
 
     /**
-     * Serializes and sets a value in Redis with a TTL in seconds.
-     * Fails silently if Redis is unavailable.
+     * Serializes and sets a value in both L1 Memory and L2 Redis with a TTL in seconds.
      */
     async set(key: string, value: unknown, ttlSeconds: number = CACHE_TTL.FIVE_MINUTES): Promise<void> {
-        if (!this.isReady() || value === undefined || value === null) {
+        if (value === undefined || value === null) {
+            return;
+        }
+
+        const now = Date.now();
+        this.memoryStore.set(key, { value, expiresAt: now + ttlSeconds * 1000 });
+
+        if (!this.isReady()) {
             return;
         }
 
@@ -83,12 +104,16 @@ export class CacheService {
      * Deletes one or multiple explicit cache keys.
      */
     async del(keys: string | string[]): Promise<void> {
+        const keyArray = Array.isArray(keys) ? keys : [keys];
+        for (const k of keyArray) {
+            this.memoryStore.delete(k);
+        }
+
         if (!this.isReady()) {
             return;
         }
 
         try {
-            const keyArray = Array.isArray(keys) ? keys : [keys];
             const cleanKeys = keyArray.filter((k) => Boolean(k) && !k.includes("*"));
             if (cleanKeys.length > 0) {
                 await this.client.del(...cleanKeys);
@@ -108,6 +133,13 @@ export class CacheService {
      * Non-blocking cache invalidation using Redis SCAN iteration (avoids KEYS command CPU locks).
      */
     async invalidatePattern(pattern: string): Promise<void> {
+        const regex = new RegExp("^" + pattern.replace(/\*/g, ".*") + "$");
+        for (const k of this.memoryStore.keys()) {
+            if (regex.test(k)) {
+                this.memoryStore.delete(k);
+            }
+        }
+
         if (!this.isReady()) {
             return;
         }
