@@ -18,7 +18,7 @@ export interface SessionCreationOptions {
 
 export class AuthSessionService {
     async issueUserSessionAndTokens(
-        user: { id: string; email: string; firstName?: string | null | undefined; lastName?: string | null | undefined },
+        user: { id: string; email: string; firstName?: string | null | undefined; lastName?: string | null | undefined; phone?: string | null | undefined },
         options?: SessionCreationOptions
     ) {
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -51,12 +51,16 @@ export class AuthSessionService {
             sessionId,
         });
 
+        const name = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.firstName || null;
+
         return {
             user: {
                 id: user.id,
+                name,
                 firstName: user.firstName ?? null,
                 lastName: user.lastName ?? null,
                 email: user.email,
+                phone: user.phone ?? null,
             },
             accessToken,
             refreshToken,
@@ -89,7 +93,7 @@ export class AuthSessionService {
         }
 
         return this.issueUserSessionAndTokens(
-            { id: user.id, email: user.email!, firstName: user.firstName, lastName: user.lastName },
+            { id: user.id, email: user.email!, firstName: user.firstName, lastName: user.lastName, phone: user.phone },
             { deviceId, deviceName, metadata }
         );
     }
@@ -280,9 +284,12 @@ export class AuthSessionService {
             )
         ) as string[];
 
+        const name = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.firstName || null;
+
         const profileResult = {
             id: user.id,
             userId: user.id,
+            name,
             firstName: user.firstName ?? null,
             lastName: user.lastName ?? null,
             email: user.email ?? null,
@@ -356,12 +363,22 @@ export class AuthSessionService {
                     passwordHash: randomPasswordHash,
                     status: "ACTIVE",
                     lastLoginAt: new Date(),
+                    roles: {
+                        create: {
+                            role: {
+                                connectOrCreate: {
+                                    where: { name: "CUSTOMER" },
+                                    create: { name: "CUSTOMER", description: "Default customer role" },
+                                },
+                            },
+                        },
+                    },
                 },
             });
         }
 
         return this.issueUserSessionAndTokens(
-            { id: user.id, email: user.email!, firstName: user.firstName, lastName: user.lastName },
+            { id: user.id, email: user.email!, firstName: user.firstName, lastName: user.lastName, phone: user.phone },
             { deviceId, deviceName, metadata }
         );
     }

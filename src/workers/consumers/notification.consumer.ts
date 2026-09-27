@@ -1,12 +1,17 @@
-import { processedEventService } from "../../services/processedEvent.service.js";
-import { notificationDispatcherService } from "@/modules/notifications/services/notificationDispatcher.service.js";
+import { processedEventService } from "@/modules/outbox/services/processedEvent.service.js";
+import { notificationDeliveryService } from "../services/notificationDelivery.service.js";
 import { prisma } from "@/lib/prisma.js";
 
 export class NotificationConsumer {
     private readonly consumerName = "NotificationConsumer";
 
     /**
-     * Handles domain events by triggering appropriate multi-channel notifications asynchronously.
+     * Handles domain events by triggering push & email notifications for customer scenarios:
+     * - Order (important order-state changes)
+     * - Payment (payment requires attention / receipt)
+     * - Delivery (delivery status changes)
+     * - Return/Refund (return/refund progress or actions)
+     * - Account/Security (security-critical events)
      */
     async handleEvent(event: {
         id: string;
@@ -43,8 +48,8 @@ export class NotificationConsumer {
                     }
                 }
 
-                // If Payment aggregate and missing user/email details, query payment
-                if (aggregateType === "Payment" && (!userId || !email) && prisma.payment?.findUnique) {
+                // If Payment / Refund aggregate and missing user/email details, query payment
+                if ((aggregateType === "Payment" || aggregateType === "Refund") && (!userId || !email) && prisma.payment?.findUnique) {
                     const payment = await prisma.payment.findUnique({
                         where: { id: aggregateId },
                         include: { order: { include: { user: true, address: true } } },
@@ -57,11 +62,25 @@ export class NotificationConsumer {
                     }
                 }
 
+                // If User security aggregate, query user
+                if (aggregateType === "User" && (!userId || !email) && prisma.user?.findUnique) {
+                    const user = await prisma.user.findUnique({
+                        where: { id: aggregateId },
+                        select: { id: true, email: true, firstName: true, lastName: true },
+                    }).catch(() => null);
+
+                    if (user) {
+                        userId = userId || user.id;
+                        email = email || (user.email ?? undefined);
+                        customerName = customerName || `${user.firstName || ""} ${user.lastName || ""}`.trim();
+                    }
+                }
+
                 // If Low Stock event, notify system admins / store staff
                 if (eventType === "LOW_STOCK" || eventType === "STOCK_LOW") {
                     const adminEmails = process.env.ADMIN_ALERT_EMAILS?.split(",") || ["admin@store.com"];
                     for (const adminEmail of adminEmails) {
-                        await notificationDispatcherService.sendNotificationForEvent(
+                        await notificationDeliveryService.sendNotificationForEvent(
                             "LOW_STOCK",
                             { email: adminEmail.trim(), customerName: "Store Administrator" },
                             payload,
@@ -70,8 +89,8 @@ export class NotificationConsumer {
                     return { success: true, eventType, lowStockAlertSent: true };
                 }
 
-                // Dispatch notification for order/payment event
-                return notificationDispatcherService.sendNotificationForEvent(
+                // Dispatch push and mail notification for customer event via delivery service
+                return notificationDeliveryService.sendNotificationForEvent(
                     eventType,
                     {
                         userId,

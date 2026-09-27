@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma.js";
+import { emitToUser } from "@/sockets/socket.server.js";
 import type { NotificationContent } from "../templates/notificationTemplates.js";
 
 export interface SendInAppOptions {
@@ -9,12 +10,12 @@ export interface SendInAppOptions {
 
 export class InAppProvider {
     /**
-     * Persists an in-app notification in the PostgreSQL database.
+     * Persists an in-app notification in PostgreSQL and delivers real-time push via WebSockets.
      */
     async createInAppNotification(options: SendInAppOptions) {
         const { userId, type, content } = options;
 
-        return prisma.notification.create({
+        const notification = await prisma.notification.create({
             data: {
                 userId,
                 type,
@@ -26,6 +27,11 @@ export class InAppProvider {
                 data: content.data ?? {},
             },
         });
+
+        // Broadcast real-time event to user's WebSocket room
+        emitToUser(userId, "notification:new" as any, notification).catch(() => {});
+
+        return notification;
     }
 }
 

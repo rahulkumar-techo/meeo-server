@@ -5,6 +5,9 @@ import {
     notificationQuerySchema,
     updateNotificationPreferencesSchema,
     sendNotificationSchema,
+    registerDeviceTokenSchema,
+    unregisterDeviceTokenSchema,
+    adminNotificationFilterSchema,
 } from "../validations/notification.validation.js";
 
 export class NotificationController {
@@ -108,6 +111,49 @@ export class NotificationController {
     }
 
     /**
+     * Registers or updates an FCM device token for the authenticated user.
+     */
+    async registerDeviceToken(req: FastifyRequest, reply: FastifyReply) {
+        const userId = req.user!.id;
+        const input = registerDeviceTokenSchema.parse(req.body);
+        const result = await notificationPreferenceService.registerDeviceToken(userId, input);
+
+        return reply.status(200).send({
+            status: "success",
+            message: "Device push token registered successfully",
+            data: result,
+        });
+    }
+
+    /**
+     * Unregisters/deactivates an FCM device token for the authenticated user.
+     */
+    async unregisterDeviceToken(req: FastifyRequest, reply: FastifyReply) {
+        const userId = req.user!.id;
+        const input = unregisterDeviceTokenSchema.parse(req.body);
+        const result = await notificationPreferenceService.unregisterDeviceToken(userId, input.token);
+
+        return reply.status(200).send({
+            status: "success",
+            message: "Device push token unregistered",
+            data: result,
+        });
+    }
+
+    /**
+     * Lists all registered active device tokens for the authenticated user.
+     */
+    async listMyDeviceTokens(req: FastifyRequest, reply: FastifyReply) {
+        const userId = req.user!.id;
+        const result = await notificationPreferenceService.getUserDeviceTokens(userId);
+
+        return reply.status(200).send({
+            status: "success",
+            data: result,
+        });
+    }
+
+    /**
      * Admin manual notification dispatch across selected channels.
      */
     async sendNotification(req: FastifyRequest, reply: FastifyReply) {
@@ -134,6 +180,33 @@ export class NotificationController {
             data: result,
         });
     }
+
+    /**
+     * Admin query across all platform notifications with filters and search.
+     */
+    async listAllNotifications(req: FastifyRequest, reply: FastifyReply) {
+        const query = adminNotificationFilterSchema.parse(req.query);
+        const result = await notificationDispatcherService.listAllNotifications(query);
+
+        return reply.status(200).send({
+            status: "success",
+            data: result,
+        });
+    }
+
+    /**
+     * Admin notification overview metrics and delivery statistics for dashboard.
+     */
+    async getAdminOverview(req: FastifyRequest, reply: FastifyReply) {
+        const result = await notificationDispatcherService.getAdminOverview();
+
+        return reply.status(200).send({
+            status: "success",
+            data: result,
+        });
+    }
 }
 
 export const notificationController = new NotificationController();
+
+

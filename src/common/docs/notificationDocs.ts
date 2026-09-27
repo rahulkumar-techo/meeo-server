@@ -51,4 +51,19 @@ export const notificationSwaggerSchemas = {
             data: { type: "object", additionalProperties: true, description: "Dynamic metadata payload" },
         },
     },
+
+    adminNotificationFilter: {
+        type: "object",
+        properties: {
+            userId: { type: "string", format: "uuid", description: "Filter by recipient user ID" },
+            channel: { type: "string", enum: ["EMAIL", "PUSH", "IN_APP"], description: "Filter by channel (EMAIL, PUSH, IN_APP)" },
+            status: { type: "string", enum: ["PENDING", "SENT", "FAILED", "READ"], description: "Filter by delivery status" },
+            type: { type: "string", description: "Filter by event/template type (e.g. ORDER_CONFIRMED)" },
+            search: { type: "string", description: "Search query across notification title, body, or user email/name" },
+            startDate: { type: "string", format: "date-time", description: "Filter notifications created on or after date" },
+            endDate: { type: "string", format: "date-time", description: "Filter notifications created on or before date" },
+            page: { type: "integer", default: 1, minimum: 1 },
+            limit: { type: "integer", default: 20, minimum: 1, maximum: 100 },
+        },
+    },
 };

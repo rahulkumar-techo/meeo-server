@@ -1,35 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { paymentController } from "../controller/payment.controller.js";
-import { paymentWebhookController } from "../controller/paymentWebhook.controller.js";
 import { paymentSwaggerSchemas } from "@/common/docs/paymentDocs.js";
 import { PERMISSIONS } from "@/modules/authorization/permission.constants.js";
 
 /**
- * Registers Payment routes under /api/payments.
+ * Registers Payment routes under /api/v1/payments.
  */
 export default async function paymentRouter(app: FastifyInstance) {
-    // ----------------------------------------------------
-    // Public / Provider Webhook Ingestion
-    // ----------------------------------------------------
-    app.post(
-        "/webhook/:provider",
-        {
-            schema: {
-                tags: ["Payments & Transactions"],
-                summary: "[Public / Webhook] Ingest Provider Webhook Event",
-                description: "Idempotently processes incoming asynchronous webhook events from payment gateways (Mock, Stripe, Razorpay). Verifies cryptographic signatures, updates payment and order status, confirms inventory holds, and records domain outbox events.",
-                params: {
-                    type: "object",
-                    required: ["provider"],
-                    properties: {
-                        provider: { type: "string", description: "Payment provider name (mock, stripe, razorpay)" },
-                    },
-                },
-            },
-        },
-        paymentWebhookController.handleWebhook.bind(paymentWebhookController),
-    );
-
     // ----------------------------------------------------
     // Payment Initialization & Retries
     // ----------------------------------------------------
@@ -39,14 +16,14 @@ export default async function paymentRouter(app: FastifyInstance) {
             preHandler: [app.authenticate],
             schema: {
                 tags: ["Payments & Transactions"],
-                summary: "[User / Public] Initialize Payment Intent",
-                description: "Initializes a payment intent/session with the chosen payment gateway (Mock, Stripe, Razorpay) for an order in PENDING status.",
+                summary: "[User / Public] Initialize Razorpay Payment Intent",
+                description: "Initializes a payment session with Razorpay for an order in PENDING status.",
                 body: paymentSwaggerSchemas.initializePayment,
             },
         },
         paymentController.initializePayment.bind(paymentController),
     );
-    /// verify on payment success and mark as paid 
+
     app.post(
         "/verify",
         {
@@ -122,7 +99,7 @@ export default async function paymentRouter(app: FastifyInstance) {
             schema: {
                 tags: ["Payments & Transactions"],
                 summary: "[Admin: payment:refund] Process Full or Partial Refund",
-                description: "Issues a full or partial refund for a successful payment. Updates refundable balance, records ledger transaction, updates order status, and emits outbox events.",
+                description: "Issues a full or partial refund for a successful payment with Razorpay.",
                 body: paymentSwaggerSchemas.refundPayment,
             },
         },
@@ -139,7 +116,7 @@ export default async function paymentRouter(app: FastifyInstance) {
             schema: {
                 tags: ["Payments & Transactions"],
                 summary: "[Admin: payment:read] Reconcile Payment with Provider",
-                description: "Queries external payment gateway to synchronize payment state and heal missed or delayed webhook events.",
+                description: "Queries Razorpay API to synchronize payment state.",
                 body: paymentSwaggerSchemas.reconcilePayment,
             },
         },

@@ -1,7 +1,8 @@
 import { Redis, type RedisOptions } from "ioredis";
 
 const redisOptions: RedisOptions = {
-    maxRetriesPerRequest: 3,
+    maxRetriesPerRequest: null,
+    enableOfflineQueue: false,
     enableReadyCheck: true,
     autoResubscribe: true,
     autoResendUnfulfilledCommands: true,

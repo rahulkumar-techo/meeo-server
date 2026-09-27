@@ -13,6 +13,7 @@ import redis from "@/lib/redis.js";
 import { Keys } from "@/const/keys.js";
 import { mailService } from "@/common/mail/send.mail.js";
 import { generateOtpEmail } from "@/templates/otp.template.js";
+import { notificationDeliveryService } from "@/workers/services/notificationDelivery.service.js";
 
 export class AuthRegistrationService {
     async assertOtp(key: string, otp: string) {
@@ -30,7 +31,7 @@ export class AuthRegistrationService {
     }
 
     /**
-     * Registers a new user with email and password, creates verification OTP and dispatches email.
+     * Registers a new user with default CUSTOMER role, creates verification OTP and dispatches email.
      */
     async register(payload: AuthRegisterInput) {
         const { firstName, lastName, email, password } = payload;
@@ -43,6 +44,16 @@ export class AuthRegistrationService {
                 lastName,
                 email,
                 passwordHash,
+                roles: {
+                    create: {
+                        role: {
+                            connectOrCreate: {
+                                where: { name: "CUSTOMER" },
+                                create: { name: "CUSTOMER", description: "Default customer role" },
+                            },
+                        },
+                    },
+                },
             },
             select: {
                 id: true,
@@ -162,7 +173,7 @@ export class AuthRegistrationService {
     }
 
     /**
-     * Validates OTP and updates password, invalidating existing sessions.
+     * Validates OTP and updates password, invalidating existing sessions and triggering security notifications.
      */
     async resetPassword({ email, otp, password }: ResetPasswordInput) {
         await this.assertOtp(Keys.PASSWORD_RESET_OTP(email), otp);
@@ -170,7 +181,7 @@ export class AuthRegistrationService {
 
         const user = await prisma.user.findUnique({
             where: { email },
-            select: { id: true },
+            select: { id: true, firstName: true, lastName: true, email: true },
         });
 
         if (!user) {
@@ -187,6 +198,17 @@ export class AuthRegistrationService {
             where: { userId: user.id },
         });
         await redis.del(Keys.PASSWORD_RESET_OTP(email));
+
+        // Dispatch security notification to customer via push and email
+        const targetEmail = user.email || email;
+        const customerName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Valued Customer";
+        await notificationDeliveryService.sendNotificationForEvent(
+            "ACCOUNT_PASSWORD_CHANGED",
+            { userId: user.id, email: targetEmail, customerName },
+            { email: targetEmail, customerName },
+        ).catch((err) => {
+            console.error(`[AuthRegistration] Failed to send password changed notification:`, err.message);
+        });
 
         return { reset: true };
     }

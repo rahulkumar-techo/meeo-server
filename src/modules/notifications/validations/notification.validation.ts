@@ -43,6 +43,34 @@ export const sendNotificationSchema = z.object({
     data: z.record(z.string(), z.any()).optional(),
 });
 
+export const registerDeviceTokenSchema = z.object({
+    token: z.string().min(10, "Valid device token is required"),
+    platform: z.enum(["web", "android", "ios"]).optional().default("web"),
+    userAgent: z.string().optional(),
+});
+
+export const unregisterDeviceTokenSchema = z.object({
+    token: z.string().min(10, "Valid device token is required"),
+});
+
+/**
+ * Schema for administrative notification filtering across all channels and users.
+ */
+export const adminNotificationFilterSchema = z.object({
+    userId: z.string().uuid().optional(),
+    channel: z.enum(["EMAIL", "PUSH", "IN_APP"]).optional(),
+    status: z.enum(["PENDING", "SENT", "FAILED", "READ"]).optional(),
+    type: z.string().trim().optional(),
+    search: z.string().trim().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
 export type NotificationQueryInput = z.infer<typeof notificationQuerySchema>;
 export type UpdateNotificationPreferencesInput = z.infer<typeof updateNotificationPreferencesSchema>;
 export type SendNotificationInput = z.infer<typeof sendNotificationSchema>;
+export type RegisterDeviceTokenInput = z.infer<typeof registerDeviceTokenSchema>;
+export type UnregisterDeviceTokenInput = z.infer<typeof unregisterDeviceTokenSchema>;
+export type AdminNotificationFilterInput = z.infer<typeof adminNotificationFilterSchema>;

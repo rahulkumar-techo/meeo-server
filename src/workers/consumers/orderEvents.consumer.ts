@@ -1,4 +1,4 @@
-import { processedEventService } from "../../services/processedEvent.service.js";
+import { processedEventService } from "@/modules/outbox/services/processedEvent.service.js";
 
 export interface OrderEventPayload {
     id: string;
@@ -31,38 +31,29 @@ export class OrderEventsConsumer {
                 const orderNumber = payload?.orderNumber ?? aggregateId;
 
                 switch (eventType) {
+                    case "ORDER_CREATED":
+                    case "ORDER_PAID":
                     case "ORDER_CONFIRMED":
-                        console.log(`[OrderEventsConsumer] Processing ORDER_CONFIRMED for Order #${orderNumber}`);
-                        // Example: Trigger order confirmation email, generate invoice PDF, notify logistics
+                        console.log(`[OrderEventsConsumer] Processing ${eventType} for Order #${orderNumber}`);
                         break;
-
                     case "ORDER_PROCESSING":
                         console.log(`[OrderEventsConsumer] Processing ORDER_PROCESSING for Order #${orderNumber}`);
-                        // Example: Notify warehouse fulfillment system
                         break;
-
                     case "ORDER_SHIPPED":
+                    case "ORDER_OUT_FOR_DELIVERY":
                         console.log(
-                            `[OrderEventsConsumer] Processing ORDER_SHIPPED for Order #${orderNumber} (Carrier: ${payload?.carrier}, Tracking: ${payload?.trackingNumber})`,
+                            `[OrderEventsConsumer] Processing ${eventType} for Order #${orderNumber} (Carrier: ${payload?.carrier || "Standard"}, Tracking: ${payload?.trackingNumber || "N/A"})`,
                         );
-                        // Example: Send shipping dispatch email/SMS with tracking link
                         break;
-
                     case "ORDER_DELIVERED":
                         console.log(`[OrderEventsConsumer] Processing ORDER_DELIVERED for Order #${orderNumber}`);
-                        // Example: Send delivery feedback request / request review
                         break;
-
                     case "ORDER_CANCELLED":
                         console.log(`[OrderEventsConsumer] Processing ORDER_CANCELLED for Order #${orderNumber}`);
-                        // Example: Send cancellation email and notify accounting
                         break;
-
                     case "ORDER_EXPIRED":
                         console.log(`[OrderEventsConsumer] Processing ORDER_EXPIRED for Order #${orderNumber}`);
-                        // Example: Send cart recovery reminder / expiration notification
                         break;
-
                     default:
                         console.log(`[OrderEventsConsumer] Unhandled order event type: ${eventType}`);
                 }

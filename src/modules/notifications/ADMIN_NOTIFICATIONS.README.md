@@ -17,8 +17,10 @@
 3. [Multi-Channel Dispatch & Template Engine](#multi-channel-dispatch--template-engine)
 4. [Admin Endpoints Summary](#admin-endpoints-summary)
 5. [Admin Endpoint Specifications & Scenarios](#admin-endpoint-specifications--scenarios)
-   - [1. Dispatch Targeted or Broadcast Notification (`POST /send`)](#1-dispatch-targeted-or-broadcast-notification-post-send)
-   - [2. Retry Failed Notification Delivery (`POST /:id/retry`)](#2-retry-failed-notification-delivery-post-idretry)
+   - [1. Notification Dashboard Overview & KPIs (`GET /admin/overview`)](#1-notification-dashboard-overview--kpis-get-adminoverview)
+   - [2. Filter Platform Notifications (`GET /admin`)](#2-filter-platform-notifications-get-admin)
+   - [3. Dispatch Targeted or Broadcast Notification (`POST /send`)](#3-dispatch-targeted-or-broadcast-notification-post-send)
+   - [4. Retry Failed Notification Delivery (`POST /:id/retry`)](#4-retry-failed-notification-delivery-post-idretry)
 6. [Supported Notification Templates & Placeholders](#supported-notification-templates--placeholders)
 7. [Delivery Error Tracking & Self-Healing](#delivery-error-tracking--self-healing)
 8. [Security & Error Codes Reference](#security--error-codes-reference)
@@ -81,11 +83,11 @@ All administrative notification operations require an `Authorization: Bearer <to
 
 ### Supported Channels
 
-| Channel | Identifier | Provider Driver | Typical Use Case |
-|---|---|---|---|
-| **Email** | `EMAIL` | Resend / Nodemailer / SMTP | Order invoices, password resets, payment receipts, shipping tracking links |
-| **Push** | `PUSH` | Firebase Cloud Messaging (FCM) / Web Push | Flash sale announcements, urgent order status updates, delivery arrival alerts |
-| **In-App** | `IN_APP` | PostgreSQL Persistent Feed | Notification bell badge, persistent customer inbox, order history alerts |
+| Channel | Identifier | Provider Driver | Required Configuration | Typical Use Case |
+|---|---|---|---|---|
+| **Email** | `EMAIL` | Resend / Nodemailer / SMTP / Brevo | `BREVO_API_KEY`, `BREVO_SENDER_EMAIL` | Order invoices, password resets, payment receipts, shipping tracking links |
+| **Push** | `PUSH` | Firebase Cloud Messaging (FCM) / Web Push | `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | Flash sale announcements, urgent order status updates, delivery arrival alerts |
+| **In-App** | `IN_APP` | PostgreSQL Persistent Feed | Database Connection | Notification bell badge, persistent customer inbox, order history alerts |
 
 ---
 
@@ -93,6 +95,8 @@ All administrative notification operations require an `Authorization: Bearer <to
 
 | Method | Endpoint | Required Permission | Description |
 |---|---|---|---|
+| `GET` | `/api/v1/notifications/admin/overview` | `system:manage` | Notification dashboard KPIs, channel usage breakdown, device platform stats |
+| `GET` | `/api/v1/notifications/admin` | `system:manage` | Filter all platform notifications by channel, status, user, date, or search query |
 | `POST` | `/api/v1/notifications/send` | `system:manage` | Dispatch custom or template-based notification across selected channels |
 | `POST` | `/api/v1/notifications/:id/retry` | `system:manage` | Re-attempt delivery for a previously failed notification record |
 
@@ -102,7 +106,149 @@ All administrative notification operations require an `Authorization: Bearer <to
 
 ---
 
-### 1. Dispatch Targeted or Broadcast Notification (`POST /send`)
+### 1. Notification Dashboard Overview & KPIs (`GET /admin/overview`)
+
+Retrieves platform-wide aggregated notification metrics, channel usage (Push, Email, In-App), active device token counts, and recent failed deliveries for admin operations.
+
+- **Method**: `GET`
+- **URL**: `/api/v1/notifications/admin/overview`
+- **Permission**: `system:manage` or `SUPER_ADMIN`
+
+#### Scenarios
+
+##### Scenario 1.A: Success (`200 OK`)
+```json
+{
+  "status": "success",
+  "data": {
+    "overview": {
+      "totalNotifications": 12450,
+      "todayNotifications": 430,
+      "successfulDeliveries": 12320,
+      "failedDeliveries": 80,
+      "pendingDeliveries": 50,
+      "successRate": 99.4
+    },
+    "channelBreakdown": {
+      "EMAIL": 6500,
+      "PUSH": 4200,
+      "IN_APP": 1750
+    },
+    "statusBreakdown": {
+      "SENT": 10570,
+      "READ": 1750,
+      "FAILED": 80,
+      "PENDING": 50
+    },
+    "devices": {
+      "totalRegistered": 3200,
+      "activeDevices": 3110,
+      "platforms": {
+        "web": 1850,
+        "android": 980,
+        "ios": 280
+      }
+    },
+    "recentFailures": [
+      {
+        "id": "notif-99999999-8888-7777-6666-555555555555",
+        "channel": "EMAIL",
+        "type": "ORDER_CONFIRMED",
+        "title": "Order Confirmation",
+        "lastError": "SMTP timeout error (504)",
+        "createdAt": "2026-09-27T08:50:00.000Z",
+        "user": {
+          "id": "usr-11111111-2222-3333-4444-555555555555",
+          "firstName": "John",
+          "lastName": "Doe",
+          "email": "john@example.com"
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 2. Filter Platform Notifications (`GET /admin`)
+
+Queries all platform notifications with multi-channel, status, date range, user ID, and text search filters.
+
+- **Method**: `GET`
+- **URL**: `/api/v1/notifications/admin`
+- **Permission**: `system:manage` or `SUPER_ADMIN`
+
+#### Query Parameters
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `channel` | `enum` | No | - | Filter by channel: `EMAIL`, `PUSH`, `IN_APP` |
+| `status` | `enum` | No | - | Filter by status: `PENDING`, `SENT`, `FAILED`, `READ` |
+| `type` | `string` | No | - | Filter by event type (e.g. `ORDER_CONFIRMED`, `PROMOTION`) |
+| `userId` | `UUID` | No | - | Filter by target recipient user ID |
+| `search` | `string` | No | - | Searches across title, body, user email, or user name |
+| `startDate` | `ISO Date` | No | - | Filter notifications on/after this date |
+| `endDate` | `ISO Date` | No | - | Filter notifications on/before this date |
+| `page` | `integer` | No | `1` | Page number |
+| `limit` | `integer` | No | `20` | Results per page (Max: 100) |
+
+#### Scenarios
+
+##### Scenario 2.A: Success (`200 OK`)
+```json
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "id": "notif-11111111-2222-3333-4444-555555555555",
+        "userId": "usr-11111111-2222-3333-4444-555555555555",
+        "type": "ORDER_SHIPPED",
+        "title": "Your Order Has Shipped!",
+        "body": "Package #ORD-1001 is on its way via FedEx.",
+        "channel": "PUSH",
+        "status": "SENT",
+        "attempts": 1,
+        "lastError": null,
+        "readAt": null,
+        "sentAt": "2026-09-27T08:30:00.000Z",
+        "createdAt": "2026-09-27T08:30:00.000Z",
+        "user": {
+          "id": "usr-11111111-2222-3333-4444-555555555555",
+          "firstName": "John",
+          "lastName": "Doe",
+          "email": "john@example.com",
+          "phone": "+1234567890"
+        }
+      }
+    ],
+    "summary": {
+      "total": 1,
+      "channelCounts": {
+        "EMAIL": 0,
+        "PUSH": 1,
+        "IN_APP": 0
+      },
+      "statusCounts": {
+        "SENT": 1,
+        "FAILED": 0,
+        "PENDING": 0,
+        "READ": 0
+      }
+    },
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+---
+
+### 3. Dispatch Targeted or Broadcast Notification (`POST /send`)
 
 Dispatches a custom or campaign notification to a specific user (by `userId`), a standalone email recipient (by `recipientEmail`), or multiple communication channels.
 
@@ -204,7 +350,7 @@ Dispatches a custom or campaign notification to a specific user (by `userId`), a
 
 ---
 
-### 2. Retry Failed Notification Delivery (`POST /:id/retry`)
+### 4. Retry Failed Notification Delivery (`POST /:id/retry`)
 
 Retries a previously failed notification delivery (e.g. SMTP timeout or push connection error).
 

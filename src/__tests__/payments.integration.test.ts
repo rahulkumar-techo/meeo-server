@@ -9,7 +9,8 @@ const { paymentServiceMock, authPrismaMock } = vi.hoisted(() => ({
         initializePayment: vi.fn(),
         retryPayment: vi.fn(),
         getPaymentById: vi.fn(),
-        processWebhook: vi.fn(),
+        verifyPayment: vi.fn(),
+        failPayment: vi.fn(),
         processRefund: vi.fn(),
         reconcilePayment: vi.fn(),
         listPayments: vi.fn(),
@@ -183,36 +184,37 @@ describe("Payment HTTP Routes Integration Tests", () => {
         expect(body.data.status).toBe("SUCCESS");
     });
 
-    it("ingests webhook event via POST /api/payments/webhook/:provider", async () => {
+    it("verifies payment signature via POST /api/payments/verify", async () => {
         const app = await createTestApp();
+        const { token } = mockCustomerUser();
 
-        paymentServiceMock.processWebhook.mockResolvedValue({
-            idempotent: false,
-            message: "Webhook processed successfully",
-            status: "COMPLETED",
+        paymentServiceMock.verifyPayment.mockResolvedValue({
+            verified: true,
             paymentId: "c1111111-95e3-4d22-b5e1-0bfab4b901a1",
+            orderId: "d1111111-95e3-4d22-b5e1-0bfab4b901a1",
+            status: "SUCCESS",
+            message: "Payment verified and order confirmed successfully",
         });
 
         const response = await app.inject({
             method: "POST",
-            url: "/api/payments/webhook/razorpay",
+            url: "/api/payments/verify",
             headers: {
-                "x-test-bypass-signature": "true",
+                authorization: `Bearer ${token}`,
             },
             payload: {
-                id: "evt_test_123",
-                type: "payment_intent.succeeded",
-                data: {
-                    paymentId: "c1111111-95e3-4d22-b5e1-0bfab4b901a1",
-                    amount: 150.0,
-                },
+                orderId: "d1111111-95e3-4d22-b5e1-0bfab4b901a1",
+                razorpayOrderId: "order_123",
+                razorpayPaymentId: "pay_123",
+                razorpaySignature: "sig_123",
             },
         });
 
         expect(response.statusCode).toBe(200);
         const body = response.json();
-        expect(body.received).toBe(true);
-        expect(body.status).toBe("COMPLETED");
+        expect(body.success).toBe(true);
+        expect(body.data.verified).toBe(true);
+        expect(body.data.status).toBe("SUCCESS");
     });
 
     it("processes refund via POST /api/payments/refund with admin authorization", async () => {

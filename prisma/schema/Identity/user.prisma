@@ -37,6 +37,7 @@ model User {
   reviewReports   ReviewReport[] @relation("UserReviewReports")
   notifications          Notification[]
   notificationPreference NotificationPreference?
+  deviceTokens           DeviceToken[]
   idempotencyKeys        IdempotencyKey[]
 
   createdRefunds    Refund[]    @relation("RefundRequestedBy")

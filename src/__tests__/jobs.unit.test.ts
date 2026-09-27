@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { WorkerNodeService } from "@/modules/jobs/services/workerNode.service.js";
-import { JobOverviewService } from "@/modules/jobs/services/jobOverview.service.js";
-import { JobListService } from "@/modules/jobs/services/jobList.service.js";
-import { JobOperationsService } from "@/modules/jobs/services/jobOperations.service.js";
+import { WorkerNodeService } from "@/jobs/services/workerNode.service.js";
+import { JobOverviewService } from "@/jobs/services/jobOverview.service.js";
+import { JobListService } from "@/jobs/services/jobList.service.js";
+import { JobOperationsService } from "@/jobs/services/jobOperations.service.js";
 import { prisma } from "@/lib/prisma.js";
 import * as queueLib from "@/lib/queue.js";
 

@@ -10,6 +10,10 @@ export default async function notificationRouter(app: FastifyInstance) {
     // ----------------------------------------------------
     // User In-App Notifications
     // ----------------------------------------------------
+
+
+    
+
     app.get(
         "/",
         {
@@ -96,6 +100,67 @@ export default async function notificationRouter(app: FastifyInstance) {
     );
 
     // ----------------------------------------------------
+    // User Device Push Tokens (FCM)
+    // ----------------------------------------------------
+    app.post(
+        "/devices",
+        {
+            preHandler: [app.authenticate],
+            schema: {
+                tags: ["Notifications & Preferences"],
+                summary: "[Authenticated User] Register or update device push token",
+                description: "Registers an FCM device token for mobile (iOS/Android) or web browser push notifications.",
+                security: [{ bearerAuth: [] }],
+                body: {
+                    type: "object",
+                    required: ["token"],
+                    properties: {
+                        token: { type: "string", minLength: 10 },
+                        platform: { type: "string", enum: ["web", "android", "ios"], default: "web" },
+                        userAgent: { type: "string" },
+                    },
+                },
+            },
+        },
+        notificationController.registerDeviceToken.bind(notificationController),
+    );
+
+    app.delete(
+        "/devices",
+        {
+            preHandler: [app.authenticate],
+            schema: {
+                tags: ["Notifications & Preferences"],
+                summary: "[Authenticated User] Unregister device push token",
+                description: "Deactivates an FCM device push token (e.g. on user logout).",
+                security: [{ bearerAuth: [] }],
+                body: {
+                    type: "object",
+                    required: ["token"],
+                    properties: {
+                        token: { type: "string", minLength: 10 },
+                    },
+                },
+            },
+        },
+        notificationController.unregisterDeviceToken.bind(notificationController),
+    );
+
+    app.get(
+        "/devices",
+        {
+            preHandler: [app.authenticate],
+            schema: {
+                tags: ["Notifications & Preferences"],
+                summary: "[Authenticated User] List my registered devices",
+                description: "Lists all active registered device tokens and platforms for the authenticated user.",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        notificationController.listMyDeviceTokens.bind(notificationController),
+    );
+
+    // ----------------------------------------------------
     // User Notification Preferences
     // ----------------------------------------------------
     app.get(
@@ -128,8 +193,43 @@ export default async function notificationRouter(app: FastifyInstance) {
     );
 
     // ----------------------------------------------------
-    // Admin Notification Management & Manual Dispatch
+    // Admin Notification Management & Analytics
     // ----------------------------------------------------
+    app.get(
+        "/admin/overview",
+        {
+            preHandler: [
+                app.authenticate,
+                app.requirePermission(PERMISSIONS.SYSTEM_MANAGE),
+            ],
+            schema: {
+                tags: ["Notifications & Preferences"],
+                summary: "[Admin: system:manage] Notification dashboard overview and KPIs",
+                description: "Retrieves platform-wide notification stats, breakdown by channel (Email, Push, In-App), delivery success rates, and registered device counts.",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        notificationController.getAdminOverview.bind(notificationController),
+    );
+
+    app.get(
+        "/admin",
+        {
+            preHandler: [
+                app.authenticate,
+                app.requirePermission(PERMISSIONS.SYSTEM_MANAGE),
+            ],
+            schema: {
+                tags: ["Notifications & Preferences"],
+                summary: "[Admin: system:manage] List all platform notifications with filters",
+                description: "Administrative query across all user notifications with channel, status, event type, date range, and search filters.",
+                security: [{ bearerAuth: [] }],
+                querystring: notificationSwaggerSchemas.adminNotificationFilter,
+            },
+        },
+        notificationController.listAllNotifications.bind(notificationController),
+    );
+
     app.post(
         "/send",
         {
@@ -172,3 +272,4 @@ export default async function notificationRouter(app: FastifyInstance) {
         notificationController.retryNotification.bind(notificationController),
     );
 }
+

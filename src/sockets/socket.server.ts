@@ -223,6 +223,15 @@ export async function publishRealtimeEvent<T>(
 }
 
 /**
+ * Checks if a user is currently online with an active socket connection.
+ */
+export function isUserSocketConnected(userId: string): boolean {
+    if (!ioInstance) return false;
+    const room = ioInstance.sockets.adapter.rooms.get(SOCKET_ROOMS.USER(userId));
+    return Boolean(room && room.size > 0);
+}
+
+/**
  * Convenience helper: Send event to a specific user.
  */
 export async function emitToUser<T>(userId: string, event: SocketEventType, data: T): Promise<void> {

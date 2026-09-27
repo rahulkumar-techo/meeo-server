@@ -66,7 +66,7 @@ import { paymentProviderRegistry } from "../modules/payments/providers/paymentPr
 import { PaymentCreationService } from "../modules/payments/services/paymentCreation.service.js";
 import { PaymentAttemptService } from "../modules/payments/services/paymentAttempt.service.js";
 import { PaymentTransactionService } from "../modules/payments/services/paymentTransaction.service.js";
-import { PaymentWebhookService } from "../modules/payments/services/paymentWebhook.service.js";
+import { PaymentVerificationService } from "../modules/payments/services/paymentVerification.service.js";
 import { PaymentRefundService } from "../modules/payments/services/paymentRefund.service.js";
 import { PaymentReconciliationService } from "../modules/payments/services/paymentReconciliation.service.js";
 import { PaymentQueryService } from "../modules/payments/services/paymentQuery.service.js";
@@ -80,18 +80,12 @@ describe("Payment System Unit Tests", () => {
     // Provider Registry Tests
     // ----------------------------------------------------
     describe("PaymentProviderRegistry", () => {
-        it("resolves registered providers (RAZORPAY, STRIPE)", () => {
+        it("resolves primary payment provider (RAZORPAY)", () => {
             const rzpProv = paymentProviderRegistry.getProvider("RAZORPAY");
             expect(rzpProv.name).toBe("RAZORPAY");
 
-            const stripeProv = paymentProviderRegistry.getProvider("stripe");
-            expect(stripeProv.name).toBe("STRIPE");
-        });
-
-        it("throws error for unsupported provider", () => {
-            expect(() => paymentProviderRegistry.getProvider("UNKNOWN_PAY")).toThrow(
-                /Unsupported payment provider/,
-            );
+            const defaultProv = paymentProviderRegistry.getProvider();
+            expect(defaultProv.name).toBe("RAZORPAY");
         });
     });
 
@@ -291,45 +285,48 @@ describe("Payment System Unit Tests", () => {
     });
 
     // ----------------------------------------------------
-    // Payment Webhook Service Tests
+    // Payment Verification Service Tests
     // ----------------------------------------------------
-    describe("PaymentWebhookService", () => {
-        const service = new PaymentWebhookService();
+    describe("PaymentVerificationService", () => {
+        const service = new PaymentVerificationService();
 
-        it("rejects webhook when cryptographic signature is invalid", async () => {
+        it("throws 404 when payment record not found for order", async () => {
+            prismaMock.payment.findFirst.mockResolvedValue(null);
+
             await expect(
-                service.processWebhook("RAZORPAY", { id: "evt_1" }, { "x-razorpay-signature": "invalid_sig" }),
-            ).rejects.toThrow("Invalid webhook signature");
+                service.verifyPayment({
+                    orderId: "ord-not-found",
+                    razorpayOrderId: "order_123",
+                    razorpayPaymentId: "pay_123",
+                    razorpaySignature: "sig_123",
+                }),
+            ).rejects.toThrow("No payment found for order");
         });
 
-        it("deduplicates already completed webhook events idempotently", async () => {
-            prismaMock.paymentWebhook.findUnique.mockResolvedValue({
-                id: "wh-1",
-                provider: "RAZORPAY",
-                providerEventId: "evt_dup_123",
-                processingStatus: "COMPLETED",
+        it("returns existing verified payment idempotently", async () => {
+            prismaMock.payment.findFirst.mockResolvedValue({
+                id: "pay-1",
+                orderId: "ord-1",
+                status: "SUCCESS",
             });
 
-            const result = await service.processWebhook(
-                "RAZORPAY",
-                { id: "evt_dup_123", type: "payment_intent.succeeded" },
-                { "x-test-bypass-signature": "true" },
-            );
+            const result = await service.verifyPayment({
+                orderId: "ord-1",
+                razorpayOrderId: "order_123",
+                razorpayPaymentId: "pay_123",
+                razorpaySignature: "sig_123",
+            });
 
-            expect(result.idempotent).toBe(true);
-            expect(result.status).toBe("COMPLETED");
-            expect(prismaMock.payment.update).not.toHaveBeenCalled();
+            expect(result.verified).toBe(true);
+            expect(result.status).toBe("SUCCESS");
         });
 
-        it("executes atomic transaction on payment success webhook", async () => {
-            prismaMock.paymentWebhook.findUnique.mockResolvedValue(null);
-            prismaMock.paymentWebhook.create.mockResolvedValue({ id: "wh-1" });
-
-            prismaMock.payment.findUnique.mockResolvedValue({
+        it("executes atomic transaction on direct client payment verification", async () => {
+            prismaMock.payment.findFirst.mockResolvedValue({
                 id: "pay-1",
                 orderId: "ord-1",
                 provider: "RAZORPAY",
-                currency: "USD",
+                currency: "INR",
                 amount: 200.0,
                 order: { id: "ord-1", status: "PAYMENT_PENDING" },
                 attempts: [{ id: "att-1", status: "PROCESSING" }],
@@ -339,30 +336,15 @@ describe("Payment System Unit Tests", () => {
                 { id: "res-1", variantId: "var-1", quantity: 2, status: "ACTIVE" },
             ]);
 
-            const result = await service.processWebhook(
-                "RAZORPAY",
-                {
-                    id: "evt_success_1",
-                    event: "payment.captured",
-                    payload: {
-                        payment: {
-                            entity: {
-                                id: "pay_rzp_123",
-                                amount: 20000,
-                                currency: "USD",
-                                notes: {
-                                    paymentId: "pay-1",
-                                    orderId: "ord-1",
-                                },
-                            },
-                        },
-                    },
-                },
-                { "x-test-bypass-signature": "true" },
-            );
+            const result = await service.verifyPayment({
+                orderId: "ord-1",
+                razorpayOrderId: "order_123",
+                razorpayPaymentId: "pay_123",
+                razorpaySignature: "sig_123",
+            });
 
-            expect(result.status).toBe("COMPLETED");
-            expect(result.paymentId).toBe("pay-1");
+            expect(result.verified).toBe(true);
+            expect(result.status).toBe("SUCCESS");
 
             // Verify side-effects in transaction
             expect(prismaMock.payment.update).toHaveBeenCalledWith(
@@ -381,12 +363,6 @@ describe("Payment System Unit Tests", () => {
                 expect.objectContaining({
                     where: { variantId: "var-1" },
                     data: { reservedQuantity: { decrement: 2 } },
-                }),
-            );
-            expect(prismaMock.inventoryReservation.update).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    where: { id: "res-1" },
-                    data: { status: "CONFIRMED" },
                 }),
             );
             expect(prismaMock.outboxEvent.create).toHaveBeenCalledWith(

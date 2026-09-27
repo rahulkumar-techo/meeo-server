@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { OutboxRetryService } from "@/modules/outbox/services/outboxRetry.service.js";
 import { OutboxPublisherService } from "@/modules/outbox/services/outboxPublisher.service.js";
 import { ProcessedEventService } from "@/modules/outbox/services/processedEvent.service.js";
-import { EventRouter } from "@/modules/outbox/handlers/eventRouter.js";
-import { orderEventsConsumer } from "@/modules/outbox/handlers/consumers/orderEventsConsumer.js";
-import { paymentEventsConsumer } from "@/modules/outbox/handlers/consumers/paymentEventsConsumer.js";
+import { EventRouter } from "@/workers/consumers/eventRouter.js";
+import { orderEventsConsumer } from "@/workers/consumers/orderEvents.consumer.js";
+import { paymentEventsConsumer } from "@/workers/consumers/paymentEvents.consumer.js";
 import { prisma } from "@/lib/prisma.js";
 import * as queueLib from "@/lib/queue.js";
 

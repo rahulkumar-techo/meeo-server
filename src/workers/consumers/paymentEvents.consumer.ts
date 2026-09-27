@@ -1,4 +1,4 @@
-import { processedEventService } from "../../services/processedEvent.service.js";
+import { processedEventService } from "@/modules/outbox/services/processedEvent.service.js";
 
 export interface PaymentEventPayload {
     id: string;
@@ -29,27 +29,23 @@ export class PaymentEventsConsumer {
                 const { eventType, aggregateId, payload } = event;
 
                 switch (eventType) {
+                    case "ORDER_PAID":
                     case "PAYMENT_SUCCESS":
                         console.log(
-                            `[PaymentEventsConsumer] Processing PAYMENT_SUCCESS for Payment ${aggregateId} (Order: ${payload?.orderId}, Amount: ${payload?.amount} ${payload?.currency})`,
+                            `[PaymentEventsConsumer] Processing ${eventType} for Payment ${aggregateId} (Order: ${payload?.orderId || payload?.orderNumber || "N/A"}, Amount: ${payload?.amount ?? "N/A"} ${payload?.currency || "INR"})`,
                         );
-                        // Example: Issue customer payment receipt, update ledger balances
                         break;
-
                     case "PAYMENT_FAILED":
                         console.log(
-                            `[PaymentEventsConsumer] Processing PAYMENT_FAILED for Payment ${aggregateId} (Reason: ${payload?.reason})`,
+                            `[PaymentEventsConsumer] Processing PAYMENT_FAILED for Payment ${aggregateId} (Reason: ${payload?.reason || "Unknown"})`,
                         );
-                        // Example: Send payment failure alert with retry checkout link
                         break;
-
                     case "PAYMENT_REFUNDED":
+                    case "REFUND_INITIATED":
                         console.log(
-                            `[PaymentEventsConsumer] Processing PAYMENT_REFUNDED for Payment ${aggregateId} (Refund Amount: ${payload?.amount})`,
+                            `[PaymentEventsConsumer] Processing ${eventType} for Payment ${aggregateId} (Refund Amount: ${payload?.amount ?? "N/A"})`,
                         );
-                        // Example: Send refund confirmation note, update financial accounts
                         break;
-
                     default:
                         console.log(`[PaymentEventsConsumer] Unhandled payment event type: ${eventType}`);
                 }

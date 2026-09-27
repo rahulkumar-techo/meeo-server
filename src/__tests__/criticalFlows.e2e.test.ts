@@ -46,7 +46,7 @@ const {
     },
     paymentServiceMock: {
         initializePayment: vi.fn(),
-        processWebhook: vi.fn(),
+        verifyPayment: vi.fn(),
         getPaymentById: vi.fn(),
     },
     notificationDispatcherMock: {
@@ -105,6 +105,9 @@ vi.mock("../modules/payments/services/payment.service.js", () => ({
 vi.mock("../modules/notifications/services/notificationDispatcher.service.js", () => ({
     notificationDispatcherService: notificationDispatcherMock,
 }));
+vi.mock("../workers/services/notificationDelivery.service.js", () => ({
+    notificationDeliveryService: notificationDispatcherMock,
+}));
 vi.mock("../modules/outbox/services/outboxPublisher.service.js", () => ({
     outboxPublisherService: outboxPublisherMock,
 }));
@@ -122,7 +125,7 @@ import paymentRouter from "../modules/payments/routes/payment.route.js";
 import notificationRouter from "../modules/notifications/routes/notification.route.js";
 import { generateAccessToken } from "../common/utils/token.js";
 import { errorHandler } from "../common/errors/error-handler.js";
-import { NotificationConsumer } from "../modules/outbox/handlers/consumers/notificationConsumer.js";
+import { NotificationConsumer } from "../workers/consumers/notification.consumer.js";
 
 describe("Critical Business Flows E2E Integration Tests", () => {
     beforeEach(() => {
@@ -430,53 +433,41 @@ describe("Critical Business Flows E2E Integration Tests", () => {
     });
 
     // =========================================================================
-    // Flow 4: Payment Webhook → Order Confirmation
+    // Flow 4: Payment Verification → Order Confirmation
     // =========================================================================
-    describe("Critical Flow 4: Payment Webhook → Order Confirmation", () => {
-        it("processes payment capture webhook and confirms order state", async () => {
+    describe("Critical Flow 4: Payment Verification → Order Confirmation", () => {
+        it("verifies client payment signature and confirms order state", async () => {
             const app = await createTestApp();
+            const { token } = mockCustomerUser();
 
-            paymentServiceMock.processWebhook.mockResolvedValue({
-                acknowledged: true,
+            paymentServiceMock.verifyPayment.mockResolvedValue({
+                verified: true,
                 paymentId: "pay-777",
                 orderId: "b11a4180-65aa-42ec-a945-5fd21dec0538",
-                status: "CAPTURED",
-                gatewayEvent: "payment.captured",
+                status: "SUCCESS",
+                message: "Payment verified and order confirmed successfully",
             });
 
-            const webhookPayload = {
-                event: "payment.captured",
-                payload: {
-                    payment: {
-                        entity: {
-                            id: "pay_rzp_gateway_999",
-                            order_id: "order_rzp_gateway_12345",
-                            status: "captured",
-                            amount: 8800,
-                            currency: "USD",
-                        },
-                    },
-                },
+            const verifyPayload = {
+                orderId: "b11a4180-65aa-42ec-a945-5fd21dec0538",
+                razorpayOrderId: "order_rzp_gateway_12345",
+                razorpayPaymentId: "pay_rzp_gateway_999",
+                razorpaySignature: "valid-crypto-hmac-signature",
             };
 
-            const webhookRes = await app.inject({
+            const verifyRes = await app.inject({
                 method: "POST",
-                url: "/api/payments/webhook/razorpay",
+                url: "/api/payments/verify",
                 headers: {
-                    "x-razorpay-signature": "valid-crypto-hmac-signature",
+                    authorization: `Bearer ${token}`,
                 },
-                payload: webhookPayload,
+                payload: verifyPayload,
             });
 
-            expect(webhookRes.statusCode).toBe(200);
-            expect(webhookRes.json().status).toBe("CAPTURED");
-            expect(paymentServiceMock.processWebhook).toHaveBeenCalledWith(
-                "razorpay",
-                webhookPayload,
-                expect.objectContaining({
-                    "x-razorpay-signature": "valid-crypto-hmac-signature",
-                }),
-            );
+            expect(verifyRes.statusCode).toBe(200);
+            expect(verifyRes.json().success).toBe(true);
+            expect(verifyRes.json().data.status).toBe("SUCCESS");
+            expect(paymentServiceMock.verifyPayment).toHaveBeenCalledWith(verifyPayload);
         });
     });
 

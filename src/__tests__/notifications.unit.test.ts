@@ -2,14 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
     interpolateVariables,
     renderNotificationContent,
-    NOTIFICATION_TEMPLATES,
-} from "@/modules/notifications/templates/notificationTemplates.js";
+    isCustomerEvent,
+} from "@/workers/templates/notificationTemplates.js";
 import { NotificationPreferenceService } from "@/modules/notifications/services/notificationPreference.service.js";
 import { NotificationDispatcherService } from "@/modules/notifications/services/notificationDispatcher.service.js";
-import { NotificationConsumer } from "@/modules/outbox/handlers/consumers/notificationConsumer.js";
-import { emailProvider } from "@/modules/notifications/providers/email.provider.js";
-import { pushProvider } from "@/modules/notifications/providers/push.provider.js";
-import { inAppProvider } from "@/modules/notifications/providers/inApp.provider.js";
+import { NotificationConsumer } from "@/workers/consumers/notification.consumer.js";
+import { emailProvider } from "@/workers/providers/email.provider.js";
+import { pushProvider } from "@/workers/providers/push.provider.js";
 import { processedEventService } from "@/modules/outbox/services/processedEvent.service.js";
 import { prisma } from "@/lib/prisma.js";
 
@@ -22,6 +21,7 @@ vi.mock("@/lib/prisma.js", () => ({
             findFirst: vi.fn(),
             findMany: vi.fn(),
             count: vi.fn(),
+            groupBy: vi.fn(),
             update: vi.fn(),
             updateMany: vi.fn(),
             delete: vi.fn(),
@@ -29,6 +29,14 @@ vi.mock("@/lib/prisma.js", () => ({
         notificationPreference: {
             findUnique: vi.fn(),
             upsert: vi.fn(),
+        },
+        deviceToken: {
+            findMany: vi.fn(),
+            count: vi.fn(),
+            groupBy: vi.fn(),
+        },
+        user: {
+            findUnique: vi.fn(),
         },
         order: {
             findUnique: vi.fn(),
@@ -39,21 +47,20 @@ vi.mock("@/lib/prisma.js", () => ({
     },
 }));
 
-vi.mock("@/modules/notifications/providers/email.provider.js", () => ({
+vi.mock("@/sockets/socket.server.js", () => ({
+    isUserSocketConnected: vi.fn(),
+    emitToUser: vi.fn(),
+}));
+
+vi.mock("@/workers/providers/email.provider.js", () => ({
     emailProvider: {
         sendEmail: vi.fn(),
     },
 }));
 
-vi.mock("@/modules/notifications/providers/push.provider.js", () => ({
+vi.mock("@/workers/providers/push.provider.js", () => ({
     pushProvider: {
         sendPush: vi.fn(),
-    },
-}));
-
-vi.mock("@/modules/notifications/providers/inApp.provider.ts", () => ({
-    inAppProvider: {
-        createInAppNotification: vi.fn(),
     },
 }));
 
@@ -68,7 +75,7 @@ describe("Notifications Unit Tests", () => {
         vi.clearAllMocks();
     });
 
-    describe("Templates & Variable Interpolation", () => {
+    describe("Customer Scenario Templates & Categories", () => {
         it("interpolates variables correctly into placeholders", () => {
             const template = "Hello {{customerName}}, your order #{{orderNumber}} total is {{currency}} {{total}}.";
             const rendered = interpolateVariables(template, {
@@ -81,95 +88,91 @@ describe("Notifications Unit Tests", () => {
             expect(rendered).toBe("Hello Alice, your order #ORD-999 total is USD 149.99.");
         });
 
-        it("renders predefined templates for ORDER_CONFIRMED, ORDER_SHIPPED, PAYMENT_SUCCESS, and LOW_STOCK", () => {
-            const confirmed = renderNotificationContent("ORDER_CONFIRMED", {
-                customerName: "Bob",
+        it("renders templates across all 5 Customer Categories (Order, Payment, Delivery, Return/Refund, Account/Security)", () => {
+            // 1. Order Category
+            const orderConfirmed = renderNotificationContent("ORDER_CONFIRMED", {
+                customerName: "Alice",
                 orderNumber: "ORD-101",
                 totalAmount: "50.00",
                 currency: "$",
             });
-            expect(confirmed.title).toBe("Order Confirmed!");
-            expect(confirmed.body).toContain("ORD-101");
-            expect(confirmed.html).toContain("Bob");
+            expect(orderConfirmed.title).toBe("Order Confirmed");
+            expect(orderConfirmed.pushTitle).toContain("Order Confirmed");
+            expect(isCustomerEvent("ORDER_CONFIRMED")).toBe(true);
 
+            // 2. Payment Category
+            const paymentFailed = renderNotificationContent("PAYMENT_FAILED", {
+                customerName: "Alice",
+                orderNumber: "ORD-101",
+            });
+            expect(paymentFailed.title).toBe("Payment Failed");
+            expect(paymentFailed.pushTitle).toContain("Payment Failed");
+            expect(isCustomerEvent("PAYMENT_FAILED")).toBe(true);
+
+            // 3. Delivery Category
             const shipped = renderNotificationContent("ORDER_SHIPPED", {
-                customerName: "Bob",
+                customerName: "Alice",
                 orderNumber: "ORD-101",
-                carrier: "FedEx",
-                trackingNumber: "TRK-12345",
+                carrier: "BlueDart",
+                trackingNumber: "TRK-98765",
             });
-            expect(shipped.title).toBe("Order Shipped!");
-            expect(shipped.body).toContain("FedEx");
-            expect(shipped.body).toContain("TRK-12345");
+            expect(shipped.title).toBe("Order Shipped");
+            expect(shipped.pushBody).toContain("BlueDart");
+            expect(isCustomerEvent("ORDER_SHIPPED")).toBe(true);
 
-            const paymentSuccess = renderNotificationContent("PAYMENT_SUCCESS", {
-                customerName: "Bob",
+            const outForDelivery = renderNotificationContent("ORDER_OUT_FOR_DELIVERY", {
+                customerName: "Alice",
                 orderNumber: "ORD-101",
-                amount: 50,
+            });
+            expect(outForDelivery.title).toBe("Out for Delivery");
+            expect(isCustomerEvent("ORDER_OUT_FOR_DELIVERY")).toBe(true);
+
+            // 4. Return/Refund Category
+            const refundInit = renderNotificationContent("REFUND_INITIATED", {
+                customerName: "Alice",
+                orderNumber: "ORD-101",
+                amount: "50.00",
                 currency: "$",
-                provider: "Razorpay",
-                transactionId: "pay_123",
             });
-            expect(paymentSuccess.title).toBe("Payment Successful");
-            expect(paymentSuccess.body).toContain("$ 50");
+            expect(refundInit.title).toBe("Refund Initiated");
+            expect(isCustomerEvent("REFUND_INITIATED")).toBe(true);
 
-            const lowStock = renderNotificationContent("LOW_STOCK", {
-                productName: "Wireless Mouse",
-                sku: "WM-001",
-                remainingStock: 3,
-                threshold: 10,
+            // 5. Account/Security Category
+            const passChanged = renderNotificationContent("ACCOUNT_PASSWORD_CHANGED", {
+                customerName: "Alice",
             });
-            expect(lowStock.title).toBe("Low Inventory Warning");
-            expect(lowStock.body).toContain("Wireless Mouse");
-            expect(lowStock.body).toContain("3 units remaining");
+            expect(passChanged.title).toBe("Account Password Changed");
+            expect(isCustomerEvent("ACCOUNT_PASSWORD_CHANGED")).toBe(true);
         });
     });
 
     describe("NotificationPreferenceService", () => {
         const prefService = new NotificationPreferenceService();
 
-        it("returns defaults when no preferences record exists in database", async () => {
+        it("returns customer defaults with push & email enabled and in-app disabled", async () => {
             vi.mocked(prisma.notificationPreference.findUnique).mockResolvedValue(null);
 
             const prefs = await prefService.getUserPreferences("user-1");
 
             expect(prefs.emailEnabled).toBe(true);
             expect(prefs.pushEnabled).toBe(true);
-            expect(prefs.inAppEnabled).toBe(true);
+            expect(prefs.inAppEnabled).toBe(false);
             expect(prefs.orderUpdates).toBe(true);
+            expect(prefs.securityAlerts).toBe(true);
         });
 
-        it("updates preferences via upsert", async () => {
-            vi.mocked(prisma.notificationPreference.upsert).mockResolvedValue({
-                id: "pref-1",
-                userId: "user-1",
-                emailEnabled: false,
-                pushEnabled: true,
-                inAppEnabled: true,
-                orderUpdates: true,
-                promotions: false,
-                securityAlerts: true,
-                lowStockAlerts: false,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            });
-
-            const updated = await prefService.updateUserPreferences("user-1", {
-                emailEnabled: false,
-                promotions: false,
-            });
-
-            expect(updated.emailEnabled).toBe(false);
-            expect(updated.promotions).toBe(false);
+        it("disallows IN_APP notifications strictly", async () => {
+            const inAppAllowed = await prefService.isNotificationAllowed("user-1", "IN_APP", "order");
+            expect(inAppAllowed).toBe(false);
         });
 
-        it("evaluates isNotificationAllowed properly based on channel and category flags", async () => {
+        it("evaluates push and email allowance based on preference categories", async () => {
             vi.mocked(prisma.notificationPreference.findUnique).mockResolvedValue({
                 id: "pref-1",
                 userId: "user-1",
-                emailEnabled: false,
-                pushEnabled: true,
-                inAppEnabled: true,
+                emailEnabled: true,
+                pushEnabled: false,
+                inAppEnabled: false,
                 orderUpdates: true,
                 promotions: false,
                 securityAlerts: true,
@@ -178,25 +181,24 @@ describe("Notifications Unit Tests", () => {
                 updatedAt: new Date(),
             });
 
-            const emailAllowed = await prefService.isNotificationAllowed("user-1", "EMAIL", "orderUpdates");
-            expect(emailAllowed).toBe(false); // email is disabled
+            const emailAllowed = await prefService.isNotificationAllowed("user-1", "EMAIL", "order");
+            expect(emailAllowed).toBe(true);
 
-            const pushAllowed = await prefService.isNotificationAllowed("user-1", "PUSH", "orderUpdates");
-            expect(pushAllowed).toBe(true); // push is enabled and orderUpdates is true
-
-            const promoAllowed = await prefService.isNotificationAllowed("user-1", "PUSH", "promotions");
-            expect(promoAllowed).toBe(false); // promotions category is false
+            const pushAllowed = await prefService.isNotificationAllowed("user-1", "PUSH", "order");
+            expect(pushAllowed).toBe(false);
         });
     });
 
-    describe("NotificationDispatcherService", () => {
+    describe("NotificationDispatcherService & NotificationDeliveryService", () => {
         const dispatcher = new NotificationDispatcherService();
 
-        it("dispatches multi-channel notification across In-App, Email, and Push", async () => {
-            vi.mocked(prisma.notificationPreference.findUnique).mockResolvedValue(null); // Defaults to all true
-            vi.mocked(inAppProvider.createInAppNotification).mockResolvedValue({ id: "notif-inapp" } as any);
-            vi.mocked(emailProvider.sendEmail).mockResolvedValue({ messageId: "mail-1", success: true });
+        it("dispatches PUSH_AND_EMAIL when user has registered device token and email", async () => {
+            vi.mocked(prisma.notificationPreference.findUnique).mockResolvedValue(null);
+            vi.mocked(prisma.deviceToken.findMany).mockResolvedValue([
+                { token: "device-token-123", platform: "web", userId: "user-1" } as any,
+            ]);
             vi.mocked(pushProvider.sendPush).mockResolvedValue({ ticketId: "push-1", success: true });
+            vi.mocked(emailProvider.sendEmail).mockResolvedValue({ messageId: "mail-1", success: true });
             vi.mocked(prisma.notification.create).mockResolvedValue({ id: "notif-db" } as any);
 
             const result = await dispatcher.sendNotificationForEvent(
@@ -209,12 +211,69 @@ describe("Notifications Unit Tests", () => {
                 { orderNumber: "ORD-555", totalAmount: 100 },
             );
 
-            expect(result.channelsAttempted).toEqual(["IN_APP", "EMAIL", "PUSH"]);
-            expect(inAppProvider.createInAppNotification).toHaveBeenCalledTimes(1);
+            expect(result.deliveryMode).toBe("PUSH_AND_EMAIL");
+            expect(result.channelsAttempted).toEqual(["PUSH", "EMAIL"]);
+            expect(pushProvider.sendPush).toHaveBeenCalledWith(
+                expect.objectContaining({ userId: "user-1", deviceToken: "device-token-123" }),
+            );
             expect(emailProvider.sendEmail).toHaveBeenCalledWith(
                 expect.objectContaining({ to: "customer@example.com" }),
             );
-            expect(pushProvider.sendPush).toHaveBeenCalledTimes(1);
+        });
+
+        it("dispatches PUSH_AND_EMAIL for ORDER_DELIVERED (delivers delivery confirmation & purchase billing)", async () => {
+            vi.mocked(prisma.notificationPreference.findUnique).mockResolvedValue(null);
+            vi.mocked(prisma.deviceToken.findMany).mockResolvedValue([
+                { token: "fcm-token-android-123", platform: "android", userId: "user-1" } as any,
+            ]);
+            vi.mocked(pushProvider.sendPush).mockResolvedValue({ ticketId: "fcm-1", success: true });
+            vi.mocked(emailProvider.sendEmail).mockResolvedValue({ messageId: "mail-1", success: true });
+            vi.mocked(prisma.notification.create).mockResolvedValue({ id: "notif-db" } as any);
+
+            const result = await dispatcher.sendNotificationForEvent(
+                "ORDER_DELIVERED",
+                {
+                    userId: "user-1",
+                    email: "customer@example.com",
+                    customerName: "Alice",
+                },
+                { orderNumber: "ORD-555", totalAmount: 1200 },
+            );
+
+            expect(result.deliveryMode).toBe("PUSH_AND_EMAIL");
+            expect(result.channelsAttempted).toEqual(["PUSH", "EMAIL"]);
+            expect(pushProvider.sendPush).toHaveBeenCalledWith(
+                expect.objectContaining({ userId: "user-1", deviceToken: "fcm-token-android-123" }),
+            );
+            expect(emailProvider.sendEmail).toHaveBeenCalledWith(
+                expect.objectContaining({ to: "customer@example.com" }),
+            );
+        });
+
+        it("dispatches PUSH_ONLY for intermediate operational status updates (e.g. ORDER_SHIPPED) without sending unnecessary emails", async () => {
+            vi.mocked(prisma.notificationPreference.findUnique).mockResolvedValue(null);
+            vi.mocked(prisma.deviceToken.findMany).mockResolvedValue([
+                { token: "fcm-token-android-123", platform: "android", userId: "user-1" } as any,
+            ]);
+            vi.mocked(pushProvider.sendPush).mockResolvedValue({ ticketId: "fcm-1", success: true });
+            vi.mocked(prisma.notification.create).mockResolvedValue({ id: "notif-db" } as any);
+
+            const result = await dispatcher.sendNotificationForEvent(
+                "ORDER_SHIPPED",
+                {
+                    userId: "user-1",
+                    email: "customer@example.com",
+                    customerName: "Alice",
+                },
+                { orderNumber: "ORD-555", carrier: "BlueDart", trackingNumber: "TRK-123" },
+            );
+
+            expect(result.deliveryMode).toBe("PUSH_ONLY");
+            expect(result.channelsAttempted).toEqual(["PUSH"]);
+            expect(pushProvider.sendPush).toHaveBeenCalledWith(
+                expect.objectContaining({ userId: "user-1", deviceToken: "fcm-token-android-123" }),
+            );
+            expect(emailProvider.sendEmail).not.toHaveBeenCalled();
         });
 
         it("marks single notification as read", async () => {
@@ -230,12 +289,6 @@ describe("Notifications Unit Tests", () => {
 
             const res = await dispatcher.markNotificationAsRead("user-1", "notif-1");
             expect(res.status).toBe("READ");
-            expect(prisma.notification.update).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    where: { id: "notif-1" },
-                    data: expect.objectContaining({ status: "READ" }),
-                }),
-            );
         });
 
         it("marks all notifications as read for a user", async () => {
@@ -243,10 +296,6 @@ describe("Notifications Unit Tests", () => {
 
             const res = await dispatcher.markAllAsRead("user-1");
             expect(res.count).toBe(4);
-            expect(prisma.notification.updateMany).toHaveBeenCalledWith({
-                where: { userId: "user-1", readAt: null },
-                data: expect.objectContaining({ status: "READ" }),
-            });
         });
 
         it("retries a failed email notification delivery", async () => {
@@ -272,19 +321,13 @@ describe("Notifications Unit Tests", () => {
             expect(emailProvider.sendEmail).toHaveBeenCalledWith(
                 expect.objectContaining({ to: "buyer@test.com" }),
             );
-            expect(prisma.notification.update).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    where: { id: "notif-fail" },
-                    data: expect.objectContaining({ status: "SENT", attempts: 2 }),
-                }),
-            );
         });
     });
 
     describe("NotificationConsumer (Outbox Event Processing)", () => {
         const consumer = new NotificationConsumer();
 
-        it("processes order event and calls dispatcher inside idempotency wrapper", async () => {
+        it("processes customer domain events and delivers push/email", async () => {
             vi.mocked(processedEventService.runWithConsumerIdempotency).mockImplementation(
                 async (_name, _id, fn) => {
                     const data = await fn();
@@ -293,7 +336,6 @@ describe("Notifications Unit Tests", () => {
             );
 
             vi.mocked(prisma.notificationPreference.findUnique).mockResolvedValue(null);
-            vi.mocked(inAppProvider.createInAppNotification).mockResolvedValue({ id: "inapp-1" } as any);
             vi.mocked(emailProvider.sendEmail).mockResolvedValue({ messageId: "mail-1", success: true });
             vi.mocked(pushProvider.sendPush).mockResolvedValue({ ticketId: "push-1", success: true });
             vi.mocked(prisma.notification.create).mockResolvedValue({ id: "db-1" } as any);

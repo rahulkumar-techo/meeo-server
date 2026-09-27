@@ -26,22 +26,22 @@ const { jobOverviewServiceMock, jobListServiceMock, jobOperationsServiceMock, wo
     },
 }));
 
-vi.mock("../modules/jobs/services/jobOverview.service.js", () => ({
+vi.mock("../jobs/services/jobOverview.service.js", () => ({
     jobOverviewService: jobOverviewServiceMock,
 }));
-vi.mock("../modules/jobs/services/jobList.service.js", () => ({
+vi.mock("../jobs/services/jobList.service.js", () => ({
     jobListService: jobListServiceMock,
 }));
-vi.mock("../modules/jobs/services/jobOperations.service.js", () => ({
+vi.mock("../jobs/services/jobOperations.service.js", () => ({
     jobOperationsService: jobOperationsServiceMock,
 }));
-vi.mock("../modules/jobs/services/workerNode.service.js", () => ({
+vi.mock("../jobs/services/workerNode.service.js", () => ({
     workerNodeService: workerNodeServiceMock,
 }));
 vi.mock("../lib/prisma.js", () => ({ prisma: authPrismaMock }));
 
 import authPlugin from "../plugins/auth.plugin.js";
-import jobRouter from "../modules/jobs/routes/job.route.js";
+import jobRouter from "../jobs/routes/job.route.js";
 import { generateAccessToken } from "../common/utils/token.js";
 import { errorHandler } from "../common/errors/error-handler.js";
 import { PERMISSIONS } from "../modules/authorization/permission.constants.js";

@@ -1,1342 +1,316 @@
-# Advanced E-Commerce Backend Architecture
+# Enterprise E-Commerce Backend Platform
 
-## Overview
-
-This document defines the architecture and technical foundation for a scalable, reliable, and maintainable e-commerce backend.
-
-The system uses an **Advanced Modular Monolith Architecture** with two independently deployable applications:
-
-* **API Server** — Handles client requests and synchronous business operations.
-* **Worker Server** — Handles asynchronous jobs and background processing.
-
-Both applications share the same codebase and core business modules but run as separate processes or servers.
+> **Production-Ready, High-Throughput Modular Monolith Architecture**  
+> Powered by Fastify, TypeScript, PostgreSQL (Prisma ORM), Redis, BullMQ, Socket.io, and Node-Cron.
 
 ---
 
-# 1. Architecture Goals
+## 📑 Table of Contents
 
-The backend is designed to provide:
-
-* Modular architecture
-* High reliability
-* Horizontal scalability
-* Background job processing
-* Event-driven communication
-* Transaction safety
-* Retry mechanisms
-* Failure recovery
-* Idempotent processing
-* Secure authentication
-* API rate limiting
-* Database consistency
-* Future migration path to microservices
-
-The system should avoid premature microservice complexity while maintaining clear boundaries between business domains.
+1. [System Overview & Architectural Philosophy](#-system-overview--architectural-philosophy)
+2. [High-Level System Topology](#-high-level-system-topology)
+3. [Technology Stack](#-technology-stack)
+4. [Repository & Codebase Structure](#-repository--codebase-structure)
+5. [Core Domain Modules](#-core-domain-modules)
+6. [Resilience & Event-Driven Patterns](#-resilience--event-driven-patterns)
+7. [Background Workers & Scheduled Cron Engine](#-background-workers--scheduled-cron-engine)
+8. [Real-Time WebSocket Architecture](#-real-time-websocket-architecture)
+9. [Observability & Operational Health](#-observability--operational-health)
+10. [Getting Started & Local Development](#-getting-started--local-development)
+11. [Available NPM Scripts](#-available-npm-scripts)
+12. [API & Interactive Documentation](#-api--interactive-documentation)
 
 ---
 
-# 2. Technology Stack
+## 🏛️ System Overview & Architectural Philosophy
 
-## Backend
+This platform implements an **Enterprise Modular Monolith** designed for high concurrency, fault tolerance, and developer velocity. It balances strict domain isolation with low operational complexity:
 
-* Node.js
-* TypeScript
-* Fastify
-
-## Database
-
-* PostgreSQL
-* Prisma ORM
-
-## Cache and Queue
-
-* Redis
-* BullMQ
-
-## Validation
-
-* Zod
-* Fastify Type Provider for Zod
-
-## Authentication
-
-* JWT
-* Refresh Tokens
-* Argon2 Password Hashing
-
-## Security
-
-* Helmet
-* CORS
-* Rate Limiting
-* Input Validation
-
-## Documentation
-
-* Swagger
-* OpenAPI
-
-## Logging
-
-* Pino
-
-## Testing
-
-* Vitest
+* **Single Unified Process**: API endpoints, WebSockets, background BullMQ workers, and scheduled cron jobs run cohesively in a single process during development, while remaining decoupled for independent containerized scaling in production.
+* **Transactional Outbox Guarantee**: All state changes and domain events are persisted in atomic database transactions, preventing data inconsistency between PostgreSQL and external message brokers.
+* **Two-Phase Inventory Reservations**: Stock is reserved with a TTL during checkout and committed upon payment confirmation, eliminating overselling in high-traffic drop-sales.
+* **Zero-Downtime Resilience**: Automatic reconnects, exponential backoff retries, dead-letter queues (DLQ), and self-healing cron sweepers keep the system healthy under transient failures.
 
 ---
 
-# 3. High-Level Architecture
+## 🌐 High-Level System Topology
 
 ```text
-                         CLIENT APPLICATION
-                                │
-                                ▼
-                        ┌───────────────┐
-                        │   API SERVER  │
-                        │               │
-                        │    Fastify    │
-                        └───────┬───────┘
-                                │
-             ┌──────────────────┼──────────────────┐
-             │                  │                  │
-             ▼                  ▼                  ▼
-       PostgreSQL             Redis           Object Storage
-             │                  │
-             │                  │
-             ▼                  ▼
-       Outbox Events        BullMQ Queue
-                                │
-                                ▼
-                        ┌───────────────┐
-                        │ WORKER SERVER │
-                        │               │
-                        │ Background    │
-                        │ Processing    │
-                        └───────────────┘
+                                CLIENTS & FRONTEND
+                      (Web App / Mobile App / Admin Portal)
+                                       │
+                                       │ HTTPS / WSS
+                                       ▼
+                     ┌───────────────────────────────────┐
+                     │          FASTIFY GATEWAY          │
+                     │  - Helmet / CORS / Rate Limiting  │
+                     │  - JWT Cookie & Bearer Auth       │
+                     │  - Zod Request Validation         │
+                     └─────────┬───────────────┬─────────┘
+                               │               │
+                     ┌─────────▼────────┐      │
+                     │  REST & GRAPHQL  │      │
+                     │  BUSINESS DOMAIN │      │
+                     └─────────┬────────┘      │
+                               │               │
+        ┌──────────────────────┼───────────────┼──────────────────────┐
+        │                      │               │                      │
+        ▼                      ▼               ▼                      ▼
+┌───────────────┐      ┌───────────────┐ ┌───────────────┐    ┌───────────────┐
+│  POSTGRESQL   │      │  REDIS CACHE  │ │   SOCKET.IO   │    │ OBJECT STORAGE│
+│  (Prisma ORM) │      │  & IDEMPOTENCY│ │ REAL-TIME HUB │    │  (ImageKit)   │
+│               │      │               │ │               │    │               │
+│ - Domain Data │      │ - API Cache   │ │ - Order Feeds │    │ - Product CDN │
+│ - Outbox Table│      │ - Rate Limits │ │ - Admin Tele- │    │ - Invoices    │
+│ - Event Logs  │      │ - Locks & TTL │ │   metry       │    │               │
+└───────┬───────┘      └───────┬───────┘ └───────────────┘    └───────────────┘
+        │                      │
+        │ Atomic Poller        │ Queue Broker
+        ▼                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       ASYNC ENGINE & WORKER THREADS                         │
+│                                                                             │
+│  ┌────────────────────────┐              ┌────────────────────────┐         │
+│  │   SCHEDULED CRON JOBS  │              │     BULLMQ WORKERS     │         │
+│  │   (node-cron)          │              │                        │         │
+│  │                        │              │ - Domain Event Router  │         │
+│  │ - Outbox Publisher     ├─────────────►│ - Order Notification   │         │
+│  │ - Stale Order Sweeper  │              │ - Payment Settlement   │         │
+│  │ - Node Heartbeat Relay │              │ - Dead Letter (DLQ)    │         │
+│  └────────────────────────┘              └────────────────────────┘         │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-# 4. Modular Monolith Architecture
+## 💻 Technology Stack
 
-The application is deployed as a monolith but internally organized into independent business modules.
+| Layer | Technologies | Key Advantages |
+| :--- | :--- | :--- |
+| **Runtime & Language** | Node.js (v20+), TypeScript 5.8+ | Strongly typed, async I/O, modern ES modules |
+| **HTTP Framework** | Fastify v5 | High-throughput, low-overhead HTTP lifecycle |
+| **Database & ORM** | PostgreSQL 15+, Prisma ORM 7 | Multi-file modular schema, strict relations |
+| **Caching & Queues** | Redis 7+ (ioredis), BullMQ | High-speed cache, distributed FIFO/priority queues |
+| **Scheduling** | `node-cron` | Declarative cron jobs for polling & self-healing sweepers |
+| **Real-Time** | Socket.io v4 | Bi-directional events with room-based pub/sub |
+| **API Protocols** | REST (OpenAPI 3 / Swagger) + GraphQL (Yoga) | Flexible client integration and complete schema docs |
+| **Security & Auth** | Argon2, JWT, HttpOnly Cookies, Helmet, Rate Limits | Production security baseline and brute-force defense |
+| **Testing** | Vitest 4, Supertest | Rapid unit, integration, and E2E test execution |
+
+---
+
+## 📁 Repository & Codebase Structure
 
 ```text
-backend/
+server/
+├── prisma/                          # Multi-file Prisma schema configuration
+│   ├── schema/                      # Domain schema slices (auth, catalog, orders, etc.)
+│   └── schema.prisma                # Aggregated root Prisma schema
 │
-├── apps/
+├── src/
+│   ├── common/                      # Cross-cutting primitives
+│   │   ├── errors/                  # AppError, standard HTTP exceptions
+│   │   ├── middleware/              # Auth guards, RBAC, rate-limiting hooks
+│   │   ├── utils/                   # Crypto, pagination, date, response helpers
+│   │   └── docs/                    # Swagger & OpenAPI documentation models
 │   │
-│   ├── api/
-│   │   └── main.ts
+│   ├── config/                      # Environment schema validation (Zod)
+│   ├── lib/                         # Core infrastructure singletons (Prisma, Redis, BullMQ)
 │   │
-│   └── worker/
-│       └── main.ts
-│
-├── modules/
+│   ├── cron/                        # 🕒 Scheduled Periodic Cron Jobs (node-cron)
+│   │   ├── outboxPublisher.cron.ts  # Outbox table -> BullMQ event publisher
+│   │   ├── orderSweeper.cron.ts     # Abandoned checkout & reservation reaper
+│   │   ├── workerHeartbeat.cron.ts  # Node heartbeat & observability reporter
+│   │   └── index.ts                 # Unified lifecycle manager (start/stop)
 │   │
-│   ├── auth/
-│   ├── users/
-│   ├── products/
-│   ├── categories/
-│   ├── brands/
-│   ├── inventory/
-│   ├── cart/
-│   ├── wishlist/
-│   ├── checkout/
-│   ├── orders/
-│   ├── payments/
-│   ├── coupons/
-│   ├── addresses/
-│   ├── reviews/
-│   ├── notifications/
-│   ├── search/
-│   ├── analytics/
-│   └── admin/
-│
-├── infrastructure/
+│   ├── jobs/                        # 🐂 Background Jobs & Worker Infrastructure
+│   │   ├── controller/              # Admin Job Monitoring endpoints
+│   │   ├── routes/                  # /api/v1/jobs routing table
+│   │   ├── services/                # Telemetry, queue metrics, DLQ replay
+│   │   └── workers/                 # BullMQ Queue Processors
+│   │       ├── domainEvent.worker.ts# Main domain event processor
+│   │       ├── deadLetter.worker.ts # Dead Letter Queue processor & alerts
+│   │       └── index.ts             # BullMQ worker lifecycle manager
 │   │
-│   ├── database/
-│   ├── redis/
-│   ├── queue/
-│   ├── events/
-│   ├── storage/
-│   └── logging/
-│
-├── common/
+│   ├── modules/                     # 📦 Core Domain Modules (Modular Monolith)
+│   │   ├── auth/                    # Login, register, token rotation, sessions
+│   │   ├── users/                   # Profiles, addresses, security settings
+│   │   ├── catalog/                 # Products, categories, attributes, brands
+│   │   ├── inventory/               # Two-phase reservations, stock logs
+│   │   ├── cart/                    # Cart items, guest merge, validations
+│   │   ├── wishlist/                # User wishlists & stock alerts
+│   │   ├── orders/                  # Order state machine, invoices, sweepers
+│   │   ├── payments/                # Razorpay/Stripe, webhooks, refunds
+│   │   ├── coupons/                 # Coupon codes, validation, usage tracking
+│   │   ├── promotions/              # Automatic promotions engine, rules
+│   │   ├── reviews/                 # Product reviews, ratings, verification
+│   │   ├── notifications/           # In-app, push & email notification consumers
+│   │   ├── search/                  # Fuzzy filtering, suggestions, autocomplete
+│   │   ├── dashboard/               # Admin analytics & business KPIs
+│   │   ├── auditLog/                # Compliance & administrative audit trail
+│   │   └── outbox/                  # Transactional outbox event router & retry
 │   │
-│   ├── errors/
-│   ├── middleware/
-│   ├── types/
-│   ├── utils/
-│   └── constants/
+│   ├── sockets/                     # ⚡ Real-Time Socket.io Server & Rooms
+│   ├── app.ts                       # Fastify application factory & plugin registry
+│   └── server.ts                    # Application entrypoint (HTTP + Socket + Workers + Cron)
 │
-├── prisma/
-│   └── schema.prisma
-│
-└── tests/
+└── src/__tests__/                   # Comprehensive Unit & Integration Test Suites (49+ suites)
 ```
 
 ---
 
-# 5. Core E-Commerce Modules
+## 📦 Core Domain Modules
 
-## Authentication
+### 1. 🔐 Authentication & Session Security
+* **Access & Refresh Tokens**: Dual-token architecture using HttpOnly, SameSite cookies with body fallback.
+* **Token Rotation**: Refresh tokens are single-use with automatic token revocation upon detection of reuse attempts.
+* **Password Hashing**: State-of-the-art memory-hard hashing via Argon2id.
+* **Role-Based Access Control (RBAC)**: Fine-grained permissions for `CUSTOMER`, `STAFF`, and `ADMIN`.
 
-Responsibilities:
+### 2. 🛍️ Product Catalog & Search
+* **Flexible Variations**: Color/size variants, custom specifications, SKU tracking, and image galleries.
+* **Hierarchical Categories**: Recursive category trees with nested subcategory queries.
+* **Cursor Pagination**: Ultra-fast compound cursor pagination (`id + createdAt`) avoiding expensive `OFFSET` queries.
+* **Search Engine**: Fuzzy search with price filtering, rating filters, brand/category facets, and autocomplete.
 
-* User registration
-* Login
-* Logout
-* JWT authentication
-* Refresh token rotation
-* Password reset
-* Email verification
-* Device/session management
-* Role-based access control
+### 3. 📦 Two-Phase Inventory Management
+* **Phase 1 (Reservation)**: When a customer begins checkout, stock is atomically shifted from `availableQuantity` to `reservedQuantity` with an expiration TTL (e.g. 15 minutes).
+* **Phase 2 (Confirmation / Release)**: Upon payment success, reservations are committed to permanent deductions. If checkout is cancelled or times out, the stock is released back into available inventory.
 
----
-
-## Users
-
-Responsibilities:
-
-* User profile
-* Account settings
-* Multiple addresses
-* Notification preferences
-* Account status
-* Account deletion
-
----
-
-## Products
-
-Responsibilities:
-
-* Product creation
-* Product updates
-* Product images
-* Product variants
-* SKU management
-* Product attributes
-* Product pricing
-* Product status
-* Product visibility
-
----
-
-## Categories
-
-Supports hierarchical categories.
-
+### 4. 🧾 Orders & Checkout State Machine
 ```text
-Electronics
-│
-├── Smartphones
-│   ├── Android
-│   └── iOS
-│
-├── Laptops
-│
-└── Accessories
+[ PENDING ] ────────► [ PAYMENT_PENDING ] ────────► [ CONFIRMED ] ────────► [ PROCESSING ] ────────► [ SHIPPED ] ────────► [ DELIVERED ]
+     │                        │                           │
+     ▼                        ▼                           ▼
+[ EXPIRED ]              [ CANCELLED ]               [ REFUNDED ]
+```
+* **Price Snapshots**: Immutable captures of unit price, applied coupon, and tax rate at checkout time.
+* **Idempotency**: All mutation endpoints accept `x-idempotency-key` to prevent duplicate checkouts on network retries.
+
+### 5. 💳 Payments & Webhook Verification
+* **Payment Gateways**: Webhook integration with signature verification and replay protection.
+* **Refund Pipeline**: Partial and full refund execution with automatic inventory adjustments.
+
+---
+
+## 🛡️ Resilience & Event-Driven Patterns
+
+### Transactional Outbox Pattern
+To prevent distributed transaction failures, domain events are never sent directly to message brokers inside HTTP handlers. Instead:
+1. Business data and an `OutboxEvent` are written to PostgreSQL inside a single database transaction.
+2. A high-frequency `node-cron` sweeper claims pending outbox events using pessimistic row locks (`PROCESSING` state).
+3. The events are published to BullMQ with deduplication keys (`jobId = outboxId`).
+4. Upon successful publish, the event is marked `PUBLISHED`. If retries fail, it routes to the `DEAD_LETTER` queue.
+
+### Dead Letter Queue (DLQ) & Self-Healing
+* Unhandled consumer errors or poison-pill payloads are forwarded to `dead-letter-events`.
+* Administrators can inspect payload details, examine error stack traces, and trigger manual replays via `/api/v1/jobs/:id/retry` or bulk purge actions.
+
+---
+
+## 🕒 Background Workers & Scheduled Cron Engine
+
+All background workloads are neatly decoupled into dedicated directories:
+
+| Component | Path | Tooling | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Outbox Cron** | [`src/cron/outboxPublisher.cron.ts`](file:///e:/e-com/server/src/cron/outboxPublisher.cron.ts) | `node-cron` | Scans outbox every 5s and relays events to BullMQ |
+| **Order Sweeper** | [`src/cron/orderSweeper.cron.ts`](file:///e:/e-com/server/src/cron/orderSweeper.cron.ts) | `node-cron` | Auto-cancels abandoned checkouts and releases held stock |
+| **Worker Heartbeat** | [`src/cron/workerHeartbeat.cron.ts`](file:///e:/e-com/server/src/cron/workerHeartbeat.cron.ts) | `node-cron` | Emits node health telemetry to Redis every 10s |
+| **Domain Event Worker** | [`src/jobs/workers/domainEvent.worker.ts`](file:///e:/e-com/server/src/jobs/workers/domainEvent.worker.ts) | BullMQ | Consumes order, payment, and inventory domain events |
+| **DLQ Worker** | [`src/jobs/workers/deadLetter.worker.ts`](file:///e:/e-com/server/src/jobs/workers/deadLetter.worker.ts) | BullMQ | Catches failed events for operator auditing and retry |
+
+---
+
+## ⚡ Real-Time WebSocket Architecture
+
+WebSocket communication is powered by **Socket.io** (`/socket.io`), organized into secured rooms:
+
+* **User Channel** (`user:${userId}`): Live order status changes, payment confirmations, and personalized notifications.
+* **Order Tracking Channel** (`order:${orderId}`): Courier tracking, delivery coordinates, and shipment updates.
+* **Admin Telemetry Channel** (`admin:telemetry`): Real-time queue latency, job throughput, active workers, and system alerts.
+
+---
+
+## 📊 Observability & Operational Health
+
+* **Health Probes**:
+  * `GET /health` — Overall readiness, uptime, and database/Redis ping status.
+  * `GET /health/ready` — Kubernetes readiness probe.
+  * `GET /health/live` — Kubernetes liveness probe.
+  * `GET /health/workers` — Active worker nodes, CPU/RAM telemetry, and heartbeats.
+* **Prometheus Metrics**: `GET /metrics` exports standard runtime and Fastify request latencies.
+* **Structured Logging**: JSON logging via Pino with correlation `requestId` propagation across all operations.
+
+---
+
+## 🚀 Getting Started & Local Development
+
+### 1. Prerequisites
+* **Node.js**: v20.x or higher
+* **PostgreSQL**: v15.x or higher
+* **Redis**: v7.x or higher
+
+### 2. Environment Configuration
+Create a `.env` file in the root directory:
+
+```env
+PORT=3000
+HOST=0.0.0.0
+NODE_ENV=development
+
+# Database Connection
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ecommerce_db?schema=public"
+
+# Redis Cache & Queue Connection
+REDIS_URL="redis://localhost:6379"
+
+# Security & Secrets
+JWT_SECRET="your-super-secure-jwt-secret-min-32-chars"
+REFRESH_TOKEN_SECRET="your-super-secure-refresh-token-secret"
+COOKIE_SECRET="your-cookie-signing-secret"
+
+# Background & Cron Configurations
+OUTBOX_CRON_EXPRESSION="*/5 * * * * *"
+ORDER_SWEEPER_CRON_EXPRESSION="*/5 * * * *"
+HEARTBEAT_CRON_EXPRESSION="*/10 * * * * *"
 ```
 
----
+### 3. Install & Initialize
+```bash
+# 1. Install dependencies
+npm install
 
-## Inventory
+# 2. Generate Prisma client & synchronize database schema
+npm run prisma:generate
+npm run prisma:migrate
 
-Inventory is maintained independently from product information.
-
-Responsibilities:
-
-* Stock management
-* Stock adjustments
-* Stock reservations
-* Stock releases
-* Inventory history
-* Low-stock alerts
-
-Example flow:
-
-```text
-Checkout Started
-      │
-      ▼
-Reserve Inventory
-      │
-      ▼
-Payment Successful
-      │
-      ▼
-Confirm Reservation
-      │
-      ▼
-Reduce Available Stock
-```
-
-If payment fails:
-
-```text
-Release Reservation
-      │
-      ▼
-Stock Available Again
-```
-
----
-
-## Cart
-
-Responsibilities:
-
-* Add item
-* Remove item
-* Update quantity
-* Guest cart
-* User cart
-* Cart merging after login
-* Stock validation
-* Price recalculation
-
----
-
-## Wishlist
-
-Responsibilities:
-
-* Add product
-* Remove product
-* Move product to cart
-* Wishlist management
-
----
-
-## Checkout
-
-The checkout module orchestrates multiple business operations.
-
-```text
-Cart
- │
- ▼
-Validate Products
- │
- ▼
-Validate Inventory
- │
- ▼
-Apply Coupon
- │
- ▼
-Calculate Price
- │
- ▼
-Create Order
- │
- ▼
-Reserve Inventory
- │
- ▼
-Create Payment
+# 3. Start development server (HTTP + WebSockets + BullMQ + Cron)
+npm run dev
 ```
 
 ---
 
-## Orders
+## 📜 Available NPM Scripts
 
-Responsibilities:
-
-* Order creation
-* Order items
-* Address snapshot
-* Price snapshot
-* Order status
-* Order status history
-* Cancellation
-* Refunds
-* Returns
-
-Example lifecycle:
-
-```text
-PENDING
-   │
-   ▼
-PAYMENT_PENDING
-   │
-   ▼
-CONFIRMED
-   │
-   ▼
-PROCESSING
-   │
-   ▼
-SHIPPED
-   │
-   ▼
-DELIVERED
-```
-
-Alternative states:
-
-```text
-CANCELLED
-PAYMENT_FAILED
-REFUNDED
-RETURNED
-```
+| Script | Command | Description |
+| :--- | :--- | :--- |
+| `npm run dev` | `tsx watch src/server.ts` | Starts hot-reloading development server |
+| `npm run build` | `npm run prisma:generate && tsc && tsc-alias` | Builds production bundle with alias paths |
+| `npm start` | `npm run prisma:deploy && node dist/server.js` | Runs production server |
+| `npm test` | `vitest` | Runs interactive test runner |
+| `npm test -- --run` | `vitest run` | Runs all 49+ unit and integration test suites |
+| `npm run typecheck` | `tsc --noEmit` | Strict TypeScript type validation |
+| `npm run ci:verify` | Full build & test pipeline | Complete verification pipeline for CI/CD |
 
 ---
 
-## Payments
-
-The payment system should use provider abstraction.
-
-```text
-PaymentProvider
-       │
-       ├── Provider A
-       ├── Provider B
-       └── Cash On Delivery
-```
-
-Payment states:
-
-```text
-PENDING
-PROCESSING
-SUCCESS
-FAILED
-REFUNDED
-PARTIALLY_REFUNDED
-```
-
----
-
-## Coupons
-
-Supports:
-
-* Percentage discounts
-* Fixed discounts
-* Free shipping
-* Minimum order value
-* Maximum discount
-* User usage limits
-* Global usage limits
-* Product restrictions
-* Category restrictions
-* Expiration dates
-
----
-
-## Reviews
-
-Responsibilities:
-
-* Product ratings
-* Written reviews
-* Review images
-* Verified purchase validation
-* Moderation
-* Review replies
-
----
-
-## Notifications
-
-Notification channels:
-
-* Email
-* Push notifications
-* SMS
-* In-app notifications
-
-Notification events:
-
-```text
-ORDER_CREATED
-ORDER_CONFIRMED
-PAYMENT_SUCCESS
-PAYMENT_FAILED
-ORDER_SHIPPED
-ORDER_DELIVERED
-PASSWORD_RESET
-LOW_STOCK
-```
-
----
-
-# 6. API Server
-
-The API server handles synchronous requests.
-
-```text
-Client
-  │
-  ▼
-Fastify Route
-  │
-  ▼
-Validation
-  │
-  ▼
-Authentication
-  │
-  ▼
-Authorization
-  │
-  ▼
-Application Service
-  │
-  ▼
-Repository
-  │
-  ▼
-PostgreSQL
-```
-
-The API server should not perform long-running operations such as:
-
-* Sending emails
-* Processing large reports
-* Heavy analytics
-* Image processing
-* Notification delivery
-
-These operations should be delegated to the worker server.
-
----
-
-# 7. Worker Server
-
-The worker server handles asynchronous jobs.
-
-Responsibilities:
-
-* Email delivery
-* Push notifications
-* SMS delivery
-* Analytics processing
-* Report generation
-* Cleanup jobs
-* Inventory notifications
-* Retry processing
-* Scheduled jobs
-
-Architecture:
-
-```text
-Redis Queue
-     │
-     ▼
-Worker Server
-     │
-     ▼
-Fetch Required Data
-     │
-     ▼
-Execute Business Operation
-     │
-     ├───────────────┐
-     │               │
-     ▼               ▼
-SUCCESS           FAILURE
-     │               │
-     ▼               ▼
-COMPLETED        RETRY
-                     │
-                     ▼
-                  FAILED
-                     │
-                     ▼
-                    DLQ
-```
-
----
-
-# 8. Transactional Outbox Pattern
-
-The Transactional Outbox Pattern ensures that database changes and event creation happen atomically.
-
-Example:
-
-```text
-Create Order
-      +
-Create Outbox Event
-      │
-      ▼
-Single Database Transaction
-      │
-      ▼
-COMMIT
-```
-
-This prevents the problem where:
-
-```text
-Order Created Successfully
-
-BUT
-
-Event Was Never Sent
-```
-
----
-
-# 9. Outbox Events Table
-
-Recommended schema:
-
-| Column         | Type        | Description                |
-| -------------- | ----------- | -------------------------- |
-| id             | UUID / ULID | Unique event identifier    |
-| event_type     | VARCHAR     | Type of event              |
-| aggregate_type | VARCHAR     | Entity type                |
-| aggregate_id   | VARCHAR     | Entity identifier          |
-| payload        | JSONB       | Event data                 |
-| status         | VARCHAR     | Current event state        |
-| attempts       | INTEGER     | Number of publish attempts |
-| locked_by      | VARCHAR     | Publisher instance         |
-| locked_at      | TIMESTAMP   | Lock timestamp             |
-| published_at   | TIMESTAMP   | Publishing completion time |
-| created_at     | TIMESTAMP   | Event creation time        |
-| updated_at     | TIMESTAMP   | Last update time           |
-
-Example:
-
-```text
-outbox_events
-
-id: EVT_01
-event_type: ORDER_CREATED
-aggregate_type: ORDER
-aggregate_id: ORD_01
-
-payload:
-{
-  "orderId": "ORD_01"
-}
-
-status: PENDING
-attempts: 0
-locked_by: null
-locked_at: null
-published_at: null
-```
-
----
-
-# 10. Outbox Event Lifecycle
-
-The Outbox Publisher manages event delivery to the message queue.
-
-```text
-PENDING
-   │
-   │ Publisher Claims Event
-   ▼
-PROCESSING
-   │
-   ├──────────────────┐
-   │                  │
-   ▼                  ▼
-PUBLISHED           ERROR
-                      │
-                      ▼
-                 Retry Available
-                      │
-                      ▼
-                   PENDING
-                      │
-                      ▼
-                 Max Attempts
-                      │
-                      ▼
-                    FAILED
-```
-
-Important:
-
-> An outbox event is marked as `PUBLISHED` when it has been successfully handed to the queue. It does not wait for the worker to finish processing the business operation.
-
----
-
-# 11. Outbox Publisher Flow
-
-The publisher periodically fetches pending events.
-
-```text
-Every Few Seconds
-       │
-       ▼
-Fetch Pending Events
-       │
-       ▼
-Claim Event
-       │
-       ▼
-Mark PROCESSING
-       │
-       ▼
-Publish to Queue
-       │
-       ├───────────────┐
-       │               │
-       ▼               ▼
-SUCCESS              FAILURE
-       │               │
-       ▼               ▼
-PUBLISHED          RETRY
-```
-
-Recommended locking mechanism:
-
-```sql
-SELECT *
-FROM outbox_events
-WHERE status = 'PENDING'
-ORDER BY created_at
-LIMIT 100
-FOR UPDATE SKIP LOCKED;
-```
-
-`SKIP LOCKED` prevents multiple publisher instances from processing the same database row simultaneously.
-
----
-
-# 12. Processing Lease and Timeout
-
-A publisher can crash after claiming an event.
-
-Example:
-
-```text
-PENDING
-   │
-   ▼
-PROCESSING
-   │
-   ▼
-Publisher Crashes
-```
-
-Without recovery, the event could remain in `PROCESSING` forever.
-
-Use:
-
-* `locked_at`
-* `locked_by`
-* Lease timeout
-
-Example:
-
-```text
-PROCESSING
-locked_at = 10:00:00
-```
-
-If the event remains locked longer than the configured lease duration:
-
-```text
-PROCESSING
-     │
-     ▼
-Lease Expired
-     │
-     ▼
-PENDING
-     │
-     ▼
-Retry
-```
-
----
-
-# 13. Queue Worker Lifecycle
-
-The worker lifecycle is separate from the Outbox lifecycle.
-
-```text
-WAITING
-   │
-   ▼
-PROCESSING
-   │
-   ├─────────────────┐
-   │                 │
-   ▼                 ▼
-COMPLETED          ERROR
-                     │
-                     ▼
-                   RETRY
-                     │
-            ┌────────┴────────┐
-            │                 │
-            ▼                 ▼
-        COMPLETED           FAILED
-                                │
-                                ▼
-                               DLQ
-```
-
----
-
-# 14. Retry Strategy
-
-Retries should use exponential backoff.
-
-Example:
-
-```text
-Attempt 1
-Wait 5 seconds
-
-Attempt 2
-Wait 30 seconds
-
-Attempt 3
-Wait 2 minutes
-
-Attempt 4
-Wait 10 minutes
-
-Attempt 5
-FAILED
-```
-
-The retry strategy prevents immediate repeated failures from overloading dependent systems.
-
----
-
-# 15. Dead Letter Queue
-
-A Dead Letter Queue stores jobs that cannot be successfully processed after the maximum retry count.
-
-```text
-Worker
-  │
-  ▼
-Processing Failed
-  │
-  ▼
-Retry
-  │
-  ▼
-Retry Limit Reached
-  │
-  ▼
-Dead Letter Queue
-```
-
-DLQ messages should support:
-
-* Manual inspection
-* Error analysis
-* Manual retry
-* Reprocessing
-* Alerting
-
----
-
-# 16. Idempotency
-
-The system must assume that duplicate events can occur.
-
-Example:
-
-```text
-Event Published to Queue Successfully
-
-Publisher Crashes Before Marking Event PUBLISHED
-
-Lease Expires
-
-Event Published Again
-```
-
-The worker may receive the same event twice.
-
-Workers must therefore be idempotent.
-
-Example:
-
-```text
-Receive Event
-     │
-     ▼
-Check Event ID
-     │
- ┌───┴────┐
- │        │
- ▼        ▼
-Exists   New
- │        │
-Skip    Process
-```
-
-A processed event table can be used:
-
-| Column        | Description          |
-| ------------- | -------------------- |
-| event_id      | Unique event         |
-| consumer_name | Worker identifier    |
-| status        | Processing state     |
-| processed_at  | Completion timestamp |
-
----
-
-# 17. Event Delivery Guarantee
-
-The architecture provides:
-
-```text
-At-Least-Once Delivery
-```
-
-This means an event may occasionally be delivered more than once.
-
-The combination of:
-
-* Reliable event publishing
-* Retry mechanisms
-* Idempotent workers
-
-provides safe and reliable processing.
-
----
-
-# 18. Redis and BullMQ
-
-Redis is used for:
-
-* Job queues
-* Delayed jobs
-* Retry scheduling
-* Rate limiting
-* Caching
-* Distributed coordination
-
-BullMQ manages:
-
-```text
-WAITING
-ACTIVE
-COMPLETED
-FAILED
-DELAYED
-```
-
-The worker server consumes jobs independently from the API server.
-
----
-
-# 19. Rate Limiting
-
-Rate limiting should be configured by endpoint sensitivity.
-
-Example:
-
-| Endpoint Type  | Recommended Limit     |
-| -------------- | --------------------- |
-| General API    | 100 requests/minute   |
-| Login          | 5 requests/minute     |
-| Registration   | 5 requests/minute     |
-| OTP            | 3 requests/minute     |
-| Password Reset | 3 requests/15 minutes |
-| Search         | 60 requests/minute    |
-
-Redis should be used as the shared rate-limit store when multiple API servers are deployed.
-
-```text
-API Server 1
-      │
-API Server 2 ─────► Redis
-      │
-API Server 3
-```
-
----
-
-# 20. Authentication Architecture
-
-```text
-User Login
-    │
-    ▼
-Validate Credentials
-    │
-    ▼
-Verify Password
-    │
-    ▼
-Generate Access Token
-    │
-    ▼
-Generate Refresh Token
-```
-
-Recommended strategy:
-
-* Short-lived access tokens
-* Long-lived refresh tokens
-* Refresh token rotation
-* Refresh token hashing
-* Session/device tracking
-
----
-
-# 21. Security
-
-The backend should implement:
-
-* Argon2 password hashing
-* JWT validation
-* Refresh token rotation
-* Rate limiting
-* CORS configuration
-* Helmet security headers
-* Request validation
-* SQL injection protection through ORM
-* Webhook signature verification
-* Audit logging
-* Role-based access control
-* Permission-based authorization
-
----
-
-# 22. Role and Permission Architecture
-
-Avoid relying only on roles.
-
-Use permissions.
-
-Example:
-
-```text
-ADMIN
-
-products.create
-products.update
-products.delete
-
-orders.read
-orders.update
-
-users.read
-users.suspend
-```
-
-Authorization flow:
-
-```text
-Request
-   │
-   ▼
-Authenticate User
-   │
-   ▼
-Load Permissions
-   │
-   ▼
-Check Required Permission
-   │
-   ├──────────┐
-   │          │
-ALLOW       DENY
-```
-
----
-
-# 23. Error Handling
-
-Use a consistent error response format.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "PRODUCT_OUT_OF_STOCK",
-    "message": "The requested product is currently out of stock"
-  }
-}
-```
-
-Error categories:
-
-```text
-VALIDATION_ERROR
-AUTHENTICATION_ERROR
-AUTHORIZATION_ERROR
-NOT_FOUND
-CONFLICT
-RATE_LIMITED
-BUSINESS_RULE_ERROR
-INTERNAL_ERROR
-```
-
-Internal system details should never be exposed to clients.
-
----
-
-# 24. Logging and Monitoring
-
-The system should log:
-
-* API requests
-* Errors
-* Queue failures
-* Worker failures
-* Outbox publishing failures
-* Retry attempts
-* DLQ messages
-
-Important metrics:
-
-```text
-API Response Time
-Error Rate
-Database Latency
-Queue Size
-Job Processing Time
-Failed Jobs
-Retry Count
-DLQ Count
-Outbox Pending Events
-```
-
----
-
-# 25. Deployment Architecture
-
-```text
-                         INTERNET
-                            │
-                            ▼
-                      Load Balancer
-                            │
-                 ┌──────────┴──────────┐
-                 │                     │
-                 ▼                     ▼
-            API SERVER 1          API SERVER 2
-                 │                     │
-                 └──────────┬──────────┘
-                            │
-                 ┌──────────┴──────────┐
-                 │                     │
-                 ▼                     ▼
-             PostgreSQL              Redis
-                                        │
-                                        ▼
-                              ┌────────────────┐
-                              │ Worker Server  │
-                              │                │
-                              │ Worker 1       │
-                              │ Worker 2       │
-                              │ Worker 3       │
-                              └────────────────┘
-```
-
-API servers and worker servers can scale independently.
-
----
-
-# 26. Recommended Package Categories
-
-## Core
-
-```text
-fastify
-typescript
-tsx
-```
-
-## Database
-
-```text
-prisma
-@prisma/client
-pg
-```
-
-## Redis and Jobs
-
-```text
-ioredis
-bullmq
-```
-
-## Fastify Plugins
-
-```text
-@fastify/cors
-@fastify/helmet
-@fastify/jwt
-@fastify/cookie
-@fastify/rate-limit
-@fastify/sensible
-@fastify/compress
-@fastify/multipart
-```
-
-## Validation
-
-```text
-zod
-fastify-type-provider-zod
-```
-
-## Security
-
-```text
-argon2
-```
-
-## Documentation
-
-```text
-@fastify/swagger
-@fastify/swagger-ui
-```
-
-## Logging
-
-```text
-pino-pretty
-```
-
-## Testing
-
-```text
-vitest
-@vitest/coverage-v8
-```
-
----
-
-# 27. Final Event Flow
-
-```text
-1. Client Creates Order
-        │
-        ▼
-2. API Validates Request
-        │
-        ▼
-3. Database Transaction Starts
-        │
-        ├── Create Order
-        │
-        └── Create Outbox Event
-        │
-        ▼
-4. Database Transaction Commits
-        │
-        ▼
-5. Outbox Publisher Fetches Event
-        │
-        ▼
-6. Event Marked PROCESSING
-        │
-        ▼
-7. Event Published to Redis Queue
-        │
-        ▼
-8. Outbox Event Marked PUBLISHED
-        │
-        ▼
-9. Worker Receives Queue Job
-        │
-        ▼
-10. Worker Executes Business Logic
-        │
-        ├───────────────┐
-        │               │
-        ▼               ▼
-    SUCCESS           FAILURE
-        │               │
-        ▼               ▼
-   COMPLETED          RETRY
-                        │
-                        ▼
-                 Retry Limit Reached
-                        │
-                        ▼
-                       FAILED
-                        │
-                        ▼
-                        DLQ
-```
-
----
-
-# 28. Architecture Decision
-
-The recommended architecture is:
-
-```text
-MODULAR MONOLITH
-
-├── API SERVER
-│
-├── WORKER SERVER
-│
-├── PostgreSQL
-│
-├── Redis
-│
-├── BullMQ
-│
-└── Transactional Outbox Pattern
-```
-
-This architecture provides the best balance between:
-
-* Development speed
-* Operational simplicity
-* Reliability
-* Scalability
-* Maintainability
-* Future extensibility
-
-The system can later evolve toward microservices if specific modules require independent deployment, scaling, or ownership.
-
-The initial architecture, however, should remain a well-structured modular monolith to avoid unnecessary distributed-system complexity.
-
-
-
-| Technology  | Best for                                  | Main advantage                                         |
-| ----------- | ----------------------------------------- | ------------------------------------------------------ |
-| **REST**    | Public APIs, simple CRUD, integrations    | Simple, cacheable, widely supported                    |
-| **GraphQL** | Complex frontend data requirements        | Client requests exactly the data it needs              |
-
-
-```
-                    ┌──────────────────┐
-                    │   Mobile App     │
-                    │ React Native     │
-                    └────────┬─────────┘
-                             │
-                    REST / GraphQL
-                             │
-                    ┌────────▼─────────┐
-                    │   API Gateway    │
-                    │                  │
-                    │ REST + GraphQL   │
-                    └────────┬─────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              │              │              │
-              ▼              ▼              ▼
-        ┌──────────┐   ┌──────────┐   ┌──────────┐
-        │ User     │   │ Order    │   │ Product  │
-        │ Service  │   │ Service  │   │ Service  │
-        └────┬─────┘   └────┬─────┘   └────┬─────┘
-             │              │              │
-             └─────────────────┼───────────┘
-                      │
-                   Database
-
-```                    
+## 📖 API & Interactive Documentation
+
+Once the server is running, explore the interactive documentation interfaces:
+
+* **Swagger UI (REST Documentation)**: [http://localhost:3000/docs](http://localhost:3000/docs)
+* **GraphQL Playground (Yoga API)**: [http://localhost:3000/graphql](http://localhost:3000/graphql)
+* **Notifications & FCM Guide**: [src/modules/notifications/README.md](file:///e:/e-com/server/src/modules/notifications/README.md)
+* **Background Jobs API Overview**: [src/jobs/ADMIN_BACKGROUND_JOBS.README.md](file:///e:/e-com/server/src/jobs/ADMIN_BACKGROUND_JOBS.README.md)
+* **Real-Time WebSockets Guide**: [src/sockets/SOCKETS.md](file:///e:/e-com/server/src/sockets/SOCKETS.md)

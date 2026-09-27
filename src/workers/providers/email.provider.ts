@@ -9,13 +9,13 @@ export interface SendEmailOptions {
 
 export class EmailProvider {
     /**
-     * Sends an email notification using Brevo transactional email service.
+     * Sends a transactional email notification via Brevo/SMTP.
      */
     async sendEmail(options: SendEmailOptions): Promise<{ messageId: string; success: boolean }> {
         const { to, content } = options;
 
         try {
-            console.log(`[Email-Notification] 📤 Dispatching notification email to: ${to} | Subject: "${content.subject}"`);
+            console.log(`[EmailProvider] 📤 Dispatching email to: ${to} | Subject: "${content.subject}"`);
             const info = await mailService.sendMail({
                 to,
                 subject: content.subject,
@@ -23,14 +23,14 @@ export class EmailProvider {
                 html: content.html,
             });
 
-            console.log(`[Email-Notification] ✅ Notification email delivered to ${to} | Message ID: ${info?.messageId}`);
+            console.log(`[EmailProvider] ✅ Email delivered to ${to} | Message ID: ${info?.messageId}`);
 
             return {
                 messageId: info?.messageId || `mock-mail-${Date.now()}`,
                 success: true,
             };
         } catch (err: any) {
-            console.error(`[Email-Notification] ❌ Failed to send email notification to ${to}:`, err.message);
+            console.error(`[EmailProvider] ❌ Failed to send email to ${to}:`, err.message);
             throw err;
         }
     }

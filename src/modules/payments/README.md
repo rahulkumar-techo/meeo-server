@@ -2,8 +2,8 @@
 
 > **Base Route**: `/api/v1/payments`  
 > **Route Definition**: [`src/modules/payments/routes/payment.route.ts`](file:///e:/e-com/server/src/modules/payments/routes/payment.route.ts)  
-> **Controllers**: [`src/modules/payments/controller/payment.controller.ts`](file:///e:/e-com/server/src/modules/payments/controller/payment.controller.ts), [`src/modules/payments/controller/paymentWebhook.controller.ts`](file:///e:/e-com/server/src/modules/payments/controller/paymentWebhook.controller.ts)  
-> **Services**: [`src/modules/payments/services/payment.service.ts`](file:///e:/e-com/server/src/modules/payments/services/payment.service.ts)  
+> **Controllers**: [`src/modules/payments/controller/payment.controller.ts`](file:///e:/e-com/server/src/modules/payments/controller/payment.controller.ts)  
+> **Services**: [`src/modules/payments/services/payment.service.ts`](file:///e:/e-com/server/src/modules/payments/services/payment.service.ts), [`src/modules/payments/services/paymentVerification.service.ts`](file:///e:/e-com/server/src/modules/payments/services/paymentVerification.service.ts)  
 > **Validation Schemas**: [`src/modules/payments/validations/payment.validation.ts`](file:///e:/e-com/server/src/modules/payments/validations/payment.validation.ts)  
 > **Admin Guide**: [`ADMIN_PAYMENTS.README.md`](file:///e:/e-com/server/src/modules/payments/ADMIN_PAYMENTS.README.md)
 
@@ -12,45 +12,44 @@
 ## Table of Contents
 
 1. [Architecture & Design Principles](#architecture--design-principles)
-2. [Supported Payment Gateways](#supported-payment-gateways)
+2. [Supported Payment Gateway](#supported-payment-gateway)
 3. [Lifecycle & State Machine](#lifecycle--state-machine)
 4. [Endpoints Summary](#endpoints-summary)
-5. [Endpoint Specifications & Scenarios](#endpoint-specifications--scenarios)
+5. [Endpoint Specifications & Payload Contracts](#endpoint-specifications--payload-contracts)
    - [1. Initialize Payment Intent (`POST /initialize`)](#1-initialize-payment-intent-post-initialize)
-   - [2. Retry Failed Payment (`POST /retry`)](#2-retry-failed-payment-post-retry)
-   - [3. Ingest Gateway Webhook (`POST /webhook/:provider`)](#3-ingest-gateway-webhook-post-webhookprovider)
-   - [4. Get Payment Details & Attempt Ledger (`GET /:id`)](#4-get-payment-details--attempt-ledger-get-id)
-   - [5. Process Refund (`POST /refund`)](#5-process-refund-post-refund)
-   - [6. Reconcile Payment (`POST /reconcile`)](#6-reconcile-payment-post-reconcile)
-   - [7. List Payments (`GET /admin/list`)](#7-list-payments-get-adminlist)
-6. [Flow Diagrams](#flow-diagrams)
-   - [Customer Checkout & Payment Intent Flow](#customer-checkout--payment-intent-flow)
-   - [Webhook Ingestion & Order Confirmation](#webhook-ingestion--order-confirmation)
-   - [Payment Retry Workflow](#payment-retry-workflow)
-7. [Frontend Client SDK Integration](#frontend-client-sdk-integration)
+   - [2. Verify Payment Signature (`POST /verify`)](#2-verify-payment-signature-post-verify)
+   - [3. Record Payment Failure / Cancel (`POST /fail`)](#3-record-payment-failure-cancel-post-fail)
+   - [4. Retry Failed Payment (`POST /retry`)](#4-retry-failed-payment-post-retry)
+   - [5. Get Payment Details & Attempt Ledger (`GET /:id`)](#5-get-payment-details--attempt-ledger-get-id)
+   - [6. Process Refund (`POST /refund`)](#6-process-refund-post-refund)
+   - [7. Reconcile Payment (`POST /reconcile`)](#7-reconcile-payment-post-reconcile)
+   - [8. List Payments (`GET /admin/list`)](#8-list-payments-get-adminlist)
+6. [Frontend Client SDK Integration Guide (React / Next.js)](#frontend-client-sdk-integration-guide-react--nextjs)
+7. [Automated Outbox & Notification Flow](#automated-outbox--notification-flow)
 8. [Error Handling & Status Codes](#error-handling--status-codes)
 
 ---
 
 ## Architecture & Design Principles
 
-The Payments module handles financial transactions across multiple payment gateways (Stripe, Razorpay, Mock simulator) with the following core architectural guarantees:
+The Payments module is dedicated to **Razorpay** and provides clean, robust, and idempotent payment handling:
 
-- **Gateway Agnostic Abstraction**: Abstract `IPaymentProvider` interface standardizes intent creation, signature verification, capture, refund, and reconciliation.
-- **Idempotency & Deduplication**: All webhook handlers, retry calls, and refund requests are strictly idempotent to prevent duplicate charges or over-refunding.
-- **Double-Entry Ledger & Discrete Attempts**: Every payment tracks individual gateway attempts (`PaymentAttempt`) and immutable financial ledger records (`PaymentTransaction`) with signed amounts.
-- **Transactional Consistency**: Payment transitions atomically trigger order confirmations (`Order.status -> CONFIRMED`), convert inventory holds to committed stock, and emit domain events through the transactional outbox pattern.
-- **Self-Healing Reconciliation**: Active polling and reconciliation capabilities allow healing payments stuck in `PROCESSING` if webhooks are delayed or lost.
+- **Single Source of Truth**: Unified verification endpoint (`POST /verify`) validates Razorpay's cryptographic HMAC SHA-256 signature and executes atomic order confirmation.
+- **Atomic Transactional Consistency**: When payment succeeds:
+  - `Payment.status` transitions to `SUCCESS`.
+  - `Order.status` transitions to `CONFIRMED`.
+  - Reserved inventory converts from temporary hold to committed stock.
+  - An `ORDER_PAID` event is written to the **Transactional Outbox**.
+- **Double-Entry Ledger & Discrete Attempts**: Every checkout tracks discrete attempts (`PaymentAttempt`) and immutable financial ledger records (`PaymentTransaction`).
+- **Zero-Manual Background Relay**: The automated background worker periodically claims pending `OutboxEvent` records, adds them to BullMQ (`domain-events`), and triggers automated customer emails, in-app notifications, and push alerts.
 
 ---
 
-## Supported Payment Gateways
+## Supported Payment Gateway
 
 | Gateway | Identifier | Supported Methods | Features |
 |---|---|---|---|
-| **Stripe** | `STRIPE` | Credit/Debit Cards, Apple Pay, Google Pay | PaymentIntents API, 3D Secure, Cryptographic Webhook verification, Partial & Full Refunds |
-| **Razorpay** | `RAZORPAY` | UPI, Netbanking, Credit/Debit Cards, Wallets | Order creation, HMAC-SHA256 signature verification, Instant Refunds |
-| **Mock Gateway** | `MOCK` | Simulated Gateway | Deterministic test harnesses for CI/CD and local development |
+| **Razorpay** | `RAZORPAY` | UPI (GPay, PhonePe, Paytm), Netbanking, Credit/Debit Cards, Wallets | Order generation, HMAC-SHA256 signature verification, instant refunds |
 
 ---
 
@@ -58,436 +57,194 @@ The Payments module handles financial transactions across multiple payment gatew
 
 ```
               ┌────────────────────────┐
-              │        PENDING         │
+              │     PENDING / INIT     │
               └───────────┬────────────┘
-                          │
-                  POST /initialize
                           │
               ┌───────────▼────────────┐
-              │       PROCESSING       │
-              └───────────┬────────────┘
-                          │
-          ┌───────────────┴───────────────┐
-          │                               │
-    Webhook: SUCCESS                Webhook: FAILED
-          │                               │
-          ▼                               ▼
-  ┌───────────────┐               ┌───────────────┐
-  │    SUCCESS    │               │    FAILED     │◀─── POST /retry
-  └───────┬───────┘               └───────────────┘
-          │
-  POST /refund (Partial/Full)
-          │
-          ▼
-  ┌───────────────┐
-  │   REFUNDED /  │
-  │ PARTIALLY_REF │
-  └───────────────┘
+              │    REQUIRES_ACTION     │ (Razorpay Checkout Modal Open)
+              └─────┬────────────┬─────┘
+                    │            │
+      [Payment Verified]   [User Cancels / Bank Fails]
+                    │            │
+                    ▼            ▼
+       ┌─────────────────┐  ┌───────────┐
+       │     SUCCESS     │  │  FAILED   │ ──► [POST /retry] ──► New Attempt
+       └────────┬────────┘  └───────────┘
+                │
+         [POST /refund]
+                │
+                ▼
+       ┌────────────────────────┐
+       │   REFUNDED / PARTIAL   │
+       └────────────────────────┘
 ```
 
 ---
 
 ## Endpoints Summary
 
-| Method | Endpoint | Auth / Permission | Description |
+| Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/v1/payments/initialize` | Public / User (`optionalAuthenticate`) | Create payment intent/session for a pending order |
-| `POST` | `/api/v1/payments/retry` | Public / User (`optionalAuthenticate`) | Create new attempt for a pending or failed payment |
-| `POST` | `/api/v1/payments/webhook/:provider` | Public (Gateway Signature Checked) | Ingest asynchronous gateway event |
-| `GET` | `/api/v1/payments/:id` | Public / User / Admin | Fetch payment record, attempts, ledger transactions |
-| `POST` | `/api/v1/payments/refund` | Admin (`payment:refund`) | Execute full or partial refund with gateway dispatch |
-| `POST` | `/api/v1/payments/reconcile` | Admin (`payment:read`) | Reconcile payment state directly with gateway API |
-| `GET` | `/api/v1/payments/admin/list` | Admin (`payment:read`) | Query and paginate all platform payments |
+| `POST` | `/api/v1/payments/initialize` | User Bearer | Generates a Razorpay Order and returns checkout metadata. |
+| `POST` | `/api/v1/payments/verify` | User Bearer | Cryptographically verifies Razorpay payment signature and confirms order. |
+| `POST` | `/api/v1/payments/fail` | User Bearer | Records payment failure or modal dismissal. |
+| `POST` | `/api/v1/payments/retry` | User Bearer | Creates a new attempt for a previously failed payment. |
+| `GET` | `/api/v1/payments/:id` | User / Admin | Retrieves payment breakdown, attempts, and ledger records. |
+| `POST` | `/api/v1/payments/refund` | Admin (`payment:refund`) | Issues a full or partial refund via Razorpay. |
+| `POST` | `/api/v1/payments/reconcile` | Admin (`payment:read`) | Reconciles payment state with Razorpay API. |
+| `GET` | `/api/v1/payments/admin/list` | Admin (`payment:read`) | Lists platform payments with status filters & pagination. |
 
 ---
 
-## Endpoint Specifications & Scenarios
-
----
+## Endpoint Specifications & Payload Contracts
 
 ### 1. Initialize Payment Intent (`POST /initialize`)
+Initializes a payment session for an order in `PENDING` status.
 
-Initializes a payment intent with the requested gateway provider for an existing order in `PENDING` status.
-
-- **Method**: `POST`
-- **URL**: `/api/v1/payments/initialize`
-- **Authentication**: Optional Bearer Token (Associates userId if authenticated)
-
-#### Request Body Schema
-| Field | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `orderId` | `UUID` | Yes | - | Valid order UUID in `PENDING` status |
-| `provider` | `enum` | No | `"MOCK"` | Gateway provider: `"MOCK"`, `"STRIPE"`, `"RAZORPAY"` |
-| `paymentMethod` | `string` | No | - | Payment method identifier (e.g. `card_visa`, `upi`) |
-| `returnUrl` | `URL` | No | - | Client redirect URL upon 3DS / hosted checkout completion |
-| `metadata` | `object` | No | - | Arbitrary key-value metadata |
-
-#### Request Body Example
+**Request Body**:
 ```json
 {
-  "orderId": "65b8f2c1-8e9a-4c22-b514-61c0c1b7e199",
-  "provider": "STRIPE",
-  "returnUrl": "https://store.example.com/checkout/success"
+  "orderId": "b11a4180-65aa-42ec-a945-5fd21dec0538",
+  "paymentMethod": "UPI"
 }
 ```
 
-#### Scenarios
-
-##### Scenario 1.A: Success - Stripe Payment Intent Created (`201 Created` / `200 OK`)
+**Response (201 Created)**:
 ```json
 {
   "success": true,
-  "message": "Payment intent initialized successfully",
   "data": {
-    "paymentId": "73c1a2d4-e5f6-4a1b-9c8d-123456789abc",
-    "orderId": "65b8f2c1-8e9a-4c22-b514-61c0c1b7e199",
-    "amount": 126.64,
-    "currency": "USD",
-    "status": "PROCESSING",
-    "provider": "STRIPE",
-    "clientSecret": "pi_3MtwBwLkdIwHu7ix28a3tqPa_secret_Yr6kL9...",
-    "gatewayOrderId": "pi_3MtwBwLkdIwHu7ix28a3tqPa",
+    "paymentId": "c1111111-95e3-4d22-b5e1-0bfab4b901a1",
+    "orderId": "b11a4180-65aa-42ec-a945-5fd21dec0538",
+    "orderNumber": "ORD-20260906-0001",
+    "provider": "RAZORPAY",
+    "providerPaymentId": "order_EKfUsjf8ubngaf",
+    "clientSecret": "rzp_test_YourKeyId",
+    "checkoutUrl": "https://api.razorpay.com/v1/checkout/order_EKfUsjf8ubngaf",
+    "amount": 1499.00,
+    "currency": "INR",
+    "status": "REQUIRES_ACTION",
     "attemptNumber": 1
   }
 }
 ```
 
-##### Scenario 1.B: Error - Order Already Paid or Cancelled (`400 Bad Request`)
-```json
-{
-  "success": false,
-  "message": "Cannot initialize payment for order with status \"CONFIRMED\"",
-  "statusCode": 400
-}
-```
-
-##### Scenario 1.C: Error - Order Not Found (`404 Not Found`)
-```json
-{
-  "success": false,
-  "message": "Order not found",
-  "statusCode": 404
-}
-```
-
 ---
 
-### 2. Retry Failed Payment (`POST /retry`)
+### 2. Verify Payment Signature (`POST /verify`)
+Directly verifies the Razorpay signature returned by the client SDK modal.
 
-Creates a new payment attempt for an existing payment record whose previous attempt failed or expired.
-
-- **Method**: `POST`
-- **URL**: `/api/v1/payments/retry`
-- **Authentication**: Optional Bearer Token
-
-#### Request Body Schema
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `paymentId` | `UUID` | Yes | Existing payment UUID |
-| `paymentMethod` | `string` | No | Alternative payment method |
-| `metadata` | `object` | No | Additional tracking metadata |
-
-#### Request Body Example
+**Request Body**:
 ```json
 {
-  "paymentId": "73c1a2d4-e5f6-4a1b-9c8d-123456789abc",
-  "paymentMethod": "card_mastercard"
+  "orderId": "b11a4180-65aa-42ec-a945-5fd21dec0538",
+  "razorpayOrderId": "order_EKfUsjf8ubngaf",
+  "razorpayPaymentId": "pay_29QQoUBcxrhErF",
+  "razorpaySignature": "9ef4d60bfdca8b113dc2935dd4c366d3821a772d16c47d129e5099a4aa7f0eef"
 }
 ```
 
-#### Scenarios
-
-##### Scenario 2.A: Success - Retry Attempt Created (`200 OK`)
+**Response (200 OK)**:
 ```json
 {
   "success": true,
-  "message": "Payment retry initialized successfully",
   "data": {
-    "paymentId": "73c1a2d4-e5f6-4a1b-9c8d-123456789abc",
-    "status": "PROCESSING",
-    "attemptNumber": 2,
-    "clientSecret": "pi_3MtwBwLkdIwHu7ix28a3tqPa_secret_ReTry2...",
-    "gatewayOrderId": "pi_3MtwBwLkdIwHu7ix28a3tqPa"
-  }
-}
-```
-
-##### Scenario 2.B: Error - Payment Already Succeeded (`400 Bad Request`)
-```json
-{
-  "success": false,
-  "message": "Cannot retry payment that has already succeeded",
-  "statusCode": 400
-}
-```
-
----
-
-### 3. Ingest Gateway Webhook (`POST /webhook/:provider`)
-
-Asynchronous endpoint invoked by payment gateways (Stripe, Razorpay, Mock). Verifies payload cryptographic HMAC signatures, updates payment status, confirms orders, commits inventory holds, and records outbox events.
-
-- **Method**: `POST`
-- **URL**: `/api/v1/payments/webhook/:provider` (`mock`, `stripe`, `razorpay`)
-- **Authentication**: Gateway cryptographic signature in HTTP headers (`stripe-signature`, `x-razorpay-signature`)
-
-#### Headers
-- **Stripe**: `stripe-signature: t=1614000000,v1=5257a869e7eceefe25949b39...`
-- **Razorpay**: `x-razorpay-signature: 4a64d5...`
-
-#### Scenarios
-
-##### Scenario 3.A: Success - Payment Succeeded Event (`200 OK`)
-```json
-{
-  "received": true,
-  "status": "SUCCESS",
-  "paymentId": "73c1a2d4-e5f6-4a1b-9c8d-123456789abc",
-  "orderId": "65b8f2c1-8e9a-4c22-b514-61c0c1b7e199"
-}
-```
-
-##### Scenario 3.B: Error - Invalid Webhook Signature (`400 Bad Request`)
-```json
-{
-  "success": false,
-  "message": "Webhook signature verification failed for provider STRIPE",
-  "statusCode": 400
-}
-```
-
----
-
-### 4. Get Payment Details & Attempt Ledger (`GET /:id`)
-
-Fetches payment breakdown including discrete attempts, ledger transactions, and refund records.
-
-- **Method**: `GET`
-- **URL**: `/api/v1/payments/:id`
-- **Authentication**: Optional Bearer Token / Admin permission
-
-#### Scenarios
-
-##### Scenario 4.A: Success (`200 OK`)
-```json
-{
-  "success": true,
-  "message": "Payment retrieved successfully",
-  "data": {
-    "id": "73c1a2d4-e5f6-4a1b-9c8d-123456789abc",
-    "orderId": "65b8f2c1-8e9a-4c22-b514-61c0c1b7e199",
+    "verified": true,
+    "paymentId": "c1111111-95e3-4d22-b5e1-0bfab4b901a1",
+    "orderId": "b11a4180-65aa-42ec-a945-5fd21dec0538",
     "status": "SUCCESS",
-    "amount": 126.64,
-    "refundedAmount": 0.00,
-    "currency": "USD",
-    "provider": "STRIPE",
-    "attempts": [
-      {
-        "id": "att-1",
-        "attemptNumber": 1,
-        "status": "SUCCESS",
-        "gatewayTransactionId": "pi_3MtwBwLkdIwHu7ix28a3tqPa",
-        "gatewayResponseCode": "200",
-        "createdAt": "2026-09-08T12:00:05.000Z"
+    "message": "Payment verified and order confirmed successfully"
+  }
+}
+```
+
+---
+
+### 3. Record Payment Failure / Cancel (`POST /fail`)
+Called by frontend if user closes the modal or payment fails.
+
+**Request Body**:
+```json
+{
+  "orderId": "b11a4180-65aa-42ec-a945-5fd21dec0538",
+  "failureCode": "BAD_REQUEST_ERROR",
+  "failureMessage": "Payment failed by bank"
+}
+```
+
+---
+
+## Frontend Client SDK Integration Guide (React / Next.js)
+
+```tsx
+import { useEffect } from "react";
+
+// 1. Load Razorpay Checkout Script
+export function useRazorpay() {
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
+}
+
+// 2. Checkout Flow
+async function handleCheckout(orderId: string) {
+  // Step A: Initialize Payment on Server
+  const initRes = await fetch("/api/v1/payments/initialize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ orderId }),
+  });
+  const { data } = await initRes.json();
+
+  // Step B: Open Razorpay Modal
+  const options = {
+    key: data.clientSecret, // Razorpay Key ID
+    amount: data.amount * 100, // In paise
+    currency: data.currency,
+    name: "My E-Commerce Store",
+    order_id: data.providerPaymentId, // Razorpay order_id
+    handler: async function (response: any) {
+      // Step C: Verify on Server
+      const verifyRes = await fetch("/api/v1/payments/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          orderId,
+          razorpayOrderId: response.razorpay_order_id,
+          razorpayPaymentId: response.razorpay_payment_id,
+          razorpaySignature: response.razorpay_signature,
+        }),
+      });
+      const verifyData = await verifyRes.json();
+      if (verifyData.success) {
+        window.location.href = `/orders/${orderId}/success`;
       }
-    ],
-    "transactions": [
-      {
-        "id": "txn-1",
-        "type": "CAPTURE",
-        "amount": 126.64,
-        "currency": "USD",
-        "gatewayTransactionId": "ch_3MtwBwLkdIwHu7ix28a3tqPa",
-        "createdAt": "2026-09-08T12:02:00.000Z"
-      }
-    ],
-    "refunds": []
-  }
+    },
+    modal: {
+      ondismiss: async function () {
+        await fetch("/api/v1/payments/fail", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ orderId, failureMessage: "Modal dismissed by user" }),
+        });
+      },
+    },
+  };
+
+  const rzp = new (window as any).Razorpay(options);
+  rzp.open();
 }
 ```
 
 ---
 
-### 5. Process Refund (`POST /refund`)
+## Automated Outbox & Notification Flow
 
-Issues a full or partial refund against a succeeded payment.
-
-- **Method**: `POST`
-- **URL**: `/api/v1/payments/refund`
-- **Permission**: `payment:refund` or `SUPER_ADMIN`
-
-#### Request Body
-```json
-{
-  "paymentId": "73c1a2d4-e5f6-4a1b-9c8d-123456789abc",
-  "amount": 50.00,
-  "reason": "Customer returned 1 item"
-}
-```
-
-#### Scenarios
-
-##### Scenario 5.A: Success - Partial Refund (`200 OK`)
-```json
-{
-  "success": true,
-  "message": "Refund processed successfully",
-  "data": {
-    "refundId": "ref-11111111-2222-3333-4444-555555555555",
-    "paymentId": "73c1a2d4-e5f6-4a1b-9c8d-123456789abc",
-    "amount": 50.00,
-    "currency": "USD",
-    "status": "COMPLETED",
-    "remainingRefundable": 76.64,
-    "paymentStatus": "PARTIALLY_REFUNDED"
-  }
-}
-```
-
----
-
-### 6. Reconcile Payment (`POST /reconcile`)
-
-Queries the gateway provider to synchronize payment state and heal missed webhooks.
-
-- **Method**: `POST`
-- **URL**: `/api/v1/payments/reconcile`
-- **Permission**: `payment:read` or `SUPER_ADMIN`
-
-#### Request Body
-```json
-{
-  "paymentId": "73c1a2d4-e5f6-4a1b-9c8d-123456789abc"
-}
-```
-
-#### Response (`200 OK`)
-```json
-{
-  "success": true,
-  "message": "Payment reconciled successfully with provider",
-  "data": {
-    "paymentId": "73c1a2d4-e5f6-4a1b-9c8d-123456789abc",
-    "previousStatus": "PROCESSING",
-    "currentStatus": "SUCCESS",
-    "reconciled": true,
-    "orderUpdated": true
-  }
-}
-```
-
----
-
-### 7. List Payments (`GET /admin/list`)
-
-Lists all platform payments with pagination, status, and provider filters.
-
-- **Method**: `GET`
-- **URL**: `/api/v1/payments/admin/list?page=1&limit=20&status=SUCCESS`
-- **Permission**: `payment:read` or `SUPER_ADMIN`
-
----
-
-## Flow Diagrams
-
-### Customer Checkout & Payment Intent Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Customer as Customer / Browser
-    participant API as Payment API
-    participant Gateway as Payment Gateway (Stripe/Razorpay)
-    participant DB as PostgreSQL DB
-    participant Outbox as Domain Outbox
-
-    Customer->>API: POST /api/v1/payments/initialize (orderId, provider)
-    API->>DB: Validate Order (PENDING status & total)
-    API->>Gateway: Create Payment Intent / Order
-    Gateway-->>API: Returns clientSecret & gatewayOrderId
-    API->>DB: Create Payment (PROCESSING) + Attempt #1
-    API-->>Customer: Returns clientSecret & paymentId
-    Customer->>Gateway: Confirm Card / 3DS / UPI Challenge
-    Gateway-->>Customer: Payment Authorization Complete
-```
-
-### Webhook Ingestion & Order Confirmation
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Gateway as Payment Gateway
-    participant Webhook as POST /webhook/:provider
-    participant DB as Database & Ledger
-    participant Event as Outbox / Worker
-
-    Gateway->>Webhook: Asynchronous Event (payment_intent.succeeded)
-    Webhook->>Webhook: Verify Cryptographic Signature
-    Webhook->>DB: Begin Atomic Transaction
-    DB->>DB: Update Payment -> SUCCESS
-    DB->>DB: Write Ledger CAPTURE Transaction
-    DB->>DB: Update Order -> CONFIRMED
-    DB->>DB: Commit Inventory Reservation
-    DB->>Event: Write PAYMENT_SUCCEEDED Outbox Event
-    Webhook-->>Gateway: HTTP 200 OK (Acknowledged)
-```
-
-### Payment Retry Workflow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Customer as Customer
-    participant API as Payment API
-    participant DB as Database
-    participant Gateway as Gateway Provider
-
-    Customer->>API: POST /api/v1/payments/retry (paymentId)
-    API->>DB: Fetch Payment (Must be FAILED or PENDING)
-    API->>Gateway: Create New Intent / Refresh Attempt
-    Gateway-->>API: New clientSecret
-    API->>DB: Insert PaymentAttempt (attemptNumber = N + 1)
-    API-->>Customer: Return new clientSecret & updated attempt
-```
-
----
-
-## Frontend Client SDK Integration
-
-### Stripe Elements (Web / React)
-
-```typescript
-import { loadStripe } from "@stripe/stripe-js";
-import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
-
-// 1. Initialize intent on backend
-const response = await fetch("/api/v1/payments/initialize", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    orderId: "65b8f2c1-8e9a-4c22-b514-61c0c1b7e199",
-    provider: "STRIPE",
-    returnUrl: `${window.location.origin}/checkout/complete`,
-  }),
-});
-const { data } = await response.json();
-const { clientSecret } = data;
-
-// 2. Render Stripe PaymentElement with clientSecret
-// 3. Confirm payment with stripe.confirmPayment({ elements, confirmParams: { return_url: "..." } })
-```
-
----
-
-## Error Handling & Status Codes
-
-| HTTP Status | Error Type | Cause / Recommended Action |
-|---|---|---|
-| `400 Bad Request` | `VALIDATION_ERROR` | Malformed UUID, negative amount, or invalid gateway payload |
-| `400 Bad Request` | `INVALID_PAYMENT_STATE` | Attempting to retry a succeeded payment or refund a failed payment |
-| `400 Bad Request` | `OVER_REFUND_ERROR` | Requested refund amount exceeds remaining refundable balance |
-| `400 Bad Request` | `SIGNATURE_VERIFICATION_FAILED` | Gateway webhook signature mismatch |
-| `401 Unauthorized` | `AUTHENTICATION_REQUIRED` | Missing or expired JWT Bearer token |
-| `403 Forbidden` | `PERMISSION_DENIED` | Missing `payment:read` or `payment:refund` permission |
-| `404 Not Found` | `PAYMENT_NOT_FOUND` | Referenced payment ID does not exist |
-| `500 Internal Server Error`| `GATEWAY_ERROR` | Upstream provider connection failure or server error |
+When `POST /verify` completes:
+1. `OutboxEvent` with `ORDER_PAID` is inserted atomically in PostgreSQL.
+2. Background Poller Worker sweeps pending events every 5 seconds.
+3. BullMQ Worker triggers [NotificationConsumer](file:///e:/e-com/server/src/modules/outbox/handlers/consumers/notificationConsumer.ts).
+4. Automated Confirmation Email, In-App Notification bell record, and Push Notification are sent automatically.

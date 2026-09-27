@@ -13,6 +13,8 @@ const { notificationDispatcherMock, notificationPreferenceMock, authPrismaMock }
         deleteNotification: vi.fn(),
         sendManualNotification: vi.fn(),
         retryFailedNotification: vi.fn(),
+        listAllNotifications: vi.fn(),
+        getAdminOverview: vi.fn(),
     },
     notificationPreferenceMock: {
         getUserPreferences: vi.fn(),
@@ -304,4 +306,85 @@ describe("Notifications HTTP Routes Integration Tests", () => {
             expect.objectContaining({ recipientEmail: "vip@customer.com", type: "PROMOTION" }),
         );
     });
+
+    it("allows admin to fetch notification overview and dashboard KPIs via GET /api/notifications/admin/overview", async () => {
+        const app = await createTestApp();
+        const { token } = mockAdminUser();
+
+        notificationDispatcherMock.getAdminOverview.mockResolvedValue({
+            overview: {
+                totalNotifications: 150,
+                todayNotifications: 20,
+                successfulDeliveries: 145,
+                failedDeliveries: 5,
+                pendingDeliveries: 0,
+                successRate: 96.7,
+            },
+            channelBreakdown: { EMAIL: 80, PUSH: 40, IN_APP: 30 },
+            statusBreakdown: { SENT: 120, READ: 25, FAILED: 5, PENDING: 0 },
+            devices: {
+                totalRegistered: 50,
+                activeDevices: 48,
+                platforms: { web: 30, android: 15, ios: 5 },
+            },
+            recentFailures: [],
+        });
+
+        const response = await app.inject({
+            method: "GET",
+            url: "/api/notifications/admin/overview",
+            headers: {
+                authorization: `Bearer ${token}`,
+            },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+        expect(body.status).toBe("success");
+        expect(body.data.overview.totalNotifications).toBe(150);
+        expect(body.data.channelBreakdown.PUSH).toBe(40);
+        expect(notificationDispatcherMock.getAdminOverview).toHaveBeenCalled();
+    });
+
+    it("allows admin to filter all notifications with multi-channel and status parameters via GET /api/notifications/admin", async () => {
+        const app = await createTestApp();
+        const { token } = mockAdminUser();
+
+        notificationDispatcherMock.listAllNotifications.mockResolvedValue({
+            items: [
+                {
+                    id: "notif-100",
+                    channel: "PUSH",
+                    status: "SENT",
+                    type: "ORDER_SHIPPED",
+                    title: "Order Shipped",
+                    body: "Tracking: TRK-12345",
+                },
+            ],
+            summary: {
+                total: 1,
+                channelCounts: { EMAIL: 0, PUSH: 1, IN_APP: 0 },
+                statusCounts: { SENT: 1, FAILED: 0, PENDING: 0, READ: 0 },
+            },
+            pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        });
+
+        const response = await app.inject({
+            method: "GET",
+            url: "/api/notifications/admin?channel=PUSH&status=SENT&search=Tracking",
+            headers: {
+                authorization: `Bearer ${token}`,
+            },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+        expect(body.status).toBe("success");
+        expect(body.data.items).toHaveLength(1);
+        expect(body.data.summary.channelCounts.PUSH).toBe(1);
+        expect(notificationDispatcherMock.listAllNotifications).toHaveBeenCalledWith(
+            expect.objectContaining({ channel: "PUSH", status: "SENT", search: "Tracking" }),
+        );
+    });
 });
+

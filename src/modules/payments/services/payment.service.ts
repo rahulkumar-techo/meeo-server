@@ -1,7 +1,7 @@
 import { paymentCreationService } from "./paymentCreation.service.js";
 import { paymentAttemptService } from "./paymentAttempt.service.js";
 import { paymentTransactionService } from "./paymentTransaction.service.js";
-import { paymentWebhookService } from "./paymentWebhook.service.js";
+import { paymentVerificationService } from "./paymentVerification.service.js";
 import { paymentRefundService } from "./paymentRefund.service.js";
 import { paymentReconciliationService } from "./paymentReconciliation.service.js";
 import { paymentQueryService } from "./paymentQuery.service.js";
@@ -16,7 +16,6 @@ import type {
 
 /**
  * Unified Payment Service Facade
- * Delegates domain operations to specialized modular services.
  */
 export class PaymentService {
     // Creation & Intent
@@ -28,17 +27,13 @@ export class PaymentService {
         return paymentCreationService.retryPayment(userId, input);
     }
 
-    // Webhooks & Transactional Lifecycle
-    async processWebhook(provider: string, rawPayload: any, headers: Record<string, any>) {
-        return paymentWebhookService.processWebhook(provider, rawPayload, headers);
-    }
-
+    // Direct Verification & Failure Handling
     async verifyPayment(input: VerifyPaymentInput) {
-        return paymentWebhookService.verifyClientPayment(input);
+        return paymentVerificationService.verifyPayment(input);
     }
 
     async failPayment(input: RecordPaymentFailureInput) {
-        return paymentWebhookService.recordClientPaymentFailure(input);
+        return paymentVerificationService.recordPaymentFailure(input);
     }
 
     // Refunds

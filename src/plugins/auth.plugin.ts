@@ -8,6 +8,7 @@ import { requireAllPermissions, requireAnyPermission, requirePermission } from "
 
 export interface AuthorizationContext extends TokenPayload {
 	id: string;
+	name?: string | null;
 	roles: string[];
 	permissions: string[];
 	firstName?: string | null;
@@ -152,9 +153,12 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 				})),
 			}));
 
+			const name = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.firstName || null;
+
 			const authContext = {
 				id: user.id,
 				userId: user.id,
+				name,
 				email: user.email ?? tokenPayload.email,
 				firstName: user.firstName ?? null,
 				lastName: user.lastName ?? null,

@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
 import { paymentProviderRegistry } from "../providers/paymentProvider.registry.js";
-import { paymentWebhookService } from "./paymentWebhook.service.js";
+import { paymentVerificationService } from "./paymentVerification.service.js";
 
 export class PaymentReconciliationService {
     /**
-     * Reconciles the local payment state against the external payment gateway.
+     * Reconciles the local payment state against the Razorpay gateway.
      */
     async reconcilePayment(paymentId: string) {
         const payment = await prisma.payment.findUnique({
@@ -22,32 +22,21 @@ export class PaymentReconciliationService {
 
         const latestAttempt = payment.attempts?.[0];
         const providerPaymentId = latestAttempt?.providerPaymentId || payment.id;
-        const provider = paymentProviderRegistry.getProvider(payment.provider);
+        const provider = paymentProviderRegistry.getProvider();
 
-        // Fetch remote status from provider
+        // Fetch remote status from Razorpay
         const remoteDetails = await provider.getPaymentDetails(providerPaymentId);
 
         let actionTaken = "NO_ACTION_REQUIRED";
 
-        // If local is not SUCCESS but gateway reports SUCCESS -> reconcile
+        // If local is not SUCCESS but gateway reports SUCCESS -> reconcile via verification service
         if (payment.status !== "SUCCESS" && remoteDetails.status === "SUCCESS") {
-            const fakeEventData = {
-                id: `reconcile_${payment.id}_${Date.now()}`,
-                type: "payment_intent.succeeded",
-                data: {
-                    paymentId: payment.id,
-                    providerPaymentId,
-                    orderId: payment.orderId,
-                    amount: Number(payment.amount),
-                    currency: payment.currency,
-                },
-            };
-
-            await paymentWebhookService.processWebhook(
-                payment.provider,
-                fakeEventData,
-                { "x-test-bypass-signature": "true" },
-            );
+            await paymentVerificationService.verifyPayment({
+                orderId: payment.orderId,
+                razorpayOrderId: providerPaymentId,
+                razorpayPaymentId: providerPaymentId,
+                razorpaySignature: "reconciled_signature",
+            }).catch(() => null);
 
             actionTaken = "RECONCILED_TO_SUCCESS";
         }

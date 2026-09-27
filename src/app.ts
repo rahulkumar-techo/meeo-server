@@ -19,7 +19,7 @@ import reviewRouter from "./modules/reviews/routes/review.route.js";
 import { searchRouter, discoveryRouter } from "./modules/search/routes/search.route.js";
 import dashboardRouter from "./modules/dashboard/routes/dashboard.route.js";
 import auditLogRouter from "./modules/audit/routes/auditLog.route.js";
-import jobRouter from "./modules/jobs/routes/job.route.js";
+import jobRouter from "./jobs/routes/job.route.js";
 import settingRouter from "./modules/settings/routes/setting.route.js";
 import helmetPlugin from "./plugins/helmet.plugin.js";
 import { sanitizeInput } from "./common/security/sanitizer.js";
