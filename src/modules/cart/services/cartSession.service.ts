@@ -40,6 +40,11 @@ export class CartSessionService {
                                     brand: { select: { id: true, name: true, slug: true } },
                                 },
                             },
+                            // Fetch variant-specific images for the cart thumbnail
+                            images: {
+                                orderBy: { sortOrder: "asc" as const },
+                                take: 1,
+                            },
                             inventory: true,
                             attributeValues: {
                                 include: {
@@ -94,13 +99,18 @@ export class CartSessionService {
                     id: item.variant?.product?.id,
                     name: item.variant?.product?.name ?? "Unknown Product",
                     slug: item.variant?.product?.slug,
-                    thumbnail: item.variant?.product?.images?.[0]?.url ?? null,
+                    // Prefer variant image so user sees the exact item they selected
+                    thumbnail: item.variant?.images?.[0]?.url
+                        ?? item.variant?.product?.images?.[0]?.url
+                        ?? null,
+                    thumbnailAlt: item.variant?.images?.[0]?.altText
+                        ?? item.variant?.product?.images?.[0]?.altText
+                        ?? null,
                     category: item.variant?.product?.category ?? null,
                     brand: item.variant?.product?.brand ?? null,
                 },
                 variant: {
                     sku: item.variant?.sku,
-                    barcode: item.variant?.barcode,
                     attributes: (item.variant?.attributeValues || []).map((av: any) => ({
                         attribute: av.attributeValue?.attribute?.name ?? "Attribute",
                         value: av.attributeValue?.value ?? "",
