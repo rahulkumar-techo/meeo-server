@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { sendCreated, sendOk } from "@/common/utils/response.js";
 import { AppError } from "@/common/errors/app-error.js";
 import { productService } from "../services/product.service.js";
+import { mapProductDetails } from "../mappers/productDetails.mapper.js";
 import {
     createProductSchema,
     updateProductSchema,
@@ -48,11 +49,11 @@ export class ProductController {
      */
     async getProduct(request: FastifyRequest, reply: FastifyReply) {
         const { id } = request.params as IdParam;
-        const result = await productService.getProductById(id);
+        const product = await productService.getProductDetails(id);
         return sendOk({
             reply,
             message: "Product retrieved successfully",
-            data: result,
+            data: mapProductDetails(product),
         });
     }
 
@@ -61,11 +62,11 @@ export class ProductController {
      */
     async getProductBySlug(request: FastifyRequest, reply: FastifyReply) {
         const { slug } = request.params as SlugParam;
-        const result = await productService.getProductBySlug(slug);
+        const product = await productService.getProductBySlug(slug);
         return sendOk({
             reply,
             message: "Product retrieved successfully",
-            data: result,
+            data: mapProductDetails(product),
         });
     }
 

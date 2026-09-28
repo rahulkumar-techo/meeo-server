@@ -24,6 +24,7 @@ const { prismaMock, imagekitMock } = vi.hoisted(() => ({
             findMany: vi.fn(),
             create: vi.fn(),
             update: vi.fn(),
+            updateMany: vi.fn(),
             delete: vi.fn(),
             count: vi.fn(),
         },
@@ -635,6 +636,11 @@ describe("Catalog Services and Authorization Unit Tests", () => {
     // Product Variant Service Tests
     // ==========================================
     describe("ProductVariantService", () => {
+        beforeEach(() => {
+            // draftProductIfActive calls updateMany — default to no rows affected
+            prismaMock.product.updateMany.mockResolvedValue({ count: 0 });
+        });
+
         it("creates a product variant with SKU, pricing, and initial stock", async () => {
             const userContext: AuthorizationContext = {
                 userId: "user-1",

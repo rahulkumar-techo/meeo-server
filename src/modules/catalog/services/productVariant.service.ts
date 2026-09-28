@@ -5,6 +5,7 @@ import type { AuthorizationContext } from "@/plugins/auth.plugin.js";
 import { verifyCatalogOwnershipOrPermission } from "../catalog-auth.helper.js";
 import { productVariantImageService } from "./productVariantImage.service.js";
 import { productVariantBatchService, variantDefaultInclude } from "./productVariantBatch.service.js";
+import { productQueryService } from "./productQuery.service.js";
 import type {
     CreateProductVariantInput,
     UpdateProductVariantInput,
@@ -57,7 +58,7 @@ export class ProductVariantService {
             }
         }
 
-        return prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx) => {
             const variantData: Prisma.ProductVariantUncheckedCreateInput = {
                 productId,
                 sku: input.sku,
@@ -115,6 +116,11 @@ export class ProductVariantService {
                 include: variantDefaultInclude,
             });
         });
+
+        // Adding a variant to an ACTIVE product requires re-publishing.
+        await this.draftProductIfActive(productId, product.slug);
+
+        return result;
     }
 
     /**
@@ -261,7 +267,7 @@ export class ProductVariantService {
             }
         }
 
-        return prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx) => {
             const data: Prisma.ProductVariantUpdateInput = {
                 ...(input.sku !== undefined && { sku: input.sku }),
                 ...(input.barcode !== undefined && { barcode: input.barcode }),
@@ -322,6 +328,11 @@ export class ProductVariantService {
                 include: variantDefaultInclude,
             });
         });
+
+        // Changing a variant on an ACTIVE product requires re-publishing.
+        await this.draftProductIfActive(variant.product.id, variant.product.slug);
+
+        return result;
     }
 
     /**
@@ -347,11 +358,39 @@ export class ProductVariantService {
             where: { id: variantId },
         });
 
+        // Removing a variant from an ACTIVE product requires re-publishing.
+        await this.draftProductIfActive(variant.product.id, variant.product.slug);
+
         return { id: variantId, productId: variant.productId, deleted: true };
     }
 
     batchCreateVariants(productId: string, input: BatchCreateVariantsInput, user?: AuthorizationContext) {
-        return productVariantBatchService.batchCreateVariants(productId, input, user);
+        return productVariantBatchService.batchCreateVariants(productId, input, user).then(async (result) => {
+            // Batch-adding variants to an ACTIVE product requires re-publishing.
+            const product = await prisma.product.findUnique({
+                where: { id: productId },
+                select: { status: true, slug: true },
+            });
+            if (product) {
+                await this.draftProductIfActive(productId, product.slug);
+            }
+            return result;
+        });
+    }
+
+    /**
+     * If the product is currently ACTIVE, revert it to DRAFT and invalidate its cache.
+     * Called automatically after any variant mutation so admin must re-publish.
+     */
+    private async draftProductIfActive(productId: string, productSlug: string) {
+        const updated = await prisma.product.updateMany({
+            where: { id: productId, status: "ACTIVE" },
+            data: { status: "DRAFT" },
+        });
+
+        if (updated.count > 0) {
+            await productQueryService.invalidateProductCache(productId, productSlug);
+        }
     }
 
     addVariantImage(variantId: string, input: AddProductImageInput, user?: AuthorizationContext) {

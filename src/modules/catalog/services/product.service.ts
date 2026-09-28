@@ -332,6 +332,10 @@ export class ProductService {
         return productQueryService.getProductById(id);
     }
 
+    getProductDetails(id: string) {
+        return productQueryService.getProductDetails(id);
+    }
+
     getProductBySlug(slug: string) {
         return productQueryService.getProductBySlug(slug);
     }

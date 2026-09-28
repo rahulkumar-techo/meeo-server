@@ -15,7 +15,8 @@ export class ProductQueryService {
     }
 
     /**
-     * Retrieves a single product by UUID with category, brand, images, and variants.
+     * Retrieves a single product by UUID mapped to the Product Details DTO shape.
+     * Only selects fields required by the client — avoids costPrice, barcode, internal IDs, etc.
      */
     async getProductById(id: string) {
         const cacheKey = CACHE_KEYS.PRODUCT.BY_ID(id);
@@ -25,24 +26,7 @@ export class ProductQueryService {
             async () => {
                 const product = await prisma.product.findUnique({
                     where: { id },
-                    include: {
-                        category: true,
-                        brand: true,
-                        images: { orderBy: { sortOrder: "asc" } },
-                        variants: {
-                            include: {
-                                attributeValues: {
-                                    include: {
-                                        attributeValue: {
-                                            include: { attribute: true },
-                                        },
-                                    },
-                                },
-                                inventory: true,
-                                images: { orderBy: { sortOrder: "asc" } },
-                            },
-                        },
-                    },
+                    select: productDetailsSelect,
                 });
 
                 if (!product) {
@@ -56,7 +40,15 @@ export class ProductQueryService {
     }
 
     /**
-     * Retrieves a single product by SEO-friendly URL slug with full relations.
+     * Retrieves a single product by UUID — alias used by the Product Details controller.
+     * Returns the same optimized shape as getProductById.
+     */
+    getProductDetails(id: string) {
+        return this.getProductById(id);
+    }
+
+    /**
+     * Retrieves a single product by SEO-friendly URL slug mapped to the Product Details DTO shape.
      */
     async getProductBySlug(slug: string) {
         const cacheKey = CACHE_KEYS.PRODUCT.BY_SLUG(slug);
@@ -66,12 +58,7 @@ export class ProductQueryService {
             async () => {
                 const product = await prisma.product.findUnique({
                     where: { slug },
-                    include: {
-                        category: true,
-                        brand: true,
-                        images: { orderBy: { sortOrder: "asc" } },
-                        variants: true,
-                    },
+                    select: productDetailsSelect,
                 });
 
                 if (!product) {
@@ -252,3 +239,75 @@ export class ProductQueryService {
 }
 
 export const productQueryService = new ProductQueryService();
+
+/**
+ * Explicit select — fetches only the columns and relations required by mapProductDetails().
+ * Avoids pulling costPrice, barcode, createdById, internal timestamps, etc.
+ */
+const productDetailsSelect = {
+    id: true,
+    name: true,
+    slug: true,
+    description: true,
+    status: true,
+    isFeatured: true,
+    bannerImage: true,
+    specifications: true,
+    category: {
+        select: {
+            id: true,
+            name: true,
+            slug: true,
+            imageUrl: true,
+        },
+    },
+    brand: {
+        select: {
+            id: true,
+            name: true,
+            slug: true,
+            logoUrl: true,
+        },
+    },
+    images: {
+        select: {
+            url: true,
+            thumbnailUrl: true,
+            altText: true,
+        },
+        orderBy: { sortOrder: "asc" as const },
+    },
+    variants: {
+        select: {
+            id: true,
+            sku: true,
+            price: true,
+            compareAtPrice: true,
+            status: true,
+            attributeValues: {
+                select: {
+                    attributeValue: {
+                        select: {
+                            value: true,
+                            attribute: {
+                                select: { name: true },
+                            },
+                        },
+                    },
+                },
+            },
+            inventory: {
+                select: { availableQuantity: true },
+            },
+            images: {
+                select: {
+                    url: true,
+                    thumbnailUrl: true,
+                    altText: true,
+                },
+                orderBy: { sortOrder: "asc" as const },
+            },
+        },
+        orderBy: { createdAt: "asc" as const },
+    },
+} as const;
