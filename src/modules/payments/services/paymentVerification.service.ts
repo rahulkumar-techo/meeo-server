@@ -42,6 +42,10 @@ export class PaymentVerificationService {
             },
         });
 
+        // Retrieve cartId directly from the order (assuming the Order model has a cartId field)
+        const cartId = payment?.order?.cartId;
+
+
         if (!payment) {
             throw new AppError(`No payment found for order ${orderId}`, 404);
         }
@@ -150,6 +154,11 @@ export class PaymentVerificationService {
                         referenceId: payment.orderId,
                     },
                 });
+            }
+
+            /// if payment successed then delete the cart from user
+            if (cartId && payment.order.status==="CONFIRMED") {
+                await tx.cart.deleteMany({ where: { id: cartId } })
             }
 
             // F. Create durable OutboxEvent in PostgreSQL for automated background delivery

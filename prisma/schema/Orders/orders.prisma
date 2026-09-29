@@ -2,6 +2,9 @@
 model Order {
   id String @id @default(uuid()) @db.Uuid
 
+  // Optional reference to the cart used for this order
+  cartId String? @db.Uuid
+
   orderNumber String @unique
 
   userId String? @db.Uuid

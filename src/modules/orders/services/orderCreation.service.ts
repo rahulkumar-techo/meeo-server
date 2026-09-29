@@ -212,7 +212,10 @@ export class OrderCreationService {
                 }
 
                 // H. Clear shopping cart
-                await tx.cartItem.deleteMany({ where: { cartId } });
+                // if (order?.status === "CONFIRMED") {
+                //     /// delete all cart items when payement successed
+                //     await tx.cartItem.deleteMany({ where: { cartId } });
+                // }
 
                 return createdOrder;
             });

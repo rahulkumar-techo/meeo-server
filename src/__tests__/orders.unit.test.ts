@@ -518,7 +518,7 @@ describe("Order & Checkout Unit Tests", () => {
             expect(result.orderNumber).toBe("ORD-20260906-TEST1");
             expect(result.financials.grandTotal).toBe(2160.0);
             expect(result.items).toHaveLength(1);
-            expect(prismaMock.cartItem.deleteMany).toHaveBeenCalledWith({ where: { cartId: "cart-1" } });
+
         });
     });
 
