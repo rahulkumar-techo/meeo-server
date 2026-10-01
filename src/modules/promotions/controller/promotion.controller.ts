@@ -156,7 +156,7 @@ export class PromotionController {
      * Storefront: Public banners and active automatic promotions.
      */
     async getActivePromotions(_req: FastifyRequest, reply: FastifyReply) {
-        const result = await promotionService.resolveCandidatePromotions(null);
+        const result = await promotionService.getActivePromotions();
         const publicList = result.map((p) => ({
             id: p.id,
             name: p.name,

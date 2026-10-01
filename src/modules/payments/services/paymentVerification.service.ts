@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
 import type { VerifyPaymentInput, RecordPaymentFailureInput } from "../validations/payment.validation.js";
+import { logger } from "@/common/observability/logger.js";
 
 export class PaymentVerificationService {
     /**
@@ -121,6 +122,11 @@ export class PaymentVerificationService {
                         reason: `Payment verified via Razorpay (ID: ${razorpayPaymentId})`,
                     },
                 });
+
+                // Delete the cart now that the order is confirmed
+                if (cartId) {
+                    await tx.cart.deleteMany({ where: { id: cartId } });
+                }
             }
 
             // E. Commit temporary inventory reservations into confirmed sales
@@ -156,10 +162,7 @@ export class PaymentVerificationService {
                 });
             }
 
-            /// if payment successed then delete the cart from user
-            if (cartId && payment.order.status==="CONFIRMED") {
-                await tx.cart.deleteMany({ where: { id: cartId } })
-            }
+
 
             // F. Create durable OutboxEvent in PostgreSQL for automated background delivery
             await tx.outboxEvent.create({
@@ -186,6 +189,11 @@ export class PaymentVerificationService {
                 },
             });
         });
+
+        logger.debug(
+            { cartId, paymentStatus: "SUCCESS", orderStatus: "CONFIRMED" },
+            "[verifyPayment] payment verified and cart cleared"
+        );
 
         return {
             verified: true,

@@ -136,6 +136,7 @@ export class OrderCreationService {
                     data: {
                         orderNumber,
                         userId: userId ?? null,
+                        cartId: cartId ?? null,
                         status: "PENDING",
                         currency: input?.currency || "INR",
                         subtotal,

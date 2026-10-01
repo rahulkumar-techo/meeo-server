@@ -260,6 +260,16 @@ export class PromotionService {
     /**
      * Resolves all active automatic promotions plus any requested promo code.
      */
+    /**
+     * Returns all currently active promotions for public storefront display.
+     */
+    async getActivePromotions() {
+        return prisma.promotion.findMany({
+            where: { status: "ACTIVE" },
+            orderBy: { priority: "desc" },
+        });
+    }
+
     async resolveCandidatePromotions(promoCode?: string | null) {
         let autoPromos = await promotionCacheService.getActiveAutomaticPromotions();
         if (!autoPromos) {

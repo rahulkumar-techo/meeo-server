@@ -29,6 +29,7 @@ model Order {
   updatedAt DateTime @updatedAt
 
   user User? @relation(fields: [userId], references: [id])
+  cart      Cart?   @relation(fields: [cartId], references: [id])
 
   items OrderItem[]
 

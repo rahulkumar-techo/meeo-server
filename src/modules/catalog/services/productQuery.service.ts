@@ -216,13 +216,17 @@ export class ProductQueryService {
                     category: { select: { id: true, name: true } },
                     brand: { select: { id: true, name: true, slug: true } },
                     variants: {
-                        select: { id: true, sku: true, price: true, compareAtPrice: true, status: true },
+                        select: {
+                            id: true, sku: true, price: true, compareAtPrice: true, status: true,
+                            images: {
+                                select: { id: true, url: true },
+                                orderBy: { sortOrder: "asc" },
+                                take: 1
+                            }
+                        },
                         orderBy: { createdAt: "asc" },
-                    },
-                    images: {
-                        select: { id: true, url: true },
-                        orderBy: { sortOrder: "asc" },
                         take: 1
+
                     }
                 }
             })
