@@ -227,7 +227,12 @@ export class ProductQueryService {
                         orderBy: { createdAt: "asc" },
                         take: 1
 
-                    }
+                    },
+                    _count: {
+                        select: {
+                            variants: true,
+                        },
+                    },
                 }
             })
         ]);
