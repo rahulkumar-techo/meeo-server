@@ -81,6 +81,13 @@ async function main() {
         : tokensFromDb;
 
     console.log(`📊 Found ${deviceRecords.length} active device token(s) in DB (Total targets: ${targetTokens.length}).\n`);
+    console.table(deviceRecords.map(d => ({
+        id: d.id,
+        platform: d.platform,
+        userAgent: (d.userAgent || "N/A").slice(0, 30),
+        token: `${d.token.slice(0, 15)}...`,
+        lastUsedAt: d.lastUsedAt,
+    })));
 
     if (targetTokens.length === 0) {
         console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
