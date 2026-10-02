@@ -256,3 +256,5 @@ export class RazorpayPaymentProvider implements IPaymentProvider {
 function paramsPaymentIdValid(id: string): boolean {
     return typeof id === "string" && (id.startsWith("pay_") || id.startsWith("order_"));
 }
+
+export const razorpayPaymentProvider = new RazorpayPaymentProvider();

@@ -162,12 +162,11 @@ export class NotificationPreferenceService {
     }
 
     /**
-     * Unregisters/deactivates a device push token for a user.
+     * Unregisters/removes a device push token for a user.
      */
     async unregisterDeviceToken(userId: string, token: string) {
-        return prisma.deviceToken.updateMany({
+        return prisma.deviceToken.deleteMany({
             where: { userId, token },
-            data: { isActive: false },
         });
     }
 

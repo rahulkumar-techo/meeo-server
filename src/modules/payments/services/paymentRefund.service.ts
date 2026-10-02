@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
-import { paymentProviderRegistry } from "../providers/paymentProvider.registry.js";
+import { razorpayPaymentProvider } from "../providers/razorpayPayment.provider.js";
 import type { CreateRefundInput } from "../validations/payment.validation.js";
 
 export class PaymentRefundService {
@@ -46,12 +46,11 @@ export class PaymentRefundService {
             );
         }
 
-        const provider = paymentProviderRegistry.getProvider(payment.provider);
         const successfulAttempt = payment.attempts?.[0];
         const providerPaymentId = successfulAttempt?.providerPaymentId || payment.id;
 
         // 1. Execute external refund via provider gateway
-        const refundResult = await provider.createRefund({
+        const refundResult = await razorpayPaymentProvider.createRefund({
             paymentId: payment.id,
             providerPaymentId,
             amount: refundAmount,

@@ -50,6 +50,7 @@ vi.mock("../lib/brevo.js", () => ({
 
 import fastifyMetrics from "fastify-metrics";
 import healthRouter, { metricsRouter } from "../modules/health/health.route.js";
+import { healthController } from "../modules/health/health.controller.js";
 import { errorHandler } from "../common/errors/error-handler.js";
 import { metricsService } from "../common/observability/metrics.service.js";
 
@@ -83,6 +84,7 @@ describe("Health, Readiness & Metrics HTTP Routes Integration Tests", () => {
         await app.register(cookie);
         await app.register(healthRouter, { prefix: "/health" });
         await app.register(metricsRouter, { prefix: "/metrics" });
+        app.get("/prom-metrics", healthController.promMetrics);
 
         // Dummy endpoint for testing error request ID propagation
         app.get("/api/test-error", async () => {
@@ -222,5 +224,31 @@ describe("Health, Readiness & Metrics HTTP Routes Integration Tests", () => {
         const json = res.json();
         expect(json.success).toBe(false);
         expect(json.requestId).toBe(customRequestId);
+    });
+
+    it("exposes Prometheus metrics via GET /prom-metrics", async () => {
+        const app = await createTestApp();
+
+        const res = await app.inject({
+            method: "GET",
+            url: "/prom-metrics",
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.headers["content-type"]).toContain("text/plain");
+        expect(res.body).toContain("process_cpu_user_seconds_total");
+    });
+
+    it("exposes Prometheus metrics via GET /metrics/prom", async () => {
+        const app = await createTestApp();
+
+        const res = await app.inject({
+            method: "GET",
+            url: "/metrics/prom",
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.headers["content-type"]).toContain("text/plain");
+        expect(res.body).toContain("process_cpu_user_seconds_total");
     });
 });

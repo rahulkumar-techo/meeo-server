@@ -78,4 +78,11 @@ export async function metricsRouter(app: FastifyInstance) {
             summary: "JSON snapshot of system, HTTP latency, and database query metrics",
         },
     }, healthController.metricsJson);
+
+    app.get("/prom", {
+        schema: {
+            tags: ["System - Observability"],
+            summary: "Prometheus metrics exported via prom-client",
+        },
+    }, healthController.promMetrics);
 }

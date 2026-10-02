@@ -129,6 +129,10 @@ export class OrderCreationService {
             const grandTotal = Number((subtotal - totalDiscount + shippingTotal + taxTotal).toFixed(2));
             const orderNumber = orderNumberService.generateOrderNumber();
 
+            // mark cod as confirmed and online as pending after payment via online mark as confirmed
+            const isCod = input?.paymentMethod === "COD";
+            const initialStatus = isCod ? "CONFIRMED" : "PENDING";
+
             // 6. Execute atomic database transaction
             const order = await prisma.$transaction(async (tx) => {
                 // A. Create Order entity
@@ -137,7 +141,7 @@ export class OrderCreationService {
                         orderNumber,
                         userId: userId ?? null,
                         cartId: cartId ?? null,
-                        status: "PENDING",
+                        status: initialStatus,
                         currency: input?.currency || "INR",
                         subtotal,
                         discountTotal: totalDiscount,
@@ -189,9 +193,11 @@ export class OrderCreationService {
                     data: {
                         orderId: createdOrder.id,
                         previousStatus: null,
-                        newStatus: "PENDING",
+                        newStatus: initialStatus,
                         changedBy: userId ?? null,
-                        reason: "Order placed by customer during checkout",
+                        reason: isCod
+                            ? "Order placed with Cash on Delivery (COD)"
+                            : "Order placed by customer during checkout",
                     },
                 });
 
@@ -201,6 +207,34 @@ export class OrderCreationService {
                     createdOrder.id,
                     items.map((i) => ({ variantId: i.variantId, productName: i.productName, sku: i.sku, quantity: i.quantity })),
                 );
+
+                // Commit reservations immediately for COD since order is already confirmed
+                if (isCod) {
+                    for (const item of items) {
+                        await tx.inventory.update({
+                            where: { variantId: item.variantId },
+                            data: { reservedQuantity: { decrement: item.quantity } },
+                        });
+                    }
+
+                    await tx.inventoryReservation.updateMany({
+                        where: { orderId: createdOrder.id, status: "ACTIVE" },
+                        data: { status: "CONFIRMED" },
+                    });
+
+                    for (const item of items) {
+                        await tx.inventoryTransaction.create({
+                            data: {
+                                variantId: item.variantId,
+                                type: "ORDER_CONFIRMED",
+                                quantity: item.quantity,
+                                note: `Confirmed stock sale for COD Order ${createdOrder.id}`,
+                                referenceType: "ORDER",
+                                referenceId: createdOrder.id,
+                            },
+                        });
+                    }
+                }
 
                 // F. Record coupon usage if coupon applied
                 if (coupon) {
@@ -212,11 +246,46 @@ export class OrderCreationService {
                     await promotionUsageService.recordUsage(tx, promo.id, createdOrder.id, promo.discountAmount, userId);
                 }
 
-                // H. Clear shopping cart
-                // if (order?.status === "CONFIRMED") {
-                //     /// delete all cart items when payement successed
-                //     await tx.cartItem.deleteMany({ where: { cartId } });
-                // }
+                // H. Create pending payment record for COD to collect upon delivery
+                if (isCod) {
+                    await tx.payment.create({
+                        data: {
+                            orderId: createdOrder.id,
+                            provider: "COD",
+                            paymentMethod: "CASH_ON_DELIVERY",
+                            status: "PENDING",
+                            currency: createdOrder.currency,
+                            amount: createdOrder.grandTotal,
+                            paidAmount: 0,
+                        },
+                    });
+                }
+
+                // I. Clear cart items when order is confirmed immediately
+                if (isCod && cartId) {
+                    await tx.cartItem.deleteMany({ where: { cartId } });
+                }
+
+                // J. Emit domain event for COD orders
+                if (isCod) {
+                    await tx.outboxEvent.create({
+                        data: {
+                            eventType: "ORDER_CONFIRMED",
+                            aggregateType: "Order",
+                            aggregateId: createdOrder.id,
+                            payload: {
+                                orderId: createdOrder.id,
+                                orderNumber: createdOrder.orderNumber,
+                                previousStatus: null,
+                                newStatus: "CONFIRMED",
+                                paymentMethod: "COD",
+                                changedBy: userId ?? null,
+                                reason: "Order placed with Cash on Delivery (COD)",
+                                timestamp: new Date().toISOString(),
+                            },
+                        },
+                    });
+                }
 
                 return createdOrder;
             });
@@ -231,6 +300,7 @@ export class OrderCreationService {
                     couponUsages: { include: { coupon: { select: { code: true, type: true } } } },
                     promotionUsages: { include: { promotion: { select: { name: true, code: true, type: true } } } },
                     reservations: { select: { id: true, status: true, expiresAt: true } },
+                    payments: { select: { id: true, provider: true, paymentMethod: true, status: true, amount: true, paidAmount: true } },
                 },
             });
 
@@ -315,6 +385,14 @@ export class OrderCreationService {
                 createdAt: sh.createdAt,
             })),
             reservations: order.reservations ?? [],
+            payments: (order.payments || []).map((p: any) => ({
+                id: p.id,
+                provider: p.provider,
+                paymentMethod: p.paymentMethod,
+                status: p.status,
+                amount: Number(p.amount),
+                paidAmount: Number(p.paidAmount),
+            })),
         };
     }
 }

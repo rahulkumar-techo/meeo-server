@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
-import { paymentProviderRegistry } from "../providers/paymentProvider.registry.js";
+import { razorpayPaymentProvider } from "../providers/razorpayPayment.provider.js";
 import { paymentAttemptService } from "./paymentAttempt.service.js";
 import type { CreatePaymentIntentInput, RetryPaymentInput } from "../validations/payment.validation.js";
 
@@ -40,7 +40,6 @@ export class PaymentCreationService {
         }
 
         const providerName = input.provider || "RAZORPAY";
-        const provider = paymentProviderRegistry.getProvider(providerName);
         const amount = Number(order.grandTotal);
         const currency = order.currency;
 
@@ -71,7 +70,7 @@ export class PaymentCreationService {
             ? `${order.user.firstName || ""} ${order.user.lastName || ""}`.trim()
             : order.address?.recipientName;
 
-        const gatewayIntent = await provider.createPaymentIntent({
+        const gatewayIntent = await razorpayPaymentProvider.createPaymentIntent({
             orderId: order.id,
             orderNumber: order.orderNumber,
             amount,
@@ -162,7 +161,6 @@ export class PaymentCreationService {
             throw new AppError(`Cannot retry payment with status "${payment.status}"`, 400);
         }
 
-        const provider = paymentProviderRegistry.getProvider(payment.provider);
         const amount = Number(payment.amount);
 
         const customerName = payment.order.user
@@ -170,7 +168,7 @@ export class PaymentCreationService {
             : payment.order.address?.recipientName;
 
         // Create new gateway intent / token
-        const gatewayIntent = await provider.createPaymentIntent({
+        const gatewayIntent = await razorpayPaymentProvider.createPaymentIntent({
             orderId: payment.orderId,
             orderNumber: payment.order.orderNumber,
             amount,

@@ -136,11 +136,10 @@ export class PushProvider {
                     errorCode.includes("registration-token-not-registered");
 
                 if (isInvalidToken) {
-                    console.warn(`[PushProvider] ⚠️ Deactivating stale/invalid FCM device token in DB: ${deviceToken.slice(0, 20)}...`);
+                    console.warn(`[PushProvider] ⚠️ Deleting stale/invalid FCM device token in DB: ${deviceToken.slice(0, 20)}...`);
                     try {
-                        await prisma.deviceToken.updateMany({
+                        await prisma.deviceToken.deleteMany({
                             where: { token: deviceToken },
-                            data: { isActive: false },
                         });
                     } catch {
                         // ignore db errors

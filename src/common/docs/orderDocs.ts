@@ -57,6 +57,12 @@ export const orderSwaggerSchemas = {
                 type: "string",
                 description: "Special delivery instructions or order notes",
             },
+            paymentMethod: {
+                type: "string",
+                enum: ["RAZORPAY", "COD"],
+                default: "RAZORPAY",
+                description: "Selected payment method (RAZORPAY or COD)",
+            },
             currency: {
                 type: "string",
                 default: "INR",

@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: "meeo-api"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["api:5000"]
+
+  - job_name: "meeo-api-prom"
+    metrics_path: "/prom-metrics"
+    static_configs:
+      - targets: ["api:5000"]
+
+remote_write:
+  - url: "https://prometheus-prod-43-prod-ap-south-1.grafana.net/api/prom/push"
+    basic_auth:
+      username: "2752301"
+      password_file: "/run/secrets/grafana_cloud_token"
+

@@ -35,6 +35,7 @@ import { apiDescription, swaggerTags } from "./common/docs/apiDescription.js";
 import { docsDescriptionHtml } from "./common/docs/docsDescriptionPage.js";
 import { metricsService } from "./common/observability/metrics.service.js";
 import healthRouter, { metricsRouter } from "./modules/health/health.route.js";
+import { healthController } from "./modules/health/health.controller.js";
 import fastifyMetrics from "fastify-metrics";
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -242,6 +243,14 @@ export async function buildApp(): Promise<FastifyInstance> {
     // --- Observability & System Health ---
     app.register(healthRouter, { prefix: "/health" });
     app.register(metricsRouter, { prefix: "/metrics" });
+
+    // Prometheus scrape endpoint via prom-client
+    app.get("/prom-metrics", {
+        schema: {
+            tags: ["System - Observability"],
+            summary: "Prometheus metrics exported via prom-client",
+        },
+    }, healthController.promMetrics);
 
     app.get("/health", async (_req, reply) => {
         return reply.status(200).send({

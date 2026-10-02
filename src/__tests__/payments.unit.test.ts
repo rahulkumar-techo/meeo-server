@@ -62,7 +62,7 @@ vi.mock("@/lib/prisma.js", () => ({
     prisma: prismaMock,
 }));
 
-import { paymentProviderRegistry } from "../modules/payments/providers/paymentProvider.registry.js";
+import { razorpayPaymentProvider } from "../modules/payments/providers/razorpayPayment.provider.js";
 import { PaymentCreationService } from "../modules/payments/services/paymentCreation.service.js";
 import { PaymentAttemptService } from "../modules/payments/services/paymentAttempt.service.js";
 import { PaymentTransactionService } from "../modules/payments/services/paymentTransaction.service.js";
@@ -79,13 +79,9 @@ describe("Payment System Unit Tests", () => {
     // ----------------------------------------------------
     // Provider Registry Tests
     // ----------------------------------------------------
-    describe("PaymentProviderRegistry", () => {
-        it("resolves primary payment provider (RAZORPAY)", () => {
-            const rzpProv = paymentProviderRegistry.getProvider("RAZORPAY");
-            expect(rzpProv.name).toBe("RAZORPAY");
-
-            const defaultProv = paymentProviderRegistry.getProvider();
-            expect(defaultProv.name).toBe("RAZORPAY");
+    describe("RazorpayPaymentProvider", () => {
+        it("identifies primary payment provider as RAZORPAY", () => {
+            expect(razorpayPaymentProvider.name).toBe("RAZORPAY");
         });
     });
 

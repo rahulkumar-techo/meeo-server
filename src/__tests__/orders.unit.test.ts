@@ -62,9 +62,15 @@ const { prismaMock } = vi.hoisted(() => ({
             findMany: vi.fn(),
             create: vi.fn(),
             update: vi.fn(),
+            updateMany: vi.fn(),
         },
         inventoryTransaction: {
             create: vi.fn(),
+        },
+        payment: {
+            create: vi.fn(),
+            findFirst: vi.fn(),
+            update: vi.fn(),
         },
         $transaction: vi.fn((callback: (tx: any) => any) => {
             if (typeof callback === "function") {
@@ -513,12 +519,139 @@ describe("Order & Checkout Unit Tests", () => {
             const result = (await service.createOrder(userId, {
                 shippingAddress,
                 currency: "USD",
+                paymentMethod: "RAZORPAY",
             })) as any;
 
             expect(result.orderNumber).toBe("ORD-20260906-TEST1");
             expect(result.financials.grandTotal).toBe(2160.0);
             expect(result.items).toHaveLength(1);
+        });
 
+        it("orchestrates COD checkout: confirms order immediately, creates pending COD payment, and clears cart", async () => {
+            const userId = "user-cod-123";
+
+            prismaMock.cart.findFirst.mockResolvedValue({
+                id: "cart-cod-1",
+                items: [
+                    {
+                        id: "ci-1",
+                        quantity: 1,
+                        variant: {
+                            id: "v1",
+                            sku: "LAP-PRO",
+                            price: 1000.0,
+                            status: "ACTIVE",
+                            inventory: { availableQuantity: 5 },
+                            product: { id: "p1", name: "Laptop Pro", status: "ACTIVE", images: [] },
+                        },
+                    },
+                ],
+            });
+
+            const shippingAddress = {
+                recipientName: "Bob Jones",
+                addressLine1: "123 Elm St",
+                city: "Seattle",
+                state: "WA",
+                postalCode: "98101",
+                country: "USA",
+            };
+
+            prismaMock.inventory.findUnique.mockResolvedValue({
+                variantId: "v1",
+                availableQuantity: 5,
+                reservedQuantity: 0,
+            });
+
+            prismaMock.order.create.mockResolvedValue({
+                id: "order-cod-new",
+                orderNumber: "ORD-COD-1",
+                userId,
+                status: "CONFIRMED",
+                currency: "INR",
+                subtotal: 1000.0,
+                discountTotal: 0,
+                taxTotal: 180.0,
+                shippingTotal: 0,
+                grandTotal: 1180.0,
+            });
+
+            prismaMock.order.findUnique.mockResolvedValue({
+                id: "order-cod-new",
+                orderNumber: "ORD-COD-1",
+                userId,
+                status: "CONFIRMED",
+                currency: "INR",
+                subtotal: 1000.0,
+                discountTotal: 0,
+                taxTotal: 180.0,
+                shippingTotal: 0,
+                grandTotal: 1180.0,
+                items: [
+                    {
+                        id: "oi-1",
+                        productId: "p1",
+                        variantId: "v1",
+                        productName: "Laptop Pro",
+                        sku: "LAP-PRO",
+                        unitPrice: 1000.0,
+                        quantity: 1,
+                        discountTotal: 0,
+                        taxTotal: 0,
+                        total: 1000.0,
+                    },
+                ],
+                address: shippingAddress,
+                statusHistory: [{ previousStatus: null, newStatus: "CONFIRMED", reason: "Order placed with Cash on Delivery (COD)" }],
+                couponUsages: [],
+                reservations: [{ id: "res-1", status: "CONFIRMED" }],
+                payments: [{ id: "pay-1", provider: "COD", paymentMethod: "CASH_ON_DELIVERY", status: "PENDING", amount: 1180.0, paidAmount: 0 }],
+            });
+
+            const result = (await service.createOrder(userId, {
+                shippingAddress,
+                paymentMethod: "COD",
+                currency: "INR",
+            })) as any;
+
+            expect(result.status).toBe("CONFIRMED");
+            expect(result.payments).toHaveLength(1);
+            expect(result.payments[0].provider).toBe("COD");
+            expect(result.payments[0].status).toBe("PENDING");
+
+            // Verify order was created with CONFIRMED status
+            expect(prismaMock.order.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        status: "CONFIRMED",
+                    }),
+                }),
+            );
+
+            // Verify initial payment record was created for COD
+            expect(prismaMock.payment.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        provider: "COD",
+                        paymentMethod: "CASH_ON_DELIVERY",
+                        status: "PENDING",
+                    }),
+                }),
+            );
+
+            // Verify cart was cleared
+            expect(prismaMock.cartItem.deleteMany).toHaveBeenCalledWith({
+                where: { cartId: "cart-cod-1" },
+            });
+
+            // Verify ORDER_CONFIRMED event was emitted
+            expect(prismaMock.outboxEvent.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.objectContaining({
+                        eventType: "ORDER_CONFIRMED",
+                    }),
+                }),
+            );
         });
     });
 

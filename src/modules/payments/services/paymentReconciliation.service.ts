@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
-import { paymentProviderRegistry } from "../providers/paymentProvider.registry.js";
+import { razorpayPaymentProvider } from "../providers/razorpayPayment.provider.js";
 import { paymentVerificationService } from "./paymentVerification.service.js";
 
 export class PaymentReconciliationService {
@@ -22,10 +22,8 @@ export class PaymentReconciliationService {
 
         const latestAttempt = payment.attempts?.[0];
         const providerPaymentId = latestAttempt?.providerPaymentId || payment.id;
-        const provider = paymentProviderRegistry.getProvider();
-
         // Fetch remote status from Razorpay
-        const remoteDetails = await provider.getPaymentDetails(providerPaymentId);
+        const remoteDetails = await razorpayPaymentProvider.getPaymentDetails(providerPaymentId);
 
         let actionTaken = "NO_ACTION_REQUIRED";
 
