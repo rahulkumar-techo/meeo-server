@@ -160,6 +160,22 @@ export async function buildApp(): Promise<FastifyInstance> {
         (request as any).startTime = performance.now();
     });
 
+    // for grafana protect ,can only be access through the grafa
+    app.addHook("onRequest", async (request, reply) => {
+        const path = request.url.split("?")[0];
+        if (path === "/metrics" || path === "/prom-metrics") {
+            const auth = request.headers.authorization;
+            const secret = process.env.METRICS_TOKEN ;
+            if (!auth || auth !== `Bearer ${secret}`) {
+                return reply
+                    .status(401)
+                    .header("WWW-Authenticate", 'Bearer realm="metrics"')
+                    .send("Unauthorized");
+            }
+        }
+    });
+
+
     app.addHook("onResponse", async (request, reply) => {
         const startTime = (request as any).startTime || performance.now();
         const durationMs = Number((performance.now() - startTime).toFixed(2));

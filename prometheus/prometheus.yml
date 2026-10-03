@@ -22,4 +22,3 @@ remote_write:
     basic_auth:
       username: "2752301"
       password_file: "/run/secrets/grafana_cloud_token"
-

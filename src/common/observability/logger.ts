@@ -1,35 +1,23 @@
 import pino from "pino";
 import { secureLogSerializers } from "@/common/security/masking.js";
+import { createLoggerTransport } from "@/const/logger.config.js";
 
 const isProduction = process.env.NODE_ENV === "production";
 const logLevel = process.env.LOG_LEVEL ?? (isProduction ? "info" : "debug");
+const transport = createLoggerTransport();
 
 /**
  * Production-ready structured logger instance.
- * In development, uses pino-pretty for human readability; in production, emits structured JSON.
+ * Automatically ships logs to Grafana Cloud Loki when configured, while mirroring to console.
  */
 export const logger = pino({
     level: logLevel,
     serializers: secureLogSerializers,
-    timestamp: pino.stdTimeFunctions.isoTime,
     base: {
-        env: process.env.NODE_ENV ?? "development",
+        env: process.env.NODE_ENV ?? (isProduction ? "production" : "development"),
         service: "meeo-server",
     },
-    ...(isProduction
-        ? {}
-        : {
-              transport: {
-                  target: "pino-pretty",
-                  options: {
-                      colorize: true,
-                      levelFirst: true,
-                      translateTime: "SYS:yyyy-mm-dd HH:MM:ss.l",
-                      singleLine: true,
-                      ignore: "pid,hostname",
-                  },
-              },
-          }),
+    ...(transport ? { transport } : {}),
 });
 
 /**

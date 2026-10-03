@@ -43,24 +43,82 @@ export function formatHttpLog(
     return `${methodFormatted} ${url} ${statusFormatted} ${durationFormatted} ${idFormatted}`.trim();
 }
 
+export function createLoggerTransport() {
+    const lokiUrl = process.env.LOKI_URL;
+    const lokiUser = process.env.LOKI_USER_ID;
+    const lokiToken = process.env.GRAFANA_LOKI_TOKEN;
+    const hasLoki = Boolean(lokiUrl && lokiUser && lokiToken);
+
+    if (!hasLoki) {
+        return isProduction
+            ? undefined
+            : {
+                  target: "pino-pretty",
+                  options: {
+                      colorize: true,
+                      levelFirst: true,
+                      translateTime: "SYS:HH:MM:ss.l",
+                      singleLine: true,
+                      ignore: "pid,hostname,reqId,req,res,responseTime",
+                  },
+              };
+    }
+
+    const lokiTarget = {
+        target: "pino-loki",
+        options: {
+            host: new URL(lokiUrl!).origin,
+            basicAuth: {
+                username: lokiUser!,
+                password: lokiToken!,
+            },
+            labels: {
+                app: "meeo-server",
+                service: "meeo-server",
+                job: "meeo-api",
+                env: process.env.NODE_ENV ?? (isProduction ? "production" : "development"),
+            },
+            structuredMetaKey: false,
+            replaceTimestamp: true,
+        },
+    };
+
+    if (isProduction) {
+        return {
+            targets: [
+                {
+                    target: "pino/file",
+                    options: { destination: 1 },
+                },
+                lokiTarget,
+            ],
+        };
+    }
+
+    return {
+        targets: [
+            {
+                target: "pino-pretty",
+                options: {
+                    colorize: true,
+                    levelFirst: true,
+                    translateTime: "SYS:HH:MM:ss.l",
+                    singleLine: true,
+                    ignore: "pid,hostname,reqId,req,res,responseTime",
+                },
+            },
+            lokiTarget,
+        ],
+    };
+}
+
+const transport = createLoggerTransport();
+
 export const preetyLogger = {
     disableRequestLogging: true,
     logger: {
         level: process.env.LOG_LEVEL ?? (isProduction ? "info" : "debug"),
         serializers: secureLogSerializers,
-        ...(isProduction
-            ? {}
-            : {
-                  transport: {
-                      target: "pino-pretty",
-                      options: {
-                          colorize: true,
-                          levelFirst: true,
-                          translateTime: "SYS:HH:MM:ss.l",
-                          singleLine: true,
-                          ignore: "pid,hostname,reqId,req,res,responseTime",
-                      },
-                  },
-              }),
+        ...(transport ? { transport } : {}),
     },
 };
