@@ -26,8 +26,10 @@ async function sendHeartbeat() {
     }
 }
 
-// Start worker heartbeat cron (default: runs every 10 seconds)
-export function startWorkerHeartbeatCron(cronExpression = "*/10 * * * * *") {
+// Start worker heartbeat cron.
+// Staggered interval (every 15s at seconds 03, 18, 33, 48) prevents concurrent IO spikes 
+// with Outbox and Behaviour crons on shared/constrained CPU hosts (e.g. Render Free Tier).
+export function startWorkerHeartbeatCron(cronExpression = "3,18,33,48 * * * * *") {
     if (heartbeatTask) return;
     const expression = process.env.HEARTBEAT_CRON_EXPRESSION || cronExpression;
     heartbeatTask = cron.schedule(expression, sendHeartbeat);

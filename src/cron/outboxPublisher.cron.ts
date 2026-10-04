@@ -23,7 +23,8 @@ async function runOutboxPoll() {
     }
 }
 
-// Start outbox publisher cron (default: runs every 5 seconds)
+// Start outbox publisher cron (default: runs every 5 seconds at :00, :05, :10...)
+// Polling frequency can be tuned via OUTBOX_CRON_EXPRESSION env variable.
 export function startOutboxPublisherCron(cronExpression = "*/5 * * * * *") {
     if (outboxTask) return;
     const expression = process.env.OUTBOX_CRON_EXPRESSION || cronExpression;

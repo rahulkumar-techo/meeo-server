@@ -19,7 +19,7 @@ async function runAggregationBatch() {
             );
         }
     } catch (err: any) {
-        console.error("[Cron: User Behaviour Aggregation Error]:", err.message);
+        console.error("[Cron: User Behaviour Aggregation Error]:", err?.message || err);
     } finally {
         isAggregating = false;
     }
@@ -43,8 +43,11 @@ async function runRetentionPurge() {
     }
 }
 
-// Start user behaviour aggregation cron (default: runs every 10 seconds)
-export function startUserBehaviourCron(cronExpression = "*/10 * * * * *") {
+// Start user behaviour aggregation cron.
+// Staggered interval (every 20s at seconds 07, 27, 47) prevents overlapping database IO spikes 
+// with Outbox poller (runs on :00, :05, :10...) and Heartbeat (runs on :03, :18, :33...), 
+// eliminating "[NODE-CRON] [WARN] missed execution" warnings on constrained CPU hosts like Render.
+export function startUserBehaviourCron(cronExpression = "7,27,47 * * * * *") {
     if (aggregationTask) return;
     const expression = process.env.USER_BEHAVIOUR_CRON_EXPRESSION || cronExpression;
     aggregationTask = cron.schedule(expression, runAggregationBatch);
