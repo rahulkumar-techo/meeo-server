@@ -27,6 +27,10 @@ export class AuthService {
         return authRegistrationService.verifyOtp(payload);
     }
 
+    verifyResetOtp(payload: AuthOtpVerification) {
+        return authRegistrationService.verifyResetOtp(payload);
+    }
+
     resendOtp(payload: ResendOtpInput) {
         return authRegistrationService.resendOtp(payload);
     }

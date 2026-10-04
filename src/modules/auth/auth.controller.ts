@@ -46,13 +46,24 @@ class AuthController {
         });
     }
 
+    async verifyResetOtp(request: FastifyRequest, reply: FastifyReply) {
+        const data = otpVerification.parse(request.body);
+        const result = await authService.verifyResetOtp(data);
+
+        return sendOk({
+            reply,
+            message: "Reset code verified successfully",
+            data: result,
+        });
+    }
+
     async resendOtp(request: FastifyRequest, reply: FastifyReply) {
         const data = resendOtp.parse(request.body);
         const result = await authService.resendOtp(data);
 
         return sendOk({
             reply,
-            message: "If the account requires verification, a new OTP has been sent",
+            message: "A new verification code has been sent to your email",
             data: result,
         });
     }
@@ -63,7 +74,7 @@ class AuthController {
 
         return sendOk({
             reply,
-            message: "If an account exists, password reset instructions have been sent",
+            message: "Password reset code sent successfully",
             data: result,
         });
     }

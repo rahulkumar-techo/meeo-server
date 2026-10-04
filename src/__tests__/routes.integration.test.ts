@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { authServiceMock, userServiceMock } = vi.hoisted(() => ({
     authServiceMock: {
-        register: vi.fn(), login: vi.fn(), verifyOtp: vi.fn(), resendOtp: vi.fn(),
+        register: vi.fn(), login: vi.fn(), verifyOtp: vi.fn(), verifyResetOtp: vi.fn(), resendOtp: vi.fn(),
         forgotPassword: vi.fn(), resetPassword: vi.fn(), refreshToken: vi.fn(), getCurrentUser: vi.fn(),
     },
     userServiceMock: {
@@ -55,6 +55,29 @@ describe("auth and user routes (integration)", () => {
 
         expect(response.statusCode).toBe(201);
         expect(authServiceMock.register).toHaveBeenCalledOnce();
+        await app.close();
+    });
+
+    it("verifies reset OTP at HTTP boundary and returns verified status", async () => {
+        authServiceMock.verifyResetOtp.mockResolvedValue({ verified: true });
+        const app = await createTestApp();
+
+        const response = await app.inject({
+            method: "POST",
+            url: "/api/auth/verify-reset-otp",
+            payload: { email: "ada@example.test", otp: "1234" },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({
+            success: true,
+            message: "Reset code verified successfully",
+            data: { verified: true },
+        });
+        expect(authServiceMock.verifyResetOtp).toHaveBeenCalledWith({
+            email: "ada@example.test",
+            otp: "1234",
+        });
         await app.close();
     });
 

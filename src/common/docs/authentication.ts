@@ -44,6 +44,22 @@ export const authenticationSchemas = {
             response: { 200: successResponse(), ...commonErrors },
         },
     },
+    verifyResetOtp: {
+        schema: {
+            tags: ["Auth"],
+            summary: "[Public] Verify password reset OTP",
+            description: "Verifies the 4-digit password reset OTP without clearing the Redis key, allowing the client to validate the code before prompting for a new password.",
+            ...jsonBody({
+                type: "object",
+                required: ["email", "otp"],
+                properties: {
+                    email: { type: "string", format: "email" },
+                    otp: { type: "string", pattern: "^[0-9]{4}$" },
+                },
+            }),
+            response: { 200: successResponse({ type: "object", properties: { verified: { type: "boolean" } } }), ...commonErrors },
+        },
+    },
     resendOtp: {
         schema: {
             tags: ["Auth"],

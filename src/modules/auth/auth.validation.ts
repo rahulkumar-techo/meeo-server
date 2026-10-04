@@ -1,19 +1,21 @@
 import { z } from "zod";
 
+const emailField = z.string().trim().toLowerCase().email("Invalid email address");
+
 export const authRegister = z.object({
     firstName: z.string().min(1, "First name is required"),
     lastName: z.string().min(1, "Last name is required"),
-    email: z.string().email("Invalid email address"),
+    email: emailField,
     password: z.string().trim().min(5, "Password must be at least 5 characters").max(100, "Password cannot exceed 100 characters"),
 });
 
 export const otpVerification = z.object({
     otp: z.coerce.string().regex(/^\d{4}$/, "OTP must be exactly 4 digits"),
-    email: z.string().email("Invalid email address"),
+    email: emailField,
 });
 
 export const resendOtp = z.object({
-    email: z.string().email("Invalid email address"),
+    email: emailField,
 });
 
 export const forgotPassword = resendOtp;
@@ -23,7 +25,7 @@ export const resetPassword = otpVerification.extend({
 });
 
 export const loginSchema = z.object({
-    email: z.string().email("Invalid email address"),
+    email: emailField,
     password: z.string().trim().min(5, "Password must be at least 5 characters").max(100, "Password cannot exceed 100 characters"),
     deviceName: z.string().trim().max(100).optional(),
     deviceId: z.string().trim().max(255).optional(),

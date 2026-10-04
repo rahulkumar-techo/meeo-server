@@ -31,38 +31,73 @@ export class AuthRegistrationService {
 
     /**
      * Registers a new user with default CUSTOMER role, creates verification OTP and dispatches email.
+     * If the email exists but is unverified, refreshes their info, generates a fresh OTP, and dispatches verification email.
      */
     async register(payload: AuthRegisterInput) {
         const { firstName, lastName, email, password } = payload;
 
         const passwordHash = await argon2.hash(password);
 
-        const user = await prisma.user.create({
-            data: {
-                firstName,
-                lastName,
-                email,
-                passwordHash,
-                roles: {
-                    create: {
-                        role: {
-                            connectOrCreate: {
-                                where: { name: "CUSTOMER" },
-                                create: { name: "CUSTOMER", description: "Default customer role" },
+        const existingUser = await prisma.user.findUnique({
+            where: { email },
+            select: {
+                id: true,
+                email: true,
+                emailVerified: true,
+            },
+        });
+
+        if (existingUser?.emailVerified) {
+            throw new AppError("Email already registered", 400);
+        }
+
+        let user;
+        if (existingUser) {
+            // Unverified user resubmitting signup: update credentials & names, then issue fresh OTP
+            user = await prisma.user.update({
+                where: { id: existingUser.id },
+                data: {
+                    firstName,
+                    lastName,
+                    passwordHash,
+                },
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    createdAt: true,
+                    updatedAt: true,
+                },
+            });
+        } else {
+            user = await prisma.user.create({
+                data: {
+                    firstName,
+                    lastName,
+                    email,
+                    passwordHash,
+                    roles: {
+                        create: {
+                            role: {
+                                connectOrCreate: {
+                                    where: { name: "CUSTOMER" },
+                                    create: { name: "CUSTOMER", description: "Default customer role" },
+                                },
                             },
                         },
                     },
                 },
-            },
-            select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                createdAt: true,
-                updatedAt: true,
-            },
-        });
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    createdAt: true,
+                    updatedAt: true,
+                },
+            });
+        }
 
         if (!user) {
             throw new AppError("User Not Created", 404);
@@ -115,6 +150,15 @@ export class AuthRegistrationService {
     }
 
     /**
+     * Validates password reset OTP without clearing the Redis key,
+     * allowing the client to verify the code before prompting for a new password.
+     */
+    async verifyResetOtp({ email, otp }: AuthOtpVerification) {
+        await this.assertOtp(Keys.PASSWORD_RESET_OTP(email), otp);
+        return { verified: true };
+    }
+
+    /**
      * Resends OTP for unverified user email and dispatches email.
      */
     async resendOtp({ email }: ResendOtpInput) {
@@ -123,8 +167,12 @@ export class AuthRegistrationService {
             select: { id: true, email: true, emailVerified: true, firstName: true, lastName: true },
         });
 
-        if (!user || user.emailVerified) {
-            return {};
+        if (!user) {
+            throw new AppError("No account found with this email", 404);
+        }
+
+        if (user.emailVerified) {
+            throw new AppError("Email is already verified. Please log in.", 400);
         }
 
         const tempOtp = await this.createOtp(Keys.USER_OTP(email));
@@ -163,16 +211,20 @@ export class AuthRegistrationService {
      * Generates a password reset OTP and dispatches email.
      */
     async forgotPassword({ email }: ForgotPasswordInput) {
+        console.log(`[ForgotPassword] 📥 Received request for email: "${email}"`);
+
         const user = await prisma.user.findUnique({
             where: { email },
             select: { id: true, email: true, firstName: true, lastName: true },
         });
 
         if (!user) {
-            return {};
+            console.warn(`[ForgotPassword] ⚠️ User with email "${email}" NOT FOUND in database.`);
+            throw new AppError("No account found with this email", 404);
         }
 
         const tempOtp = await this.createOtp(Keys.PASSWORD_RESET_OTP(email));
+        console.log(`[ForgotPassword] ✅ User found (ID: ${user.id}). Generated OTP. Staging outbox event...`);
 
         const emailContent = generateOtpEmail({
             firstName: user.firstName ?? "Valued",

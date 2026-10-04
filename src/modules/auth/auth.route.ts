@@ -25,6 +25,11 @@ const publicAuthRoutes = (app: FastifyInstance) => {
         authController.forgotPassword.bind(authController),
     );
     app.post(
+        "/verify-reset-otp",
+        authenticationSchemas.verifyResetOtp,
+        authController.verifyResetOtp.bind(authController),
+    );
+    app.post(
         "/reset-password",
         authenticationSchemas.resetPassword,
         authController.resetPassword.bind(authController),
