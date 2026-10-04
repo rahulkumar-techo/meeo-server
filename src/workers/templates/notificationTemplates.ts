@@ -409,6 +409,57 @@ export const NOTIFICATION_TEMPLATES: Record<string, NotificationTemplateDefiniti
             </div>
         `.trim(),
     },
+
+    // ----------------------------------------------------
+    // Category: Auth / Account Verification (OTP)
+    // ----------------------------------------------------
+    USER_REGISTERED: {
+        type: "USER_REGISTERED",
+        category: "security",
+        subject: "Your Verification Code - {{appName}}",
+        title: "Your Verification Code",
+        body: "Hello {{customerName}}, your verification code is {{otpCode}}.",
+        pushTitle: "Your Verification Code",
+        pushBody: "Your verification code is {{otpCode}}.",
+        sendEmailByDefault: true, // Verification OTP emails must always be dispatched
+        html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 24px; color: #111827; background-color: #f9fafb; line-height: 1.5;">
+                <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; padding: 32px; border: 1px solid #e5e7eb;">
+                    <h2 style="color: #111827; margin-top: 0; font-size: 20px; font-weight: 600;">Welcome to {{appName}}</h2>
+                    <p>Dear <strong>{{customerName}}</strong>,</p>
+                    <p>Thank you for registering. Please use the verification code below to verify your email address:</p>
+                    <div style="background: #f3f4f6; border-radius: 6px; padding: 16px; margin: 20px 0; text-align: center;">
+                        <span style="font-size: 28px; font-weight: 700; letter-spacing: 4px; color: #111827;">{{otpCode}}</span>
+                    </div>
+                    <p style="font-size: 13px; color: #6b7280;">This code will expire in 5 minutes. If you did not create an account, you can safely ignore this email.</p>
+                </div>
+            </div>
+        `.trim(),
+    },
+
+    USER_OTP_REQUESTED: {
+        type: "USER_OTP_REQUESTED",
+        category: "security",
+        subject: "Your Verification Code - {{appName}}",
+        title: "Your Verification Code",
+        body: "Hello {{customerName}}, your verification code is {{otpCode}}.",
+        pushTitle: "Your Verification Code",
+        pushBody: "Your verification code is {{otpCode}}.",
+        sendEmailByDefault: true,
+        html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 24px; color: #111827; background-color: #f9fafb; line-height: 1.5;">
+                <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; padding: 32px; border: 1px solid #e5e7eb;">
+                    <h2 style="color: #111827; margin-top: 0; font-size: 20px; font-weight: 600;">Verification Code</h2>
+                    <p>Dear <strong>{{customerName}}</strong>,</p>
+                    <p>We received a request for a verification code. Please use the code below:</p>
+                    <div style="background: #f3f4f6; border-radius: 6px; padding: 16px; margin: 20px 0; text-align: center;">
+                        <span style="font-size: 28px; font-weight: 700; letter-spacing: 4px; color: #111827;">{{otpCode}}</span>
+                    </div>
+                    <p style="font-size: 13px; color: #6b7280;">This code will expire in 5 minutes. If you did not request this, please contact support.</p>
+                </div>
+            </div>
+        `.trim(),
+    },
 };
 
 // Valid customer notification categories
@@ -446,12 +497,12 @@ export function renderNotificationContent(
     };
 
     return {
-        subject: interpolateVariables(template.subject, variables),
-        title: interpolateVariables(template.title, variables),
-        body: interpolateVariables(template.body, variables),
-        html: interpolateVariables(template.html, variables),
-        pushTitle: interpolateVariables(template.pushTitle || template.title, variables),
-        pushBody: interpolateVariables(template.pushBody || template.body, variables),
+        subject: variables.subject ? interpolateVariables(variables.subject, variables) : interpolateVariables(template.subject, variables),
+        title: variables.title ? interpolateVariables(variables.title, variables) : interpolateVariables(template.title, variables),
+        body: variables.body ? interpolateVariables(variables.body, variables) : interpolateVariables(template.body, variables),
+        html: variables.html ? interpolateVariables(variables.html, variables) : interpolateVariables(template.html, variables),
+        pushTitle: interpolateVariables(variables.pushTitle || template.pushTitle || template.title, variables),
+        pushBody: interpolateVariables(variables.pushBody || template.pushBody || template.body, variables),
         data: variables,
     };
 }

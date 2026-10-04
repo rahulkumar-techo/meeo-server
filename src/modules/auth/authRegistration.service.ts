@@ -11,7 +11,6 @@ import { AppError } from "@/common/errors/app-error.js";
 import { generateOtp } from "@/common/utils/generateOtp.js";
 import redis from "@/lib/redis.js";
 import { Keys } from "@/const/keys.js";
-import { mailService } from "@/common/mail/send.mail.js";
 import { generateOtpEmail } from "@/templates/otp.template.js";
 import { notificationDeliveryService } from "@/workers/services/notificationDelivery.service.js";
 
@@ -78,13 +77,24 @@ export class AuthRegistrationService {
             appName: process.env.APP_NAME || "MEEO",
         });
 
-        await mailService.sendMail({
-            to: user.email!,
-            subject: `Your Verification Code - ${process.env.APP_NAME || "MEEO"}`,
-            html: emailContent.html,
-            text: emailContent.text,
-        }).catch((err) => {
-            console.error(`[AuthRegistration] Failed to send registration OTP email to ${user.email}:`, err.message);
+        // Stage transactional outbox event for background email dispatch
+        await prisma.outboxEvent.create({
+            data: {
+                eventType: "USER_REGISTERED",
+                aggregateType: "User",
+                aggregateId: user.id,
+                payload: {
+                    userId: user.id,
+                    email: user.email,
+                    customerName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Customer",
+                    otpCode: registerOtp,
+                    appName: process.env.APP_NAME || "MEEO",
+                    subject: `Your Verification Code - ${process.env.APP_NAME || "MEEO"}`,
+                    html: emailContent.html,
+                    body: emailContent.text,
+                },
+                status: "PENDING",
+            },
         });
 
         return { user, tempOtp: registerOtp };
@@ -110,7 +120,7 @@ export class AuthRegistrationService {
     async resendOtp({ email }: ResendOtpInput) {
         const user = await prisma.user.findUnique({
             where: { email },
-            select: { email: true, emailVerified: true, firstName: true, lastName: true },
+            select: { id: true, email: true, emailVerified: true, firstName: true, lastName: true },
         });
 
         if (!user || user.emailVerified) {
@@ -126,13 +136,24 @@ export class AuthRegistrationService {
             appName: process.env.APP_NAME || "MEEO",
         });
 
-        await mailService.sendMail({
-            to: email,
-            subject: `Your New Verification Code - ${process.env.APP_NAME || "MEEO"}`,
-            html: emailContent.html,
-            text: emailContent.text,
-        }).catch((err) => {
-            console.error(`[AuthRegistration] Failed to resend OTP email to ${email}:`, err.message);
+        // Stage transactional outbox event for background email dispatch
+        await prisma.outboxEvent.create({
+            data: {
+                eventType: "USER_OTP_REQUESTED",
+                aggregateType: "User",
+                aggregateId: user.id,
+                payload: {
+                    userId: user.id,
+                    email: user.email,
+                    customerName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Customer",
+                    otpCode: tempOtp,
+                    appName: process.env.APP_NAME || "MEEO",
+                    subject: `Your New Verification Code - ${process.env.APP_NAME || "MEEO"}`,
+                    html: emailContent.html,
+                    body: emailContent.text,
+                },
+                status: "PENDING",
+            },
         });
 
         return { tempOtp };
@@ -144,7 +165,7 @@ export class AuthRegistrationService {
     async forgotPassword({ email }: ForgotPasswordInput) {
         const user = await prisma.user.findUnique({
             where: { email },
-            select: { email: true, firstName: true, lastName: true },
+            select: { id: true, email: true, firstName: true, lastName: true },
         });
 
         if (!user) {
@@ -160,13 +181,24 @@ export class AuthRegistrationService {
             appName: process.env.APP_NAME || "MEEO",
         });
 
-        await mailService.sendMail({
-            to: email,
-            subject: `Password Reset Verification Code - ${process.env.APP_NAME || "MEEO"}`,
-            html: emailContent.html,
-            text: emailContent.text,
-        }).catch((err) => {
-            console.error(`[AuthRegistration] Failed to send password reset OTP email to ${email}:`, err.message);
+        // Stage transactional outbox event for background email dispatch
+        await prisma.outboxEvent.create({
+            data: {
+                eventType: "USER_OTP_REQUESTED",
+                aggregateType: "User",
+                aggregateId: user.id,
+                payload: {
+                    userId: user.id,
+                    email: user.email,
+                    customerName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Customer",
+                    otpCode: tempOtp,
+                    appName: process.env.APP_NAME || "MEEO",
+                    subject: `Password Reset Verification Code - ${process.env.APP_NAME || "MEEO"}`,
+                    html: emailContent.html,
+                    body: emailContent.text,
+                },
+                status: "PENDING",
+            },
         });
 
         return { tempOtp };
