@@ -1,0 +1,30 @@
+// Interests enums
+enum UserInterestType {
+  CATEGORY
+  BRAND
+  PRODUCT
+}
+
+model UserInterest {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+
+  type     UserInterestType
+  entityId String
+
+  score Float @default(0)
+
+  viewCount     Int @default(0)
+  cartCount     Int @default(0)
+  purchaseCount Int @default(0)
+
+  lastInteractionAt DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type, entityId])
+  @@index([userId, score])
+  @@map("user_interests")
+}

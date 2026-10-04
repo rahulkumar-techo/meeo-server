@@ -27,26 +27,31 @@ model User {
   deletedAt DateTime?
 
   // Related models and tables.
-  addresses       Address[]
-  sessions        UserSession[]
-  roles           UserRole[]
-  carts           Cart[]
-  wishlist        Wishlist?
-  orders          Order[]
-  reviews         Review[]
-  reviewReports   ReviewReport[] @relation("UserReviewReports")
+  addresses              Address[]
+  sessions               UserSession[]
+  roles                  UserRole[]
+  carts                  Cart[]
+  wishlist               Wishlist?
+  orders                 Order[]
+  reviews                Review[]
+  reviewReports          ReviewReport[]          @relation("UserReviewReports")
   notifications          Notification[]
   notificationPreference NotificationPreference?
   deviceTokens           DeviceToken[]
   idempotencyKeys        IdempotencyKey[]
 
-  createdRefunds    Refund[]    @relation("RefundRequestedBy")
-  createdCategories Category[]  @relation("CategoryCreatedBy")
-  createdBrands     Brand[]     @relation("BrandCreatedBy")
-  createdProducts   Product[]   @relation("ProductCreatedBy")
-  createdPromotions Promotion[] @relation("PromotionCreatedBy")
+  // events track
+  eventTrack    UserEvent[]
+  userBehaviour UserBehaviorSummary?
+  userInterests UserInterest[]
+
+  createdRefunds    Refund[]         @relation("RefundRequestedBy")
+  createdCategories Category[]       @relation("CategoryCreatedBy")
+  createdBrands     Brand[]          @relation("BrandCreatedBy")
+  createdProducts   Product[]        @relation("ProductCreatedBy")
+  createdPromotions Promotion[]      @relation("PromotionCreatedBy")
   promotionUsages   PromotionUsage[]
-  auditLogs         AuditLog[]  @relation("AuditActor")
+  auditLogs         AuditLog[]       @relation("AuditActor")
 
   // Indexes.
   @@index([status])

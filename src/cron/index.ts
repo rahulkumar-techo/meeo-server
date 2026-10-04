@@ -1,16 +1,19 @@
 import { startOutboxPublisherCron, stopOutboxPublisherCron } from "./outboxPublisher.cron.js";
 import { startOrderSweeperCron, stopOrderSweeperCron } from "./orderSweeper.cron.js";
 import { startWorkerHeartbeatCron, stopWorkerHeartbeatCron } from "./workerHeartbeat.cron.js";
+import { startUserBehaviourCron, stopUserBehaviourCron } from "./userBehaviourWorker.cron.js";
 
 export * from "./outboxPublisher.cron.js";
 export * from "./orderSweeper.cron.js";
 export * from "./workerHeartbeat.cron.js";
+export * from "./userBehaviourWorker.cron.js";
 
 // Start all background cron jobs
 export function startCronJobs() {
     startOutboxPublisherCron();
     startOrderSweeperCron();
     startWorkerHeartbeatCron();
+    startUserBehaviourCron();
     console.log("✅ All scheduled cron jobs started");
 }
 
@@ -19,5 +22,6 @@ export async function stopCronJobs() {
     stopOutboxPublisherCron();
     stopOrderSweeperCron();
     await stopWorkerHeartbeatCron();
+    stopUserBehaviourCron();
     console.log("🛑 All scheduled cron jobs stopped");
 }

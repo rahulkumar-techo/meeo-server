@@ -21,6 +21,8 @@ import dashboardRouter from "./modules/dashboard/routes/dashboard.route.js";
 import auditLogRouter from "./modules/audit/routes/auditLog.route.js";
 import jobRouter from "./jobs/routes/job.route.js";
 import settingRouter from "./modules/settings/routes/setting.route.js";
+import trackingRouter from "./modules/tracking/routes/tracking.route.js";
+import user360Router from "./modules/tracking/routes/user360.route.js";
 import helmetPlugin from "./plugins/helmet.plugin.js";
 import { sanitizeInput } from "./common/security/sanitizer.js";
 import { generateCsrfToken, setCsrfCookie } from "./common/security/csrf.js";
@@ -255,6 +257,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     // --- Admin & Analytics ---
     app.register(dashboardRouter, { prefix: "/api/v1/admin/dashboard" });
     app.register(auditLogRouter, { prefix: "/api/v1/admin/audit-logs" });
+    app.register(trackingRouter, { prefix: "/api/v1/tracking" });
+    app.register(user360Router, { prefix: "/api/v1/track-user" });
 
     // --- Observability & System Health ---
     app.register(healthRouter, { prefix: "/health" });

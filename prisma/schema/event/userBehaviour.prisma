@@ -1,0 +1,29 @@
+model UserBehaviorSummary {
+  userId String @id @db.Uuid
+
+  productViews    Int @default(0)
+  searches        Int @default(0)
+  categoryViews   Int @default(0)
+
+  wishlistAdds    Int @default(0)
+  wishlistRemoves Int @default(0)
+
+  cartAdds        Int @default(0)
+  cartRemoves     Int @default(0)
+
+  checkoutStarted Int @default(0)
+
+  paymentStarted Int @default(0)
+  paymentFailed  Int @default(0)
+  paymentSuccess Int @default(0)
+
+  lastActiveAt      DateTime?
+  lastProductViewAt DateTime?
+  lastPurchaseAt    DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_behavior_summary")
+}

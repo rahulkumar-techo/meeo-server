@@ -13,8 +13,8 @@ model Cart {
 
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  items CartItem[]
-   orders Order[]
+  items  CartItem[]
+  orders Order[]
 
   @@index([userId])
   @@index([sessionId])

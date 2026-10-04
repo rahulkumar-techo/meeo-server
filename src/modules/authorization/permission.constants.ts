@@ -57,4 +57,11 @@ export const PERMISSIONS = {
     AUDIT_READ: "audit:read",
     AUDIT_LOG_READ: "audit:read",
     SYSTEM_MANAGE: "system:manage",
+
+    // User 360 & Analytics
+    USER_360_VIEW: "user_360:view",
+    USER_COMMERCE_VIEW: "user_commerce:view",
+    USER_BEHAVIOR_VIEW: "user_behavior:view",
+    USER_INSIGHTS_VIEW: "user_insights:view",
+    USER_ACTIVITY_VIEW: "user_activity:view",
 } as const;

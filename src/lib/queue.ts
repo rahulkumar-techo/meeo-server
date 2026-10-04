@@ -19,12 +19,12 @@ export const DEFAULT_EVENT_JOB_OPTIONS: JobsOptions = {
         delay: 2000,
     },
     removeOnComplete: {
-        count: 1000,
-        age: 24 * 3600, // 24 hours
+        count: 50,
+        age: 3600, // 1 hour
     },
     removeOnFail: {
-        count: 5000,
-        age: 7 * 24 * 3600, // 7 days
+        count: 100,
+        age: 24 * 3600, // 24 hours
     },
 };
 
@@ -47,8 +47,8 @@ export const domainEventQueue = new Queue(QUEUE_NAMES.DOMAIN_EVENTS, {
 export const deadLetterQueue = new Queue(QUEUE_NAMES.DEAD_LETTER, {
     connection: redisConnection,
     defaultJobOptions: {
-        removeOnComplete: false,
-        removeOnFail: false,
+        removeOnComplete: true,
+        removeOnFail: { count: 100, age: 3 * 24 * 3600 },
     },
 });
 

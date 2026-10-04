@@ -29,7 +29,7 @@ model Product {
   bannerImage    Json?
   specifications Json?
 
-  images   Image[] @relation("ProductImages")
+  images   Image[]          @relation("ProductImages")
   variants ProductVariant[]
 
   reviews Review[]
@@ -50,31 +50,30 @@ model Product {
 
 // Unified image storage for Products, Product Variants, and Reviews with ImageKit metadata.
 model Image {
-  id               String          @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
-  fileId           String?
-  url              String
-  thumbnailUrl     String?
-  altText          String?
-  sortOrder        Int             @default(0)
-  width            Int?
-  height           Int?
-  size             Int?
+  fileId       String?
+  url          String
+  thumbnailUrl String?
+  altText      String?
+  sortOrder    Int     @default(0)
+  width        Int?
+  height       Int?
+  size         Int?
 
-  productId        String?         @db.Uuid
-  productVariantId String?         @db.Uuid
-  reviewId         String?         @db.Uuid
+  productId        String? @db.Uuid
+  productVariantId String? @db.Uuid
+  reviewId         String? @db.Uuid
 
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  product          Product?        @relation("ProductImages", fields: [productId], references: [id], onDelete: Cascade)
-  productVariant   ProductVariant? @relation("VariantImages", fields: [productVariantId], references: [id], onDelete: Cascade)
-  review           Review?         @relation("ReviewImages", fields: [reviewId], references: [id], onDelete: Cascade)
+  product        Product?        @relation("ProductImages", fields: [productId], references: [id], onDelete: Cascade)
+  productVariant ProductVariant? @relation("VariantImages", fields: [productVariantId], references: [id], onDelete: Cascade)
+  review         Review?         @relation("ReviewImages", fields: [reviewId], references: [id], onDelete: Cascade)
 
   @@index([productId])
   @@index([productVariantId])
   @@index([reviewId])
   @@map("images")
 }
-
