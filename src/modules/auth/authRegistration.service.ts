@@ -36,7 +36,8 @@ export class AuthRegistrationService {
     async register(payload: AuthRegisterInput) {
         const { firstName, lastName, email, password } = payload;
 
-        const passwordHash = await argon2.hash(password);
+        // Hash with Argon2id
+        const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
 
         const existingUser = await prisma.user.findUnique({
             where: { email },
@@ -52,51 +53,89 @@ export class AuthRegistrationService {
         }
 
         let user;
-        if (existingUser) {
-            // Unverified user resubmitting signup: update credentials & names, then issue fresh OTP
-            user = await prisma.user.update({
-                where: { id: existingUser.id },
-                data: {
-                    firstName,
-                    lastName,
-                    passwordHash,
-                },
-                select: {
-                    id: true,
-                    firstName: true,
-                    lastName: true,
-                    email: true,
-                    createdAt: true,
-                    updatedAt: true,
-                },
-            });
-        } else {
-            user = await prisma.user.create({
-                data: {
-                    firstName,
-                    lastName,
-                    email,
-                    passwordHash,
-                    roles: {
+        try {
+            user = await prisma.$transaction(async (tx) => {
+                if (existingUser) {
+                    const updated = await tx.user.update({
+                        where: { id: existingUser.id },
+                        data: {
+                            firstName,
+                            lastName,
+                            passwordHash,
+                        },
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true,
+                            createdAt: true,
+                            updatedAt: true,
+                        },
+                    });
+
+                    await tx.authAccount.upsert({
+                        where: {
+                            userId_provider_unique: {
+                                userId: existingUser.id,
+                                provider: "PASSWORD",
+                            },
+                        },
                         create: {
-                            role: {
-                                connectOrCreate: {
-                                    where: { name: "CUSTOMER" },
-                                    create: { name: "CUSTOMER", description: "Default customer role" },
+                            userId: existingUser.id,
+                            provider: "PASSWORD",
+                            providerAccountId: email,
+                            passwordHash,
+                        },
+                        update: {
+                            passwordHash,
+                            providerAccountId: email,
+                        },
+                    });
+
+                    return updated;
+                } else {
+                    return tx.user.create({
+                        data: {
+                            firstName,
+                            lastName,
+                            email,
+                            passwordHash,
+                            status: "ACTIVE",
+                            roles: {
+                                create: {
+                                    role: {
+                                        connectOrCreate: {
+                                            where: { name: "CUSTOMER" },
+                                            create: { name: "CUSTOMER", description: "Default customer role" },
+                                        },
+                                    },
+                                },
+                            },
+                            authAccounts: {
+                                create: {
+                                    provider: "PASSWORD",
+                                    providerAccountId: email,
+                                    passwordHash,
                                 },
                             },
                         },
-                    },
-                },
-                select: {
-                    id: true,
-                    firstName: true,
-                    lastName: true,
-                    email: true,
-                    createdAt: true,
-                    updatedAt: true,
-                },
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true,
+                            createdAt: true,
+                            updatedAt: true,
+                        },
+                    });
+                }
             });
+        } catch (error: any) {
+            // Handle concurrent duplicate registration race condition safely
+            if (error.code === "P2002") {
+                throw new AppError("Email already registered", 400);
+            }
+            throw error;
         }
 
         if (!user) {
@@ -261,7 +300,7 @@ export class AuthRegistrationService {
      */
     async resetPassword({ email, otp, password }: ResetPasswordInput) {
         await this.assertOtp(Keys.PASSWORD_RESET_OTP(email), otp);
-        const passwordHash = await argon2.hash(password);
+        const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
 
         const user = await prisma.user.findUnique({
             where: { email },
@@ -272,15 +311,37 @@ export class AuthRegistrationService {
             throw new AppError("Unable to reset password", 400);
         }
 
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { passwordHash },
+        await prisma.$transaction(async (tx) => {
+            await tx.user.update({
+                where: { id: user.id },
+                data: { passwordHash },
+            });
+
+            await tx.authAccount.upsert({
+                where: {
+                    userId_provider_unique: {
+                        userId: user.id,
+                        provider: "PASSWORD",
+                    },
+                },
+                create: {
+                    userId: user.id,
+                    provider: "PASSWORD",
+                    providerAccountId: user.email ?? email,
+                    passwordHash,
+                },
+                update: {
+                    passwordHash,
+                },
+            });
+
+            // Password changes invalidate every existing login session
+            await tx.userSession.updateMany({
+                where: { userId: user.id, revokedAt: null },
+                data: { revokedAt: new Date() },
+            });
         });
 
-        // Password changes invalidate every existing login session.
-        await prisma.userSession.deleteMany({
-            where: { userId: user.id },
-        });
         await redis.del(Keys.PASSWORD_RESET_OTP(email));
 
         // Dispatch security notification to customer via push and email

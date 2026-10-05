@@ -66,6 +66,12 @@ const privateAuthRoutes = (app: FastifyInstance) => {
         authController.logoutAll.bind(authController),
     );
 
+    app.post(
+        "/sessions/revoke-all",
+        { preHandler: app.authenticate, ...authenticationSchemas.logoutAll },
+        authController.logoutAll.bind(authController),
+    );
+
     app.get(
         "/sessions",
         { preHandler: app.authenticate, ...authenticationSchemas.sessions },
@@ -82,6 +88,36 @@ const privateAuthRoutes = (app: FastifyInstance) => {
         "/me",
         { preHandler: app.authenticate, ...authenticationSchemas.me },
         authController.me.bind(authController),
+    );
+
+    app.post(
+        "/password/set",
+        { preHandler: app.authenticate },
+        authController.setPassword.bind(authController),
+    );
+
+    app.post(
+        "/password/change",
+        { preHandler: app.authenticate },
+        authController.changePassword.bind(authController),
+    );
+
+    app.post(
+        "/accounts/google/link",
+        { preHandler: app.authenticate },
+        authController.linkGoogle.bind(authController),
+    );
+
+    app.delete<{ Params: { provider: string } }>(
+        "/accounts/:provider",
+        { preHandler: app.authenticate },
+        authController.unlinkProvider.bind(authController),
+    );
+
+    app.get(
+        "/accounts",
+        { preHandler: app.authenticate },
+        authController.listAccounts.bind(authController),
     );
 };
 

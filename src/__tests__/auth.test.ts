@@ -7,10 +7,22 @@ const { redisMock, prismaMock } = vi.hoisted(() => ({
         del: vi.fn(),
     },
     prismaMock: {
+        $transaction: vi.fn(async (cb: any) => (typeof cb === "function" ? cb(prismaMock) : Promise.all(cb))),
         user: {
             findUnique: vi.fn(),
             update: vi.fn(),
             create: vi.fn(),
+        },
+        authAccount: {
+            upsert: vi.fn(),
+            create: vi.fn(),
+            findUnique: vi.fn(),
+            update: vi.fn(),
+            delete: vi.fn(),
+        },
+        userSession: {
+            updateMany: vi.fn(),
+            deleteMany: vi.fn(),
         },
         outboxEvent: {
             create: vi.fn(),

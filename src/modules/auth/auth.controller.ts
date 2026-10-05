@@ -10,6 +10,10 @@ import {
     otpVerification,
     resendOtp,
     resetPassword,
+    setPasswordSchema,
+    changePasswordSchema,
+    linkGoogleSchema,
+    unlinkProviderParams,
     type AuthRegisterInput,
 } from "./auth.validation.js";
 import { sendCreated, sendOk } from "@/common/utils/response.js";
@@ -244,7 +248,39 @@ class AuthController {
         });
     }
 
+    async setPassword(request: FastifyRequest, reply: FastifyReply) {
+        const data = setPasswordSchema.parse(request.body);
+        const userId = request.user.userId || request.user.id;
+        const result = await authService.setPassword(userId, data);
+        return sendOk({ reply, message: result.message, data: result });
+    }
 
+    async changePassword(request: FastifyRequest, reply: FastifyReply) {
+        const data = changePasswordSchema.parse(request.body);
+        const userId = request.user.userId || request.user.id;
+        const result = await authService.changePassword(userId, data, request.user.sessionId);
+        return sendOk({ reply, message: result.message, data: result });
+    }
+
+    async linkGoogle(request: FastifyRequest, reply: FastifyReply) {
+        const data = linkGoogleSchema.parse(request.body);
+        const userId = request.user.userId || request.user.id;
+        const result = await authService.linkGoogle(userId, data);
+        return sendOk({ reply, message: result.message, data: result });
+    }
+
+    async unlinkProvider(request: FastifyRequest<{ Params: { provider: string } }>, reply: FastifyReply) {
+        const { provider } = unlinkProviderParams.parse(request.params);
+        const userId = request.user.userId || request.user.id;
+        const result = await authService.unlinkProvider(userId, provider as "PASSWORD" | "GOOGLE");
+        return sendOk({ reply, message: result.message, data: result });
+    }
+
+    async listAccounts(request: FastifyRequest, reply: FastifyReply) {
+        const userId = request.user.userId || request.user.id;
+        const result = await authService.listAuthAccounts(userId);
+        return sendOk({ reply, message: "Authentication methods fetched successfully", data: result });
+    }
 }
 
 export const authController = new AuthController();

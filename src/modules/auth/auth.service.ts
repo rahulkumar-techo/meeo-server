@@ -74,6 +74,26 @@ export class AuthService {
     authenticateWithGoogle(payload: GoogleLoginInput, metadata?: { ipAddress?: string; userAgent?: string }) {
         return authSessionService.authenticateWithGoogle(payload, metadata);
     }
+
+    setPassword(userId: string, payload: any) {
+        return authSessionService.setPassword(userId, payload);
+    }
+
+    changePassword(userId: string, payload: any, currentSessionId?: string) {
+        return authSessionService.changePassword(userId, payload, currentSessionId);
+    }
+
+    linkGoogle(userId: string, payload: any) {
+        return authSessionService.linkGoogle(userId, payload);
+    }
+
+    unlinkProvider(userId: string, provider: "PASSWORD" | "GOOGLE") {
+        return authSessionService.unlinkProvider(userId, provider);
+    }
+
+    listAuthAccounts(userId: string) {
+        return authSessionService.listAuthAccounts(userId);
+    }
 }
 
 export const authService = new AuthService();

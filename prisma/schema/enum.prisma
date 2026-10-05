@@ -5,6 +5,11 @@ enum UserStatus {
   PENDING_VERIFICATION
 }
 
+enum AuthProvider {
+  PASSWORD
+  GOOGLE
+}
+
 enum ProductStatus {
   DRAFT
   ACTIVE

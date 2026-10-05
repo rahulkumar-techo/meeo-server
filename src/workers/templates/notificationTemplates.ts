@@ -419,8 +419,6 @@ export const NOTIFICATION_TEMPLATES: Record<string, NotificationTemplateDefiniti
         subject: "Your Verification Code - {{appName}}",
         title: "Your Verification Code",
         body: "Hello {{customerName}}, your verification code is {{otpCode}}.",
-        pushTitle: "Your Verification Code",
-        pushBody: "Your verification code is {{otpCode}}.",
         sendEmailByDefault: true, // Verification OTP emails must always be dispatched
         html: `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 24px; color: #111827; background-color: #f9fafb; line-height: 1.5;">
@@ -443,8 +441,6 @@ export const NOTIFICATION_TEMPLATES: Record<string, NotificationTemplateDefiniti
         subject: "Your Verification Code - {{appName}}",
         title: "Your Verification Code",
         body: "Hello {{customerName}}, your verification code is {{otpCode}}.",
-        pushTitle: "Your Verification Code",
-        pushBody: "Your verification code is {{otpCode}}.",
         sendEmailByDefault: true,
         html: `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 24px; color: #111827; background-color: #f9fafb; line-height: 1.5;">

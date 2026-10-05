@@ -1,0 +1,30 @@
+// Represents an authentication credential or identity provider linked to a user.
+model AuthAccount {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Authentication provider type: PASSWORD, GOOGLE
+  provider AuthProvider
+
+  // Unique identifier within the provider:
+  // - GOOGLE: Google's immutable sub claim
+  // - PASSWORD: The user's ID
+  providerAccountId String
+
+  // Argon2id hash (populated ONLY when provider == PASSWORD)
+  passwordHash String?
+
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Constraints:
+  // Provider account ID must be unique per provider (prevents cross-account hijacking)
+  @@unique([provider, providerAccountId], name: "provider_providerAccountId_unique")
+  // A user can only link one account per provider type
+  @@unique([userId, provider], name: "userId_provider_unique")
+  @@index([userId])
+  @@map("auth_accounts")
+}

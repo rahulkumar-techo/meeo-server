@@ -88,7 +88,8 @@ export class NotificationDeliveryService {
         // --------------------------------------------------------------------
         let targetTokens: (string | undefined)[] = recipient.deviceToken ? [recipient.deviceToken] : [];
 
-        if (userId) {
+        const hasPushContent = Boolean(content.pushTitle || content.pushBody);
+        if (userId && hasPushContent) {
             const isPushAllowed = await notificationPreferenceService.isNotificationAllowed(userId, "PUSH", category);
             if (isPushAllowed) {
                 if (targetTokens.length === 0 && prisma.deviceToken?.findMany) {
