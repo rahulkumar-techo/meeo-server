@@ -31,7 +31,10 @@ describe("System Settings Unit Tests", () => {
         expect(defaults.loginRateLimit).toBe(5);
         expect(defaults.checkoutRateLimit).toBe(10);
 
-        // Tier 2: Financial rules
+        // Tier 2: Financial rules & shipping
+        expect(defaults.standardShippingFee).toBe(10.00);
+        expect(defaults.freeShippingThreshold).toBe(100.00);
+        expect(defaults.defaultTaxRate).toBe(8.00);
         expect(defaults.settlementFrequency).toBe("WEEKLY");
         expect(defaults.settlementDelayDays).toBe(2);
         expect(defaults.minimumPayoutAmount).toBe(50.00);
@@ -48,11 +51,17 @@ describe("System Settings Unit Tests", () => {
     it("updates settings and merges with existing cache", async () => {
         const updated = await settingService.updateSettings({
             platformBrandName: "Nexus Commerce",
+            standardShippingFee: 40.00,
+            freeShippingThreshold: 500.00,
+            defaultTaxRate: 18.00,
             settlementFrequency: "DAILY",
             refundApprovalThreshold: 250.00,
         });
 
         expect(updated.platformBrandName).toBe("Nexus Commerce");
+        expect(updated.standardShippingFee).toBe(40.00);
+        expect(updated.freeShippingThreshold).toBe(500.00);
+        expect(updated.defaultTaxRate).toBe(18.00);
         expect(updated.settlementFrequency).toBe("DAILY");
         expect(updated.refundApprovalThreshold).toBe(250.00);
         expect(updated.supportEmail).toBe("support@example.com"); // Unchanged default preserved

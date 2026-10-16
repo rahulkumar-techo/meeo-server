@@ -9,7 +9,8 @@
 > - [`src/modules/auth/authRegistration.service.ts`](file:///e:/e-com/server/src/modules/auth/authRegistration.service.ts) (Registration, OTP Verification, Password Resets)  
 > - [`src/modules/auth/googleAuth.service.ts`](file:///e:/e-com/server/src/modules/auth/googleAuth.service.ts) (Google JWKS Token Verification)  
 > **Validations**: [`src/modules/auth/auth.validation.ts`](file:///e:/e-com/server/src/modules/auth/auth.validation.ts)  
-> **Prisma Models**: [`auth_accounts`](file:///e:/e-com/server/prisma/schema/Identity/authAccount.prisma), [`users`](file:///e:/e-com/server/prisma/schema/Identity/user.prisma), [`user_sessions`](file:///e:/e-com/server/prisma/schema/Identity/session.prisma)
+> **Prisma Models**: [`auth_accounts`](file:///e:/e-com/server/prisma/schema/Identity/authAccount.prisma), [`users`](file:///e:/e-com/server/prisma/schema/Identity/user.prisma), [`user_sessions`](file:///e:/e-com/server/prisma/schema/Identity/session.prisma)  
+> **Customer Mobile Docs**: [`CUSTOMER_AUTH.md`](file:///e:/e-com/server/src/modules/auth/CUSTOMER_AUTH.md) (Complete React Native / Expo Customer Mobile Integration Guide)
 
 ---
 
@@ -24,6 +25,7 @@
    - [Public Endpoints](#public-endpoints)
    - [Authenticated Endpoints](#authenticated-endpoints)
 7. [Security Threat Mitigations](#7-security-threat-mitigations)
+8. [React Native Customer Mobile Guide](#8-react-native-customer-mobile-guide)
 
 ---
 
@@ -35,16 +37,17 @@ This authentication system follows the **Decoupled Identity & Authentication Pro
 > **One real user has ONE application account**, even if they authenticate via multiple methods (Password, Google OAuth, etc.).
 
 ```
-                          ┌─────────────────────────────┐
-                          │      Next.js Frontend       │
-                          │ (@react-oauth/google / Web) │
-                          └──────────────┬──────────────┘
-                                         │ HTTPS Credentials
-                                         ▼
-                          ┌─────────────────────────────┐
-                          │     Node.js Render API      │
-                          │   (Auth Controller/Router)  │
-                          └──────────────┬──────────────┘
+        ┌─────────────────────────────┐           ┌─────────────────────────────┐
+        │      Next.js Frontend       │           │ React Native Mobile (meeo)  │
+        │ (@react-oauth/google / Web) │           │ (SecureStore / Bearer Auth) │
+        └──────────────┬──────────────┘           └──────────────┬──────────────┘
+                       │ HTTPS Credentials                       │ Bearer Token / JSON
+                       └───────────────────┐    ┌────────────────┘
+                                           ▼    ▼
+                           ┌─────────────────────────────┐
+                           │     Node.js Render API      │
+                           │   (Auth Controller/Router)  │
+                           └──────────────┬──────────────┘
                                          │
                  ┌───────────────────────┴───────────────────────┐
                  │                                               │
@@ -287,3 +290,19 @@ Revokes a specific session.
 | **XSS Token Theft** | Refresh tokens stored exclusively in `HttpOnly` cookies. |
 | **Token Replay / Fixation** | Refresh token rotation on every call; reuse detection invalidates session family. |
 | **Lockout via Unlinking** | Hard check: `effectiveAccounts.length > 1` before allowing method deletion. |
+
+---
+
+## 8. React Native Customer Mobile Guide
+
+For complete, end-to-end integration details for React Native (Expo & Bare Workflow), see the dedicated customer guide:
+
+👉 **[`CUSTOMER_AUTH.md`](file:///e:/e-com/server/src/modules/auth/CUSTOMER_AUTH.md)**
+
+### Key Mobile Takeaways:
+- **No Cookie Dependency**: The server returns tokens in the JSON response body (`data.accessToken`, `data.refreshToken`) for mobile clients.
+- **Hardware-Backed Storage**: Mobile apps must persist tokens in `expo-secure-store` or `react-native-keychain` (not unencrypted `AsyncStorage`).
+- **Authorization Header**: All protected requests require `Authorization: Bearer <accessToken>`.
+- **Silent Refresh Interceptor**: Pass `{ "refreshToken": "<token>" }` in the body or `x-refresh-token` header to `POST /auth/refresh`. Handle single-use token rotation and queue concurrent failed requests.
+- **Native Google Sign-In**: Use `@react-native-google-signin/google-signin` with your Web Client ID to obtain `idToken`, and submit to `POST /auth/google`.
+

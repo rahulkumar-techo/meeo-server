@@ -237,6 +237,8 @@ Creates a new product in `DRAFT` status (or specified status) with creator track
 | `isFeatured` | `boolean` | No | `false` | Flag for homepage/featured showcase |
 | `seoTitle` | `string \| null` | No | `null` | Max 70 characters |
 | `seoDescription` | `string \| null` | No | `null` | Max 160 characters |
+| `taxRate` | `number` | No | `18.00` | GST / Tax percentage (e.g. `0`, `5`, `12`, `18`, `28`) |
+| `hsnCode` | `string \| null` | No | `null` | Harmonized System of Nomenclature code for GST invoices (Max 20 chars) |
 | `images` | `array` | No | `[]` | Array of image objects: `[{ url, altText?, sortOrder?, fileId? }]` |
 
 #### Example Request

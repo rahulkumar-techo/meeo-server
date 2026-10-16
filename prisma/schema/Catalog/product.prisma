@@ -18,6 +18,9 @@ model Product {
   seoTitle       String?
   seoDescription String?
 
+  taxRate Decimal @default(18.0) @db.Decimal(5, 2)
+  hsnCode String?
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?

@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
+import { settingService } from "@/modules/settings/services/setting.service.js";
 import type { AddressSnapshotInput } from "../validations/order.validation.js";
 
 export const DEFAULT_STANDARD_SHIPPING_FEE = 10.0;
 export const FREE_SHIPPING_THRESHOLD = 100.0;
-export const ESTIMATED_TAX_RATE = 0.08; // 8% standard tax estimate
+export const ESTIMATED_TAX_RATE = 0.08; // 8% standard tax estimate fallback
 
 export interface ValidatedCartItem {
     cartItemId: string;
@@ -16,6 +17,9 @@ export interface ValidatedCartItem {
     compareAtPrice: number | null;
     quantity: number;
     lineTotal: number;
+    taxRate?: number;
+    taxTotal?: number;
+    hsnCode?: string | null;
     variantSnapshot: any;
     availableStock: number;
 }
@@ -112,6 +116,12 @@ export class OrderValidationService {
                 })),
             };
 
+            const fallbackTaxRate = settingService.getSettingsSync()?.defaultTaxRate ?? 8.0;
+            const itemTaxRate = (product as any).taxRate !== undefined && (product as any).taxRate !== null
+                ? Number((product as any).taxRate)
+                : fallbackTaxRate;
+            const itemTaxTotal = Number(((lineTotal * itemTaxRate) / 100).toFixed(2));
+
             validatedItems.push({
                 cartItemId: item.id,
                 variantId: variant.id,
@@ -122,6 +132,9 @@ export class OrderValidationService {
                 compareAtPrice: variant.compareAtPrice ? Number(variant.compareAtPrice) : null,
                 quantity: item.quantity,
                 lineTotal,
+                taxRate: itemTaxRate,
+                taxTotal: itemTaxTotal,
+                hsnCode: (product as any).hsnCode ?? null,
                 variantSnapshot,
                 availableStock,
             });
@@ -208,15 +221,43 @@ export class OrderValidationService {
     }
 
     /**
-     * Calculates shipping fees and estimated taxes.
+     * Calculates shipping fees and dynamic GST/taxes.
+     * Uses store configuration from SettingService with fallback to defaults,
+     * and calculates item-specific tax totals when items are provided.
      */
-    calculateFees(subtotal: number, isFreeShipping: boolean = false) {
+    calculateFees(
+        subtotal: number,
+        isFreeShipping: boolean = false,
+        options?: {
+            items?: Array<{ lineTotal: number; taxRate?: number; taxTotal?: number }>;
+            shippingFee?: number;
+            freeShippingThreshold?: number;
+            defaultTaxRate?: number;
+        },
+    ) {
+        const settings = settingService.getSettingsSync();
+        const standardShipping = options?.shippingFee ?? settings?.standardShippingFee ?? DEFAULT_STANDARD_SHIPPING_FEE;
+        const threshold = options?.freeShippingThreshold ?? settings?.freeShippingThreshold ?? FREE_SHIPPING_THRESHOLD;
+        const fallbackTaxRate = options?.defaultTaxRate ?? settings?.defaultTaxRate ?? 8.0;
+
         let shippingTotal = 0;
         if (!isFreeShipping) {
-            shippingTotal = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : DEFAULT_STANDARD_SHIPPING_FEE;
+            shippingTotal = subtotal >= threshold ? 0 : standardShipping;
         }
 
-        const taxTotal = Number((subtotal * ESTIMATED_TAX_RATE).toFixed(2));
+        let taxTotal = 0;
+        if (options?.items && options.items.length > 0) {
+            taxTotal = options.items.reduce((sum, item) => {
+                if (item.taxTotal !== undefined) {
+                    return sum + item.taxTotal;
+                }
+                const rate = item.taxRate !== undefined ? item.taxRate : fallbackTaxRate;
+                return sum + Number(((item.lineTotal * rate) / 100).toFixed(2));
+            }, 0);
+            taxTotal = Number(taxTotal.toFixed(2));
+        } else {
+            taxTotal = Number(((subtotal * fallbackTaxRate) / 100).toFixed(2));
+        }
 
         return {
             shippingTotal: Number(shippingTotal.toFixed(2)),

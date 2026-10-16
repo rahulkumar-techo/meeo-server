@@ -19,7 +19,14 @@ export class SettingService {
     }
 
     /**
-     * Retrieves public customer-facing brand & currency settings.
+     * Synchronously retrieves the current in-memory cached system settings.
+     */
+    getSettingsSync(): SystemSettings {
+        return cachedSettings;
+    }
+
+    /**
+     * Retrieves public customer-facing brand, currency, delivery, and tax settings.
      */
     async getPublicSettings() {
         const s = cachedSettings;
@@ -29,6 +36,9 @@ export class SettingService {
             supportEmail: s.supportEmail,
             defaultCurrency: s.defaultCurrency,
             timezone: s.timezone,
+            standardShippingFee: s.standardShippingFee,
+            freeShippingThreshold: s.freeShippingThreshold,
+            defaultTaxRate: s.defaultTaxRate,
             maintenanceMode: s.maintenanceMode,
             readOnlyMode: s.readOnlyMode,
             disableCheckout: s.disableCheckout,

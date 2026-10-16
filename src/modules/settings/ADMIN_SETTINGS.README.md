@@ -73,10 +73,13 @@
 
 ---
 
-### Tier 2 — Financial Rules & Settlement Policies
+### Tier 2 — Financial Rules, Settlement Policies & Delivery Settings
 
 | Setting Key | Type | Default | Description |
 |---|---|---|---|
+| `standardShippingFee` | `number` | `10.00` | Flat standard shipping fee charged when subtotal is below free shipping threshold |
+| `freeShippingThreshold` | `number` | `100.00` | Minimum order subtotal required to qualify for automatic free shipping |
+| `defaultTaxRate` | `number` | `8.00` | Default platform tax / GST percentage fallback for products without individual tax rates |
 | `settlementFrequency` | `enum` | `"WEEKLY"` | Merchant and vendor payout cycle: `"DAILY"`, `"WEEKLY"`, `"BI_WEEKLY"`, `"MONTHLY"` |
 | `settlementDelayDays` | `integer` | `2` | Holding buffer in days before funds become eligible for payout (e.g. T+2) |
 | `minimumPayoutAmount` | `number` | `50.00` | Minimum accrued balance required to trigger an automated payout disbursement |

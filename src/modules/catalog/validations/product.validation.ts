@@ -38,6 +38,8 @@ export const createProductSchema = z.object({
     isFeatured: z.boolean().optional().default(false),
     seoTitle: z.string().trim().max(70, "SEO title should not exceed 70 characters").nullable().optional(),
     seoDescription: z.string().trim().max(160, "SEO description should not exceed 160 characters").nullable().optional(),
+    taxRate: z.coerce.number().min(0).max(100).optional(),
+    hsnCode: z.string().trim().max(20).nullable().optional(),
     bannerImage: bannerImageSchema.nullable().optional(),
     specifications: productSpecificationsSchema.nullable().optional(),
     images: z.array(productImageInputSchema).optional().default([]),
@@ -54,6 +56,8 @@ export const updateProductSchema = z.object({
     isFeatured: z.boolean().optional(),
     seoTitle: z.string().trim().max(70, "SEO title should not exceed 70 characters").nullable().optional(),
     seoDescription: z.string().trim().max(160, "SEO description should not exceed 160 characters").nullable().optional(),
+    taxRate: z.coerce.number().min(0).max(100).optional(),
+    hsnCode: z.string().trim().max(20).nullable().optional(),
     bannerImage: bannerImageSchema.nullable().optional(),
     specifications: productSpecificationsSchema.nullable().optional(),
 }).strict().refine((data) => Object.keys(data).length > 0, {

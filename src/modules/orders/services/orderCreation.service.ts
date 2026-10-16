@@ -49,7 +49,7 @@ export class OrderCreationService {
         const totalDiscount = Number(Math.min(subtotal, couponDiscount + promoResult.discountSubtotal).toFixed(2));
         const isFreeShipping = couponFreeShipping || promoResult.isFreeShipping;
 
-        const { shippingTotal, taxTotal } = orderValidationService.calculateFees(subtotal, isFreeShipping);
+        const { shippingTotal, taxTotal } = orderValidationService.calculateFees(subtotal, isFreeShipping, { items });
         const grandTotal = Number((subtotal - totalDiscount + shippingTotal + taxTotal).toFixed(2));
 
         return {
@@ -125,7 +125,7 @@ export class OrderCreationService {
             const isFreeShipping = couponFreeShipping || promoResult.isFreeShipping;
 
             // 5. Calculate Shipping, Taxes, and Grand Total
-            const { shippingTotal, taxTotal } = orderValidationService.calculateFees(subtotal, isFreeShipping);
+            const { shippingTotal, taxTotal } = orderValidationService.calculateFees(subtotal, isFreeShipping, { items });
             const grandTotal = Number((subtotal - totalDiscount + shippingTotal + taxTotal).toFixed(2));
             const orderNumber = orderNumberService.generateOrderNumber();
 
@@ -165,7 +165,7 @@ export class OrderCreationService {
                             unitPrice: item.unitPrice,
                             quantity: item.quantity,
                             discountTotal: 0,
-                            taxTotal: 0,
+                            taxTotal: item.taxTotal ?? 0,
                             total: item.lineTotal,
                         },
                     });

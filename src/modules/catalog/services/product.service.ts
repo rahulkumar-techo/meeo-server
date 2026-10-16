@@ -81,6 +81,8 @@ export class ProductService {
             isFeatured: input.isFeatured,
             seoTitle: input.seoTitle ?? input.name,
             seoDescription: input.seoDescription ?? (input.description ? input.description.slice(0, 160) : null),
+            taxRate: input.taxRate !== undefined ? new Prisma.Decimal(input.taxRate) : new Prisma.Decimal(18.0),
+            hsnCode: input.hsnCode ?? null,
             createdById: creatorId ?? null,
             ...(input.bannerImage !== undefined && {
                 bannerImage: input.bannerImage === null ? Prisma.DbNull : (input.bannerImage as Prisma.InputJsonValue),
@@ -164,6 +166,8 @@ export class ProductService {
             ...(input.isFeatured !== undefined && { isFeatured: input.isFeatured }),
             ...(input.seoTitle !== undefined && { seoTitle: input.seoTitle }),
             ...(input.seoDescription !== undefined && { seoDescription: input.seoDescription }),
+            ...(input.taxRate !== undefined && { taxRate: new Prisma.Decimal(input.taxRate) }),
+            ...(input.hsnCode !== undefined && { hsnCode: input.hsnCode }),
             ...(input.bannerImage !== undefined && {
                 bannerImage: input.bannerImage === null ? Prisma.DbNull : (input.bannerImage as Prisma.InputJsonValue),
             }),

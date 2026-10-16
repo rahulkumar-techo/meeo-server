@@ -36,7 +36,10 @@ export const SystemSettingsSchema = z.object({
         aiProductRecommendations: 20,
     }),
 
-    // Tier 2 — Financial Rules
+    // Tier 2 — Financial Rules & Delivery Settings
+    standardShippingFee: z.coerce.number().min(0).default(10.00),
+    freeShippingThreshold: z.coerce.number().min(0).default(100.00),
+    defaultTaxRate: z.coerce.number().min(0).max(100).default(8.00),
     settlementFrequency: z.enum(["DAILY", "WEEKLY", "BI_WEEKLY", "MONTHLY"]).default("WEEKLY"),
     settlementDelayDays: z.coerce.number().int().min(0).max(30).default(2),
     minimumPayoutAmount: z.coerce.number().min(0).default(50.00),

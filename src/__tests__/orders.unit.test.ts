@@ -303,6 +303,30 @@ describe("Order & Checkout Unit Tests", () => {
             expect(fees.taxTotal).toBe(10.4);
         });
 
+        it("calculates dynamic item-specific GST and configurable shipping fees", () => {
+            const items = [
+                { lineTotal: 1000.0, taxRate: 18.0 },
+                { lineTotal: 400.0, taxRate: 5.0 },
+            ];
+            const subtotal = 1400.0;
+
+            const feesWithShipping = service.calculateFees(subtotal, false, {
+                items,
+                shippingFee: 50.0,
+                freeShippingThreshold: 2000.0,
+            });
+            expect(feesWithShipping.shippingTotal).toBe(50.0);
+            expect(feesWithShipping.taxTotal).toBe(200.0);
+
+            const feesFree = service.calculateFees(subtotal, false, {
+                items,
+                shippingFee: 50.0,
+                freeShippingThreshold: 1000.0,
+            });
+            expect(feesFree.shippingTotal).toBe(0);
+            expect(feesFree.taxTotal).toBe(200.0);
+        });
+
         it("resolves saved address and falls back billing address to shipping", async () => {
             prismaMock.address.findUnique.mockResolvedValue({
                 id: "addr-1",
