@@ -206,10 +206,13 @@ export class ObservabilityConfigService {
             where: { key },
         });
 
+        const defaultFallback = DEFAULT_OBSERVABILITY_CONFIGS.find((c) => c.key === key);
+        const baseValue = (existing?.value as Record<string, unknown>) ?? (defaultFallback?.value as Record<string, unknown>) ?? {};
+
         // Merge existing config value with incoming updates
         const mergedValue = updates.value !== undefined
-            ? { ...((existing?.value as Record<string, unknown>) ?? {}), ...updates.value }
-            : (existing?.value as Record<string, unknown>) ?? {};
+            ? { ...baseValue, ...updates.value }
+            : baseValue;
 
         const updated = await prisma.observabilityConfig.upsert({
             where: { key },

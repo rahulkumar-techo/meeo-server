@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const memoryDb = new Map<string, any>();
+const { memoryDb } = vi.hoisted(() => {
+    const memoryDb = new Map<string, any>();
+    return { memoryDb };
+});
 
 vi.mock("@/lib/prisma.js", () => ({
     prisma: {
@@ -11,9 +14,19 @@ vi.mock("@/lib/prisma.js", () => ({
                 const existing = memoryDb.get(where.key);
                 const record = {
                     id: existing?.id || "mock-id-" + where.key,
+                    key: where.key,
+                    category: existing?.category || create?.category || "server_errors",
+                    description: create?.description || existing?.description || "",
+                    isEnabled: true,
+                    updatedBy: null,
                     createdAt: existing?.createdAt || new Date(),
                     updatedAt: new Date(),
                     ...(existing ? { ...existing, ...update } : create),
+                    value: {
+                        ...(existing?.value || {}),
+                        ...(create?.value || {}),
+                        ...(update?.value || {}),
+                    },
                 };
                 memoryDb.set(where.key, record);
                 return record;
