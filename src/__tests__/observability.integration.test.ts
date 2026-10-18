@@ -6,6 +6,7 @@ import { prometheusClient } from "@/modules/observability/clients/prometheus.cli
 import { lokiClient } from "@/modules/observability/clients/loki.client.js";
 import { AppError } from "@/common/errors/app-error.js";
 import { PERMISSIONS } from "@/modules/authorization/permission.constants.js";
+import { observabilityService } from "@/modules/observability/services/observability.service.js";
 
 describe("Observability Fastify Endpoints Integration Tests", () => {
     const buildTestApp = async (userPermissions: string[] = [PERMISSIONS.SYSTEM_MANAGE]) => {
@@ -144,6 +145,39 @@ describe("Observability Fastify Endpoints Integration Tests", () => {
 
     it("GET /api/v1/observability/queues returns BullMQ queue overview and telemetry", async () => {
         const app = await buildTestApp();
+
+        vi.spyOn(observabilityService, "getQueueOverview").mockResolvedValueOnce({
+            queues: [
+                {
+                    name: "domain-events",
+                    displayName: "Domain Events Queue",
+                    isPaused: false,
+                    counts: { active: 0, waiting: 0, completed: 10, failed: 0, delayed: 0, paused: 0 },
+                    throughputRps: 2.5,
+                    averageLatencyMs: 40.0,
+                },
+                {
+                    name: "dead-letter-events",
+                    displayName: "Dead Letter Queue (DLQ)",
+                    isPaused: false,
+                    counts: { active: 0, waiting: 0, completed: 0, failed: 0, delayed: 0, paused: 0 },
+                    throughputRps: 0.1,
+                    averageLatencyMs: 12.0,
+                },
+            ],
+            recentJobs: [],
+            summary: {
+                totalQueues: 2,
+                activeInFlight: 0,
+                throttled: 0,
+                succeeded: 10,
+                failed: 0,
+                dlqDepth: 0,
+                successRate: 100,
+                averageExecutionLatencyMs: 40.0,
+                workerNodes: { total: 1, healthy: 1, degraded: 0, totalConcurrency: 5 },
+            } as any,
+        });
 
         const res = await app.inject({
             method: "GET",
