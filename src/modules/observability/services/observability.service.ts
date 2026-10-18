@@ -1,6 +1,10 @@
 // Observability domain service.
 // Coordinates Prometheus/Loki client requests, presets, and normalization with automatic in-memory telemetry fallback.
 
+import os from "node:os";
+import v8 from "node:v8";
+import fs from "node:fs";
+import { monitorEventLoopDelay } from "node:perf_hooks";
 import { AppError } from "@/common/errors/app-error.js";
 import { prometheusClient } from "../clients/prometheus.client.js";
 import { lokiClient } from "../clients/loki.client.js";
@@ -30,9 +34,39 @@ import type {
     NormalizedLogEntry,
     NormalizedMetricPoint,
     NormalizedMetricSeries,
+    SystemInfoCpu,
+    SystemInfoDisk,
+    SystemInfoMemory,
+    SystemInfoNetwork,
+    SystemInfoProcessesDetails,
+    SystemInfoResponse,
 } from "../types/observability.types.js";
 
 export class ObservabilityService {
+    private eventLoopHistogram = monitorEventLoopDelay({ resolution: 20 });
+    private cachedMetrics = new Map<string, { data: unknown; expiresAt: number }>();
+
+    constructor() {
+        try {
+            this.eventLoopHistogram.enable();
+        } catch {
+            // Non-critical if perf_hooks delay monitor is unavailable in execution environment
+        }
+    }
+
+    /**
+     * In-memory short-TTL cache wrapper ensuring zero CPU/disk recalculation spikes under concurrent polling.
+     */
+    private getCachedOrFetch<T>(key: string, ttlMs: number, fetcher: () => T): T {
+        const now = Date.now();
+        const cached = this.cachedMetrics.get(key);
+        if (cached && cached.expiresAt > now) {
+            return cached.data as T;
+        }
+        const data = fetcher();
+        this.cachedMetrics.set(key, { data, expiresAt: now + ttlMs });
+        return data;
+    }
     /**
      * Retrieves time-series metric data points normalized for frontend charting.
      * Gracefully falls back to real-time process/HTTP telemetry if Prometheus is not running.
@@ -761,6 +795,320 @@ export class ObservabilityService {
         if (durationSec <= 86400) return "5m";
         if (durationSec <= 604800) return "30m";
         return "2h";
+    }
+
+    /**
+     * Gathers CPU utilization, load averages, core speed, and process CPU % of cores.
+     */
+    getCpuInfo(): SystemInfoCpu {
+        return this.getCachedOrFetch("cpu_info", 2000, () => {
+            const cpus = os.cpus();
+            const cpuCores = cpus.length || 1;
+            const cpuModel = cpus[0]?.model || "Unknown";
+            const cpuSpeedMHz = cpus[0]?.speed || 0;
+
+            const loadAvg = os.loadavg();
+            const load1m = loadAvg[0] ?? 0;
+            const load5m = loadAvg[1] ?? 0;
+            const load15m = loadAvg[2] ?? 0;
+            const normalizedLoad1mPercent = Number(((load1m / cpuCores) * 100).toFixed(2));
+
+            const cpuUsage = process.cpuUsage();
+            const uptimeSeconds = Math.max(1, process.uptime());
+            const totalCpuSeconds = Number(((cpuUsage.user + cpuUsage.system) / 1_000_000).toFixed(2));
+            const processCpuPercentSingleCore = Number(((totalCpuSeconds / uptimeSeconds) * 100).toFixed(2));
+            const processCpuPercentTotalSystem = Number(((totalCpuSeconds / (uptimeSeconds * cpuCores)) * 100).toFixed(2));
+
+            return {
+                model: cpuModel,
+                cores: cpuCores,
+                speedMHz: cpuSpeedMHz,
+                loadAverage: {
+                    load1m: Number(load1m.toFixed(2)),
+                    load5m: Number(load5m.toFixed(2)),
+                    load15m: Number(load15m.toFixed(2)),
+                    normalizedLoad1mPercent,
+                },
+                processUsage: {
+                    userMicroseconds: cpuUsage.user,
+                    systemMicroseconds: cpuUsage.system,
+                    totalCpuSeconds,
+                    processCpuPercentSingleCore,
+                    processCpuPercentTotalSystem,
+                },
+                outOfGiven: {
+                    processCpuPercentOfTotalCores: processCpuPercentTotalSystem,
+                    coresGiven: cpuCores,
+                },
+            };
+        });
+    }
+
+    /**
+     * Gathers system RAM and process heap/RSS memory usage.
+     */
+    getMemoryInfo(): SystemInfoMemory {
+        return this.getCachedOrFetch("memory_info", 2000, () => {
+            const totalMemBytes = os.totalmem();
+            const freeMemBytes = os.freemem();
+            const usedMemBytes = Math.max(0, totalMemBytes - freeMemBytes);
+            const memUsagePercent = Number(((usedMemBytes / totalMemBytes) * 100).toFixed(2));
+
+            const memUsage = process.memoryUsage();
+            const v8HeapStats = v8.getHeapStatistics();
+            const heapLimitBytes = v8HeapStats.heap_size_limit;
+
+            const toMb = (bytes: number) => Number((bytes / (1024 * 1024)).toFixed(2));
+            const toGb = (bytes: number) => Number((bytes / (1024 * 1024 * 1024)).toFixed(2));
+
+            const processRssPercentOfSystem = Number(((memUsage.rss / totalMemBytes) * 100).toFixed(2));
+            const heapUsedPercentOfHeapLimit = Number(((memUsage.heapUsed / heapLimitBytes) * 100).toFixed(2));
+            const heapUsedPercentOfAllocated = Number(((memUsage.heapUsed / memUsage.heapTotal) * 100).toFixed(2));
+
+            return {
+                system: {
+                    totalBytes: totalMemBytes,
+                    totalMb: toMb(totalMemBytes),
+                    totalGb: toGb(totalMemBytes),
+                    freeBytes: freeMemBytes,
+                    freeMb: toMb(freeMemBytes),
+                    freeGb: toGb(freeMemBytes),
+                    usedBytes: usedMemBytes,
+                    usedMb: toMb(usedMemBytes),
+                    usedGb: toGb(usedMemBytes),
+                    usagePercent: memUsagePercent,
+                },
+                process: {
+                    rssBytes: memUsage.rss,
+                    rssMb: toMb(memUsage.rss),
+                    heapTotalBytes: memUsage.heapTotal,
+                    heapTotalMb: toMb(memUsage.heapTotal),
+                    heapUsedBytes: memUsage.heapUsed,
+                    heapUsedMb: toMb(memUsage.heapUsed),
+                    externalBytes: memUsage.external,
+                    externalMb: toMb(memUsage.external),
+                    arrayBuffersBytes: memUsage.arrayBuffers,
+                    arrayBuffersMb: toMb(memUsage.arrayBuffers),
+                    heapLimitBytes,
+                    heapLimitMb: toMb(heapLimitBytes),
+                },
+                outOfGiven: {
+                    processRssPercentOfSystem,
+                    heapUsedPercentOfHeapLimit,
+                    heapUsedPercentOfAllocatedHeap: heapUsedPercentOfAllocated,
+                    systemMemoryUsagePercent: memUsagePercent,
+                },
+            };
+        });
+    }
+
+    /**
+     * Inspects root storage volume available/used space via statfs.
+     */
+    getDiskInfo(): SystemInfoDisk {
+        return this.getCachedOrFetch("disk_info", 5000, () => {
+            try {
+                const stats = fs.statfsSync(process.cwd());
+                const totalBytes = stats.blocks * stats.bsize;
+                const freeBytes = stats.bavail * stats.bsize;
+                const usedBytes = Math.max(0, totalBytes - freeBytes);
+                const usagePercent = totalBytes > 0 ? Number(((usedBytes / totalBytes) * 100).toFixed(2)) : 0;
+                const availablePercent = Number((100 - usagePercent).toFixed(2));
+                const toGb = (bytes: number) => Number((bytes / (1024 * 1024 * 1024)).toFixed(2));
+
+                const status = usagePercent >= 95 ? "critical" : usagePercent >= 85 ? "warning" : "healthy";
+
+                return {
+                    totalBytes,
+                    totalGb: toGb(totalBytes),
+                    freeBytes,
+                    freeGb: toGb(freeBytes),
+                    usedBytes,
+                    usedGb: toGb(usedBytes),
+                    usagePercent,
+                    availablePercent,
+                    status,
+                };
+            } catch {
+                return {
+                    totalBytes: 0,
+                    totalGb: 0,
+                    freeBytes: 0,
+                    freeGb: 0,
+                    usedBytes: 0,
+                    usedGb: 0,
+                    usagePercent: 0,
+                    availablePercent: 100,
+                    status: "healthy",
+                };
+            }
+        });
+    }
+
+    /**
+     * Gathers network interfaces, active socket handles, and connection counts.
+     */
+    getNetworkInfo(): SystemInfoNetwork {
+        return this.getCachedOrFetch("network_info", 5000, () => {
+            const rawIfaces = os.networkInterfaces();
+            const interfaces: { name: string; address: string; family: string; internal: boolean; mac: string }[] = [];
+
+            for (const [name, list] of Object.entries(rawIfaces)) {
+                if (list) {
+                    for (const iface of list) {
+                        interfaces.push({
+                            name,
+                            address: iface.address,
+                            family: iface.family,
+                            internal: iface.internal,
+                            mac: iface.mac,
+                        });
+                    }
+                }
+            }
+
+            const activeSocketHandlesCount = typeof (process as any)._getActiveHandles === "function"
+                ? (process as any)._getActiveHandles().length
+                : 0;
+            const activeRequestsCount = typeof (process as any)._getActiveRequests === "function"
+                ? (process as any)._getActiveRequests().length
+                : 0;
+
+            return {
+                interfaces,
+                activeSocketHandlesCount,
+                activeRequestsCount,
+            };
+        });
+    }
+
+    /**
+     * Gathers process telemetry, event loop lag, and concurrency handles.
+     */
+    getProcessesInfo(): SystemInfoProcessesDetails {
+        return this.getCachedOrFetch("processes_info", 2000, () => {
+            const uptimeSeconds = Math.max(1, process.uptime());
+            const d = Math.floor(uptimeSeconds / 86400);
+            const h = Math.floor((uptimeSeconds % 86400) / 3600);
+            const m = Math.floor((uptimeSeconds % 3600) / 60);
+            const s = Math.floor(uptimeSeconds % 60);
+            const parts: string[] = [];
+            if (d > 0) parts.push(`${d}d`);
+            if (h > 0 || d > 0) parts.push(`${h}h`);
+            if (m > 0 || h > 0 || d > 0) parts.push(`${m}m`);
+            parts.push(`${s}s`);
+            const uptimeFormatted = parts.join(" ");
+
+            const toMs = (nanos: number) => Number((nanos / 1_000_000).toFixed(2));
+            const lagMin = this.eventLoopHistogram.min ? toMs(this.eventLoopHistogram.min) : 0;
+            const lagMax = this.eventLoopHistogram.max ? toMs(this.eventLoopHistogram.max) : 0;
+            const lagMean = this.eventLoopHistogram.mean ? toMs(this.eventLoopHistogram.mean) : 0;
+            const lagP50 = this.eventLoopHistogram.percentile ? toMs(this.eventLoopHistogram.percentile(50)) : 0;
+            const lagP99 = this.eventLoopHistogram.percentile ? toMs(this.eventLoopHistogram.percentile(99)) : 0;
+
+            const activeHandlesCount = typeof (process as any)._getActiveHandles === "function"
+                ? (process as any)._getActiveHandles().length
+                : 0;
+            const activeRequestsCount = typeof (process as any)._getActiveRequests === "function"
+                ? (process as any)._getActiveRequests().length
+                : 0;
+            const uvThreadPoolSize = Number(process.env.UV_THREADPOOL_SIZE) || 4;
+
+            return {
+                pid: process.pid,
+                ppid: process.ppid,
+                title: process.title,
+                nodeVersion: process.version,
+                platform: process.platform,
+                arch: process.arch,
+                uptimeSeconds: Math.floor(uptimeSeconds),
+                uptimeFormatted,
+                eventLoopLagMs: {
+                    min: lagMin,
+                    max: lagMax,
+                    mean: lagMean,
+                    p50: lagP50,
+                    p99: lagP99,
+                },
+                activeHandlesCount,
+                activeRequestsCount,
+                uvThreadPoolSize,
+            };
+        });
+    }
+
+    /**
+     * Gathers comprehensive host & process telemetry: RAM, CPU, Process, Threads and libuv concurrency.
+     * Computes exact resource allocation and "using out of given" statistics for infrastructure management.
+     */
+    getSystemInfo(): SystemInfoResponse {
+        const cpu = this.getCpuInfo();
+        const ram = this.getMemoryInfo();
+        const disk = this.getDiskInfo();
+        const network = this.getNetworkInfo();
+        const processes = this.getProcessesInfo();
+
+        const hardwareCores = typeof os.availableParallelism === "function" ? os.availableParallelism() : cpu.cores;
+
+        return {
+            summary: {
+                ram: {
+                    systemMemoryUsed: `${ram.system.usedGb} GB / ${ram.system.totalGb} GB (${ram.system.usagePercent}%)`,
+                    processRssOfSystem: `${ram.process.rssMb} MB / ${ram.system.totalGb} GB (${ram.outOfGiven.processRssPercentOfSystem}% of system RAM)`,
+                    v8HeapUsedOfLimit: `${ram.process.heapUsedMb} MB / ${ram.process.heapLimitMb} MB (${ram.outOfGiven.heapUsedPercentOfHeapLimit}% of V8 limit)`,
+                },
+                cpu: {
+                    coresGiven: cpu.cores,
+                    model: cpu.model,
+                    processCpuOfTotalCores: `${cpu.outOfGiven.processCpuPercentOfTotalCores}% of ${cpu.cores} cores`,
+                },
+                threads: {
+                    activeHandles: processes.activeHandlesCount,
+                    activeRequests: processes.activeRequestsCount,
+                    uvThreadPoolGiven: processes.uvThreadPoolSize,
+                    hardwareCoresGiven: hardwareCores,
+                },
+                process: {
+                    pid: processes.pid,
+                    uptime: processes.uptimeFormatted,
+                    nodeVersion: processes.nodeVersion,
+                    environment: process.env.NODE_ENV || "development",
+                },
+                disk: {
+                    used: `${disk.usedGb} GB / ${disk.totalGb} GB (${disk.usagePercent}%)`,
+                    availablePercent: `${disk.availablePercent}% free`,
+                    status: disk.status,
+                },
+            },
+            ram,
+            cpu,
+            process: {
+                pid: processes.pid,
+                ppid: processes.ppid,
+                title: processes.title,
+                nodeVersion: processes.nodeVersion,
+                platform: processes.platform,
+                arch: processes.arch,
+                uptimeSeconds: processes.uptimeSeconds,
+                uptimeFormatted: processes.uptimeFormatted,
+                environment: process.env.NODE_ENV || "development",
+            },
+            threads: {
+                hardwareCores,
+                uvThreadPoolSize: processes.uvThreadPoolSize,
+                activeHandlesCount: processes.activeHandlesCount,
+                activeRequestsCount: processes.activeRequestsCount,
+                outOfGiven: {
+                    activeHandles: processes.activeHandlesCount,
+                    activeRequests: processes.activeRequestsCount,
+                    uvThreadPoolGiven: processes.uvThreadPoolSize,
+                    hardwareCoresGiven: hardwareCores,
+                },
+            },
+            disk,
+            network,
+            timestamp: new Date().toISOString(),
+        };
     }
 }
 

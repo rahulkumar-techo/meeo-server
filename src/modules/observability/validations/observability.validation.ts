@@ -50,6 +50,14 @@ export const configKeyParamSchema = z.object({
     key: z.string().trim().min(1, "Config key is required"),
 });
 
+export const updatePollingPolicySchema = z.object({
+    activeWindow: z.enum(["15m", "1h", "6h", "24h"]).optional(),
+    activeInterval: z.enum(["5s", "15s", "30s", "Off"]).optional(),
+    alertCooldownMinutes: z.number().int().min(1).max(1440).optional(),
+}).refine((data) => Boolean(data.activeWindow || data.activeInterval || data.alertCooldownMinutes !== undefined), {
+    message: "At least one of 'activeWindow', 'activeInterval', or 'alertCooldownMinutes' must be provided",
+});
+
 export type MetricsRangeQueryInput = z.infer<typeof metricsRangeQuerySchema>;
 export type MetricsInstantQueryInput = z.infer<typeof metricsInstantQuerySchema>;
 export type LogsQueryInput = z.infer<typeof logsQuerySchema>;
@@ -57,4 +65,5 @@ export type LogsStreamQueryInput = z.infer<typeof logsStreamQuerySchema>;
 export type LabelParamInput = z.infer<typeof labelParamSchema>;
 export type UpdateObservabilityConfigInput = z.infer<typeof updateObservabilityConfigSchema>;
 export type ConfigKeyParamInput = z.infer<typeof configKeyParamSchema>;
+export type UpdatePollingPolicyInput = z.infer<typeof updatePollingPolicySchema>;
 

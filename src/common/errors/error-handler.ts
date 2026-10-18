@@ -3,6 +3,7 @@ import { AppError } from "./app-error.js";
 import { Prisma } from "@/generated/prisma/client.js";
 import { ZodError } from "zod";
 import { errorTracker } from "@/common/observability/errorTracker.js";
+import { errorAlertService } from "@/modules/observability/services/errorAlert.service.js";
 
 type ValidationError = NonNullable<FastifyError["validation"]>[number];
 
@@ -91,7 +92,7 @@ export const errorHandler = (
         });
     }
 
-    // Capture uncaught 500 exceptions in ErrorTracker
+    // Capture uncaught 500 exceptions in ErrorTracker and trigger alert evaluation
     errorTracker.captureException(error, {
         requestId,
         url: request.url,
@@ -99,6 +100,15 @@ export const errorHandler = (
         ip: request.ip,
         userAgent: request.headers["user-agent"],
     });
+
+    errorAlertService
+        .record5xxError(error, {
+            requestId,
+            url: request.url,
+            method: request.method,
+            ip: request.ip,
+        })
+        .catch(() => {});
 
     // Unknown server errors
     return reply.status(500).send({

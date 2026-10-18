@@ -48,9 +48,7 @@ vi.mock("../lib/brevo.js", () => ({
     verifyBrevoAccount: vi.fn().mockResolvedValue({ email: "admin@meeo.com" }),
 }));
 
-import fastifyMetrics from "fastify-metrics";
-import healthRouter, { metricsRouter } from "../modules/health/health.route.js";
-import { healthController } from "../modules/health/health.controller.js";
+import healthRouter from "../modules/health/health.route.js";
 import { errorHandler } from "../common/errors/error-handler.js";
 import { metricsService } from "../common/observability/metrics.service.js";
 
@@ -80,11 +78,8 @@ describe("Health, Readiness & Metrics HTTP Routes Integration Tests", () => {
             metricsService.recordHttpRequest(request.method, route, reply.statusCode, durationMs);
         });
 
-        await app.register(fastifyMetrics.default, { endpoint: "/metrics", clearRegisterOnInit: true });
         await app.register(cookie);
         await app.register(healthRouter, { prefix: "/health" });
-        await app.register(metricsRouter, { prefix: "/metrics" });
-        app.get("/prom-metrics", healthController.promMetrics);
 
         // Dummy endpoint for testing error request ID propagation
         app.get("/api/test-error", async () => {
@@ -177,36 +172,6 @@ describe("Health, Readiness & Metrics HTTP Routes Integration Tests", () => {
         expect(mockQueueMetrics).toHaveBeenCalled();
     });
 
-    it("exposes Prometheus text format metrics via GET /metrics", async () => {
-        const app = await createTestApp();
-
-        const res = await app.inject({
-            method: "GET",
-            url: "/metrics",
-        });
-
-        expect(res.statusCode).toBe(200);
-        expect(res.headers["content-type"]).toContain("text/plain");
-        expect(res.body).toContain("process_cpu_user_seconds_total");
-        expect(res.body).toContain("process_resident_memory_bytes");
-    });
-
-    it("exposes JSON metrics snapshot via GET /metrics/json", async () => {
-        const app = await createTestApp();
-
-        const res = await app.inject({
-            method: "GET",
-            url: "/metrics/json",
-        });
-
-        expect(res.statusCode).toBe(200);
-        const json = res.json();
-        expect(json.success).toBe(true);
-        expect(json.data.http).toBeDefined();
-        expect(json.data.database).toBeDefined();
-        expect(json.data.process).toBeDefined();
-    });
-
     it("generates and propagates x-request-id in headers and error responses", async () => {
         const app = await createTestApp();
 
@@ -224,31 +189,5 @@ describe("Health, Readiness & Metrics HTTP Routes Integration Tests", () => {
         const json = res.json();
         expect(json.success).toBe(false);
         expect(json.requestId).toBe(customRequestId);
-    });
-
-    it("exposes Prometheus metrics via GET /prom-metrics", async () => {
-        const app = await createTestApp();
-
-        const res = await app.inject({
-            method: "GET",
-            url: "/prom-metrics",
-        });
-
-        expect(res.statusCode).toBe(200);
-        expect(res.headers["content-type"]).toContain("text/plain");
-        expect(res.body).toContain("process_cpu_user_seconds_total");
-    });
-
-    it("exposes Prometheus metrics via GET /metrics/prom", async () => {
-        const app = await createTestApp();
-
-        const res = await app.inject({
-            method: "GET",
-            url: "/metrics/prom",
-        });
-
-        expect(res.statusCode).toBe(200);
-        expect(res.headers["content-type"]).toContain("text/plain");
-        expect(res.body).toContain("process_cpu_user_seconds_total");
     });
 });

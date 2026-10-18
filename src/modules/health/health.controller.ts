@@ -1,8 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { healthService } from "./health.service.js";
-import { metricsService } from "@/common/observability/metrics.service.js";
 import { errorTracker } from "@/common/observability/errorTracker.js";
-import { client } from "@/common/observability/promClient.js";
 
 export class HealthController {
     /**
@@ -51,38 +49,6 @@ export class HealthController {
         });
     }
 
-    /**
-     * Metrics JSON overview.
-     */
-    async metricsJson(_req: FastifyRequest, reply: FastifyReply) {
-        const snapshot = metricsService.getMetricsSnapshot();
-        return reply.status(200).send({
-            success: true,
-            data: snapshot,
-        });
-    }
-
-    /**
-     * Standard Prometheus metrics scrape endpoint.
-     */
-    async metricsPrometheus(_req: FastifyRequest, reply: FastifyReply) {
-        const text = metricsService.toPrometheusText();
-        return reply
-            .header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-            .status(200)
-            .send(text);
-    }
-
-    /**
-     * Prometheus exposition scrape endpoint via prom-client.
-     */
-    async promMetrics(_req: FastifyRequest, reply: FastifyReply) {
-        const metrics = await client.register.metrics();
-        return reply
-            .header("Content-Type", client.register.contentType)
-            .status(200)
-            .send(metrics);
-    }
 
     /**
      * Diagnostics: returns recent error reports captured by ErrorTracker.

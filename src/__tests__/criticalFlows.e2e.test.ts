@@ -75,14 +75,22 @@ vi.mock("../common/utils/auth-cache.js", () => ({
     clearAuthContext: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../lib/redis.js", () => ({
-    redis: {
+vi.mock("../lib/redis.js", () => {
+    const mockRedisInstance = {
         get: vi.fn().mockResolvedValue(null),
         set: vi.fn().mockResolvedValue("OK"),
         del: vi.fn().mockResolvedValue(1),
         on: vi.fn(),
-    },
-}));
+        duplicate: vi.fn().mockReturnValue({
+            on: vi.fn(),
+            subscribe: vi.fn(),
+        }),
+    };
+    return {
+        default: mockRedisInstance,
+        redis: mockRedisInstance,
+    };
+});
 
 vi.mock("../modules/auth/auth.service.js", () => ({
     authService: authServiceMock,

@@ -767,6 +767,221 @@ Allows administrators to tune error rate thresholds, alert conditions, and statu
 
 ---
 
+### 2.11. Server-Managed Polling Policy & Dynamic Alert Cooldown (L1/L2 Cache)
+
+Protects host servers and databases from abusive or rogue client-side polling loops, while allowing System Managers to dynamically adjust dashboard time windows, auto-refresh intervals, and email alert cooldown periods.
+
+> **Security & Stability Principle**: The server dictates allowed windows and auto-refresh intervals. The frontend (`admin-dash`) must render its selector dropdowns based on `allowedWindows`, `allowedIntervals`, and `allowedAlertCooldownMinutes`. Any rogue or unapproved polling intervals (e.g. `1s`, `100ms`) are rejected with `400 Bad Request`.
+
+#### 1. Retrieve Current Polling Policy & Alert Cooldown
+* **Method**: `GET`
+* **Route**: `/api/v1/observability/polling-policy`
+* **Headers**:
+  ```http
+  Authorization: Bearer <accessToken>
+  ```
+* **Permissions**: `dashboard:read` or `system:manage`
+* **Cache Architecture**: Served in `< 0.1ms` directly from Node.js **L1 Memory Cache**, backed by **L2 Redis**.
+
+* **Response (`200 OK`)**:
+```json
+{
+  "success": true,
+  "status": "success",
+  "data": {
+    "allowedWindows": ["15m", "1h", "6h", "24h"],
+    "activeWindow": "15m",
+    "allowedIntervals": ["5s", "15s", "30s", "Off"],
+    "activeInterval": "15s",
+    "minIntervalSeconds": 5,
+    "allowedAlertCooldownMinutes": [5, 10, 15, 30, 60],
+    "alertCooldownMinutes": 15,
+    "cacheTier": "L1-Memory (Node.js) / L2-Redis",
+    "updatedAt": "2026-10-18T11:45:00.000Z"
+  }
+}
+```
+
+##### Field Descriptions:
+| Field | Type | Description |
+|---|---|---|
+| `allowedWindows` | `string[]` | Authorized dashboard query time ranges (`["15m", "1h", "6h", "24h"]`). |
+| `activeWindow` | `string` | The currently selected default window for dashboard charts. |
+| `allowedIntervals` | `string[]` | Authorized auto-refresh intervals (`["5s", "15s", "30s", "Off"]`). |
+| `activeInterval` | `string` | Current server-enforced auto-refresh interval for polling charts. |
+| `minIntervalSeconds` | `number` | Minimum permissible auto-refresh floor (`5` seconds) to prevent server overload. |
+| `allowedAlertCooldownMinutes` | `number[]` | Allowed presets for 5xx server error alert email cooldown (`[5, 10, 15, 30, 60]`). |
+| `alertCooldownMinutes` | `number` | Active suppression cooldown in minutes. Prevents flooding admin inboxes during ongoing incidents. |
+| `cacheTier` | `string` | Cache source serving the policy (`L1-Memory (Node.js) / L2-Redis`). |
+| `updatedAt` | `string` | ISO timestamp of the last configuration update. |
+
+---
+
+#### 2. Update Polling Policy & Alert Cooldown
+System Managers and Super Admins can update the active time window, auto-refresh frequency, and the alert email cooldown.
+
+* **Method**: `PUT`
+* **Route**: `/api/v1/observability/polling-policy`
+* **Headers**:
+  ```http
+  Authorization: Bearer <accessToken>
+  Content-Type: application/json
+  ```
+* **Permissions**: `system:manage` (Super Admin or System Manager)
+* **Request Body**:
+```json
+{
+  "activeWindow": "1h",
+  "activeInterval": "30s",
+  "alertCooldownMinutes": 5
+}
+```
+*(All fields are optional, but at least one must be provided)*
+
+* **Response (`200 OK`)**:
+```json
+{
+  "success": true,
+  "status": "success",
+  "message": "Server polling and alert policy updated successfully",
+  "data": {
+    "allowedWindows": ["15m", "1h", "6h", "24h"],
+    "activeWindow": "1h",
+    "allowedIntervals": ["5s", "15s", "30s", "Off"],
+    "activeInterval": "30s",
+    "minIntervalSeconds": 5,
+    "allowedAlertCooldownMinutes": [5, 10, 15, 30, 60],
+    "alertCooldownMinutes": 5,
+    "cacheTier": "L1-Memory (Node.js) / L2-Redis",
+    "updatedAt": "2026-10-18T11:47:30.000Z"
+  }
+}
+```
+
+* **Error Responses**:
+  - `400 Bad Request` (Rogue interval or invalid time window):
+    ```json
+    {
+      "success": false,
+      "status": "error",
+      "message": "Invalid auto-refresh interval '1s'. Allowed intervals: 5s, 15s, 30s, Off"
+    }
+    ```
+  - `403 Forbidden`: User lacks `system:manage` permission.
+
+---
+
+### 2.12. Comprehensive System Resource Telemetry (`/systemInfo`)
+
+Returns detailed host and process resource metrics comparing active consumption against provisioned limits (**"using out of given"**).
+
+* **Method**: `GET`
+* **Route**: `/api/v1/observability/systemInfo`
+* **Headers**:
+  ```http
+  Authorization: Bearer <accessToken>
+  ```
+* **Permissions**: `dashboard:read` or `system:manage`
+* **Response (`200 OK`)**:
+```json
+{
+  "success": true,
+  "status": "success",
+  "data": {
+    "summary": {
+      "ram": {
+        "systemMemoryUsed": "4.82 GB / 16.00 GB (30.1%)",
+        "processRssOfSystem": "145.20 MB of 16.00 GB (0.89%)",
+        "v8HeapUsedOfLimit": "85.40 MB of 4096.00 MB (2.09%)"
+      },
+      "cpu": {
+        "coresGiven": 8,
+        "model": "13th Gen Intel(R) Core(TM) i7-13700H",
+        "processCpuOfTotalCores": "1.25%"
+      },
+      "threads": {
+        "activeHandles": 42,
+        "activeRequests": 3,
+        "uvThreadPoolGiven": 4,
+        "hardwareCoresGiven": 8
+      },
+      "process": {
+        "pid": 28410,
+        "uptime": "6h 28m 14s",
+        "nodeVersion": "v20.18.0",
+        "environment": "production"
+      },
+      "disk": {
+        "used": "142.50 GB / 512.00 GB",
+        "availablePercent": "72.17%",
+        "status": "healthy"
+      }
+    },
+    "ram": {
+      "system": {
+        "totalBytes": 17179869184,
+        "totalMb": 16384,
+        "totalGb": 16,
+        "freeBytes": 12012707840,
+        "freeMb": 11456,
+        "freeGb": 11.19,
+        "usedBytes": 5167161344,
+        "usedMb": 4928,
+        "usedGb": 4.81,
+        "usagePercent": 30.08
+      },
+      "process": {
+        "rssBytes": 152252416,
+        "rssMb": 145.2,
+        "heapTotalBytes": 115343360,
+        "heapTotalMb": 110,
+        "heapUsedBytes": 89548800,
+        "heapUsedMb": 85.4,
+        "heapLimitBytes": 4294967296,
+        "heapLimitMb": 4096
+      },
+      "outOfGiven": {
+        "processRssPercentOfSystem": 0.89,
+        "heapUsedPercentOfHeapLimit": 2.09
+      }
+    },
+    "cpu": {
+      "cores": 8,
+      "model": "13th Gen Intel(R) Core(TM) i7-13700H",
+      "speedMhz": 2900,
+      "loadAverage": { "1m": 0.85, "5m": 0.65, "15m": 0.52 },
+      "processUsage": { "userMicroseconds": 4520000, "systemMicroseconds": 1240000, "totalCpuSeconds": 5.76 },
+      "outOfGiven": { "coresGiven": 8, "processCpuPercentOfTotalCores": 1.25 }
+    },
+    "threads": {
+      "hardwareCores": 8,
+      "uvThreadPoolSize": 4,
+      "activeHandlesCount": 42,
+      "activeRequestsCount": 3,
+      "outOfGiven": { "activeHandles": 42, "activeRequests": 3, "uvThreadPoolGiven": 4, "hardwareCoresGiven": 8 }
+    },
+    "disk": {
+      "totalGb": 512,
+      "freeGb": 369.5,
+      "usedGb": 142.5,
+      "usagePercent": 27.83,
+      "availablePercent": 72.17,
+      "status": "healthy"
+    },
+    "network": {
+      "interfaces": [
+        { "name": "eth0", "address": "192.168.1.15", "family": "IPv4", "internal": false, "mac": "00:15:5d:01:ca:03" }
+      ],
+      "activeSocketHandlesCount": 18,
+      "activeRequestsCount": 3
+    },
+    "timestamp": "2026-10-18T11:45:00.000Z"
+  }
+}
+```
+
+---
+
 ## 3. React Flow Telemetry Topology Mapping
 
 In the admin dashboard, **React Flow** can be used to render an interactive node graph representing the architecture topology with live telemetry status.
@@ -924,7 +1139,10 @@ In distributed telemetry, when an operator clicks on an anomaly spike in a chart
 |---|---|---|
 | **1. Auth Setup** | Ensure API client passes `Authorization: Bearer <token>` | Header config |
 | **2. Presets Load** | Fetch available metrics to populate dashboard widgets | `GET /metrics/presets` |
-| **3. Metrics Charts** | Render time-series charts with 15s refresh interval | `GET /metrics/range?preset=...` |
-| **4. React Flow Graph** | Poll instant telemetry every 10s to update node status badges | `GET /metrics/query` |
-| **5. Live Log Console** | Connect SSE stream or Socket.IO for real-time terminal | `GET /logs/stream` or `socket.emit("join:logs")` |
-| **6. Historical Logs** | Search historical logs with date range and LogQL stream selector | `GET /logs/query` |
+| **3. Polling Policy** | Load server-dictated time windows, refresh intervals & alert cooldown | `GET /polling-policy` |
+| **4. Metrics Charts** | Render time-series charts using server-approved interval (`activeInterval`) | `GET /metrics/range?preset=...` |
+| **5. React Flow Graph** | Poll instant telemetry at policy rate to update node status badges | `GET /metrics/query` |
+| **6. Live Log Console** | Connect SSE stream or Socket.IO for real-time terminal | `GET /logs/stream` or `socket.emit("join:logs")` |
+| **7. Historical Logs** | Search historical logs with date range and LogQL stream selector | `GET /logs/query` |
+| **8. System Resources** | Render CPU, RAM, threads, and disk "out of given" gauges | `GET /systemInfo` |
+| **9. Policy Controls** | Admin UI to adjust active window, refresh rate, and alert cooldown | `PUT /polling-policy` |

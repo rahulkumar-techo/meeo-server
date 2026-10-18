@@ -309,46 +309,52 @@ npm run dev
 
 ## 📚 Master Documentation Index & Markdown Directory
 
-Direct clickable directory to all architectural specifications, operational runbooks, and domain module documentation:
-
-### 1. 🔍 Observability, Telemetry & Production Operations
-* [OBSERVABILITY_PRODUCTION_RULES.md](file:///e:/e-com/server/OBSERVABILITY_PRODUCTION_RULES.md) — Production rules matrix, 0.1ms rapid-fire flood protection, O(1) circular ring buffer, route cardinality sanitization, and live log stream limits.
-* [OBSERVABILITY_INTEGRATION.md](file:///e:/e-com/server/OBSERVABILITY_INTEGRATION.md) — Fastify Observability API contracts, Loki LogQL streaming, Prometheus presets, and React Flow topology mapping.
+Direct clickable directory to all architectural specifications, operational r### 1. 🔍 Observability, Telemetry & Production Operations
+* [OBSERVABILITY_CHECKLIST.md](file:///e:/e-com/server/docs/observability/OBSERVABILITY_CHECKLIST.md) — Master 10-point server monitoring checklist, production tool responsibility matrix, granular observability endpoints, alert thresholds, and Admin Dashboard integration guide.
+* [OBSERVABILITY_PRODUCTION_RULES.md](file:///e:/e-com/server/docs/observability/OBSERVABILITY_PRODUCTION_RULES.md) — Production rules matrix, 0.1ms rapid-fire flood protection, O(1) circular ring buffer, route cardinality sanitization, and live log stream limits.
+* [OBSERVABILITY_INTEGRATION.md](file:///e:/e-com/server/docs/observability/OBSERVABILITY_INTEGRATION.md) — Fastify Observability API contracts, Loki LogQL streaming, Prometheus presets, and React Flow topology mapping.
 
 ### 2. 🔐 Identity, Authentication & Permissions
-* [AUTH.md](file:///e:/e-com/server/src/modules/auth/AUTH.md) — Authentication architecture, JWT token rotation, and refresh token security.
-* [CUSTOMER_AUTH.md](file:///e:/e-com/server/src/modules/auth/CUSTOMER_AUTH.md) — Customer-facing authentication flows, OTP verification, and social login.
-* [ADMIN_USER.README.md](file:///e:/e-com/server/src/modules/user/ADMIN_USER.README.md) — Admin user management and profile administration.
-* [ADMIN_AUTHORIZATION.README.md](file:///e:/e-com/server/src/modules/authorization/ADMIN_AUTHORIZATION.README.md) — Role-based access control (RBAC) and permission matrices.
+* [AUTH.md](file:///e:/e-com/server/docs/auth/AUTH.md) — Authentication architecture, JWT token rotation, and refresh token security.
+* [CUSTOMER_AUTH.md](file:///e:/e-com/server/docs/auth/CUSTOMER_AUTH.md) — Customer-facing authentication flows, OTP verification, and social login.
+* [ADMIN_USER.README.md](file:///e:/e-com/server/docs/auth/ADMIN_USER.README.md) — Admin user management and profile administration.
+* [ADMIN_AUTHORIZATION.README.md](file:///e:/e-com/server/docs/auth/ADMIN_AUTHORIZATION.README.md) — Role-based access control (RBAC) and permission matrices.
+* [publicAuthRoutes.md](file:///e:/e-com/server/docs/auth/publicAuthRoutes.md) — Public customer authentication routes reference.
 
 ### 3. 📦 Catalog, Products & Inventory
-* [product.README.md](file:///e:/e-com/server/src/modules/catalog/routes/product.README.md) — Product catalog endpoints and CRUD operations.
-* [DASHBOARD_INTEGRATION.md](file:///e:/e-com/server/src/modules/catalog/routes/DASHBOARD_INTEGRATION.md) — Admin dashboard integration for catalog, categories, and inventory.
-* [attribute.README.md](file:///e:/e-com/server/src/modules/catalog/routes/attribute.README.md) — Custom attributes, specifications, and filtering facets.
-* [variant.md](file:///e:/e-com/server/src/modules/catalog/routes/variant.md) — SKU variants, pricing, and stock assignment.
-* [IMAGES_AND_VARIANTS_GUIDE.md](file:///e:/e-com/server/docs/IMAGES_AND_VARIANTS_GUIDE.md) — Media upload pipelines, ImageKit integration, and variant images.
-* [inventory/README.md](file:///e:/e-com/server/src/modules/inventory/routes/README.md) — Two-phase inventory reservation and stock locks.
+* [Catalog.md](file:///e:/e-com/server/docs/catalog/Catalog.md) — Product catalog architecture, variants, and stock management.
+* [product.README.md](file:///e:/e-com/server/docs/catalog/product.README.md) — Product catalog endpoints and CRUD operations.
+* [DASHBOARD_INTEGRATION.md](file:///e:/e-com/server/docs/catalog/DASHBOARD_INTEGRATION.md) — Admin dashboard integration for catalog, categories, and inventory.
+* [attribute.README.md](file:///e:/e-com/server/docs/catalog/attribute.README.md) — Custom attributes, specifications, and filtering facets.
+* [variant.md](file:///e:/e-com/server/docs/catalog/variant.md) — SKU variants, pricing, and stock assignment.
+* [IMAGES_AND_VARIANTS_GUIDE.md](file:///e:/e-com/server/docs/catalog/IMAGES_AND_VARIANTS_GUIDE.md) — Media upload pipelines, ImageKit integration, and variant images.
+* [Inventory.md](file:///e:/e-com/server/docs/inventory/Inventory.md) — Two-phase inventory reservation and stock locks architecture.
 
 ### 4. 🛒 Orders, Checkout, Payments & Coupons
-* [ADMIN_ORDER.README.md](file:///e:/e-com/server/src/modules/orders/routes/ADMIN_ORDER.README.md) — Order processing, status transitions, and fulfillment workflows.
-* [ADMIN_PAYMENTS.README.md](file:///e:/e-com/server/src/modules/payments/ADMIN_PAYMENTS.README.md) — Payment gateway integration, webhooks, and reconciliation.
-* [ADMIN_COUPONS.README.md](file:///e:/e-com/server/src/modules/coupons/ADMIN_COUPONS.README.md) — Promotional codes, discounts, and usage constraints.
-* [promotions/README.md](file:///e:/e-com/server/src/modules/promotions/README.md) — Dynamic discount engines and promotion rules.
+* [ADMIN_ORDER.README.md](file:///e:/e-com/server/docs/orders/ADMIN_ORDER.README.md) — Order processing, status transitions, and fulfillment workflows.
+* [Payment.md](file:///e:/e-com/server/docs/payments/Payment.md) — Payment gateway architecture, intent lifecycle, and webhook verification.
+* [ADMIN_PAYMENTS.README.md](file:///e:/e-com/server/docs/payments/ADMIN_PAYMENTS.README.md) — Payment gateway integration and reconciliation runbooks.
+* [ADMIN_COUPONS.README.md](file:///e:/e-com/server/docs/coupons/ADMIN_COUPONS.README.md) — Promotional codes, discounts, and usage constraints.
+* [promotions.README.md](file:///e:/e-com/server/docs/coupons/promotions.README.md) — Dynamic discount engines and promotion rules.
 
 ### 5. ⚡ Event-Driven Infrastructure, Background Jobs & Sockets
-* [ADMIN_BACKGROUND_JOBS.README.md](file:///e:/e-com/server/src/jobs/ADMIN_BACKGROUND_JOBS.README.md) — BullMQ job queue management, active workers, and retry policies.
-* [ADMIN_OUTBOX.README.md](file:///e:/e-com/server/src/modules/outbox/ADMIN_OUTBOX.README.md) — Transactional outbox pattern and event publishing engine.
-* [workers/README.md](file:///e:/e-com/server/src/workers/README.md) — Background queue consumer workers.
-* [SOCKETS.md](file:///e:/e-com/server/src/sockets/SOCKETS.md) — Real-time Socket.io server architecture and event rooms.
-* [SOCKET_CLIENT_INTEGRATION.md](file:///e:/e-com/server/src/sockets/SOCKET_CLIENT_INTEGRATION.md) — Frontend client integration guide for real-time order tracking.
+* [ADMIN_BACKGROUND_JOBS.README.md](file:///e:/e-com/server/docs/jobs/ADMIN_BACKGROUND_JOBS.README.md) — BullMQ job queue management, active workers, and retry policies.
+* [ADMIN_OUTBOX.README.md](file:///e:/e-com/server/docs/outbox/ADMIN_OUTBOX.README.md) — Transactional outbox pattern and event publishing engine.
+* [workers.README.md](file:///e:/e-com/server/docs/jobs/workers.README.md) — Background queue consumer workers.
+* [SOCKETS.md](file:///e:/e-com/server/docs/sockets/SOCKETS.md) — Real-time Socket.io server architecture and event rooms.
+* [SOCKET_CLIENT_INTEGRATION.md](file:///e:/e-com/server/docs/sockets/SOCKET_CLIENT_INTEGRATION.md) — Frontend client integration guide for real-time order tracking.
 
 ### 6. 🏛️ Compliance, Tax (GST) & System Settings
 * [docs/gst/README.md](file:///e:/e-com/server/docs/gst/README.md) — Master GST calculation engine, HSN codes, and compliance rules.
 * [docs/gst/ADMIN_GUIDE.md](file:///e:/e-com/server/docs/gst/ADMIN_GUIDE.md) — Administrator guide for GST rules and tax slabs.
 * [docs/gst/API_REFERENCE.md](file:///e:/e-com/server/docs/gst/API_REFERENCE.md) — Comprehensive GST endpoints reference.
-* [ADMIN_AUDIT.README.md](file:///e:/e-com/server/src/modules/audit/ADMIN_AUDIT.README.md) — Audit logging and immutable compliance history.
-* [ADMIN_SETTINGS.README.md](file:///e:/e-com/server/src/modules/settings/ADMIN_SETTINGS.README.md) — Global platform configuration and dynamic settings.
-* [ADMIN_REVIEWS.README.md](file:///e:/e-com/server/src/modules/reviews/ADMIN_REVIEWS.README.md) — Product review moderation and rating verification.
+* [AUDIT_REPORT.md](file:///e:/e-com/server/docs/audit/AUDIT_REPORT.md) — System audit report and architecture compliance summary.
+* [ADMIN_AUDIT.README.md](file:///e:/e-com/server/docs/audit/ADMIN_AUDIT.README.md) — Audit logging and immutable compliance history.
+* [ADMIN_SETTINGS.README.md](file:///e:/e-com/server/docs/settings/ADMIN_SETTINGS.README.md) — Global platform configuration and dynamic settings.
+* [ADMIN_REVIEWS.README.md](file:///e:/e-com/server/docs/reviews/ADMIN_REVIEWS.README.md) — Product review moderation and rating verification.
+* [Database.md](file:///e:/e-com/server/docs/architecture/Database.md) — Database schema design, indices, and relations.
+* [RBAC.md](file:///e:/e-com/server/docs/architecture/RBAC.md) — Role-based access control matrix and permission architecture.
+* [CLIENT_TRACKING_IMPLEMENTATION.md](file:///e:/e-com/server/docs/tracking/CLIENT_TRACKING_IMPLEMENTATION.md) — Frontend client user activity and tracking integration guide.
 
 ### 7. 📱 Customer Mobile & Web API Journey
-* [customer-docs/md/README.md](file:///e:/e-com/server/customer-docs/md/README.md) — Complete 15-module customer journey walkthrough (Auth, Catalog, Cart, Checkout, Tracking).
+* [docs/customer-journey/README.md](file:///e:/e-com/server/docs/customer-journey/README.md) — Complete 15-module customer journey walkthrough (Auth, Catalog, Cart, Checkout, Tracking).

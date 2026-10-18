@@ -132,7 +132,23 @@ export interface LiveLogEvent {
 }
 
 // Logical categories for observability thresholds and alert rules
-export type ObservabilityCategory = "server_errors" | "client_errors" | "security" | "business";
+export type ObservabilityCategory = "server_errors" | "client_errors" | "security" | "business" | "preferences";
+
+// Server-enforced dashboard window and auto-refresh intervals
+export type AllowedTimeWindow = "15m" | "1h" | "6h" | "24h";
+export type AllowedAutoRefreshInterval = "5s" | "15s" | "30s" | "Off";
+
+export interface ObservabilityPollingPolicy {
+    allowedWindows: AllowedTimeWindow[];
+    activeWindow: AllowedTimeWindow;
+    allowedIntervals: AllowedAutoRefreshInterval[];
+    activeInterval: AllowedAutoRefreshInterval;
+    minIntervalSeconds: number;
+    allowedAlertCooldownMinutes: number[];
+    alertCooldownMinutes: number;
+    cacheTier: string;
+    updatedAt: string;
+}
 
 // Config payload representing threshold percentages and evaluation parameters
 export interface ObservabilityThresholdConfig {
@@ -148,6 +164,14 @@ export interface ObservabilityThresholdConfig {
     paymentFailureRatePercent?: number;
     orderFailureRatePercent?: number;
     backgroundJobDlqThreshold?: number;
+    allowedWindows?: AllowedTimeWindow[];
+    activeWindow?: AllowedTimeWindow;
+    allowedIntervals?: AllowedAutoRefreshInterval[];
+    activeInterval?: AllowedAutoRefreshInterval;
+    minIntervalSeconds?: number;
+    allowedAlertCooldownMinutes?: number[];
+    alertCooldownMinutes?: number;
+    cooldownMinutes?: number;
     [key: string]: unknown;
 }
 
@@ -162,5 +186,177 @@ export interface ObservabilityConfigItem {
     updatedBy: string | null;
     createdAt: string;
     updatedAt: string;
+}
+
+// System Hardware, Memory, CPU, Process & Threads information
+export interface SystemInfoMemory {
+    system: {
+        totalBytes: number;
+        totalMb: number;
+        totalGb: number;
+        freeBytes: number;
+        freeMb: number;
+        freeGb: number;
+        usedBytes: number;
+        usedMb: number;
+        usedGb: number;
+        usagePercent: number;
+    };
+    process: {
+        rssBytes: number;
+        rssMb: number;
+        heapTotalBytes: number;
+        heapTotalMb: number;
+        heapUsedBytes: number;
+        heapUsedMb: number;
+        externalBytes: number;
+        externalMb: number;
+        arrayBuffersBytes: number;
+        arrayBuffersMb: number;
+        heapLimitBytes: number;
+        heapLimitMb: number;
+    };
+    outOfGiven: {
+        processRssPercentOfSystem: number;
+        heapUsedPercentOfHeapLimit: number;
+        heapUsedPercentOfAllocatedHeap: number;
+        systemMemoryUsagePercent: number;
+    };
+}
+
+export interface SystemInfoCpu {
+    model: string;
+    cores: number;
+    speedMHz: number;
+    loadAverage: {
+        load1m: number;
+        load5m: number;
+        load15m: number;
+        normalizedLoad1mPercent: number;
+    };
+    processUsage: {
+        userMicroseconds: number;
+        systemMicroseconds: number;
+        totalCpuSeconds: number;
+        processCpuPercentSingleCore: number;
+        processCpuPercentTotalSystem: number;
+    };
+    outOfGiven: {
+        processCpuPercentOfTotalCores: number;
+        coresGiven: number;
+    };
+}
+
+export interface SystemInfoProcess {
+    pid: number;
+    ppid: number;
+    title: string;
+    nodeVersion: string;
+    platform: string;
+    arch: string;
+    uptimeSeconds: number;
+    uptimeFormatted: string;
+    environment: string;
+}
+
+export interface SystemInfoThreads {
+    hardwareCores: number;
+    uvThreadPoolSize: number;
+    activeHandlesCount: number;
+    activeRequestsCount: number;
+    outOfGiven: {
+        activeHandles: number;
+        activeRequests: number;
+        uvThreadPoolGiven: number;
+        hardwareCoresGiven: number;
+    };
+}
+
+export interface SystemInfoDisk {
+    totalBytes: number;
+    totalGb: number;
+    freeBytes: number;
+    freeGb: number;
+    usedBytes: number;
+    usedGb: number;
+    usagePercent: number;
+    availablePercent: number;
+    status: "healthy" | "warning" | "critical";
+}
+
+export interface SystemInfoNetworkInterface {
+    name: string;
+    address: string;
+    family: string;
+    internal: boolean;
+    mac: string;
+}
+
+export interface SystemInfoNetwork {
+    interfaces: SystemInfoNetworkInterface[];
+    activeSocketHandlesCount: number;
+    activeRequestsCount: number;
+}
+
+export interface SystemInfoProcessesDetails {
+    pid: number;
+    ppid: number;
+    title: string;
+    nodeVersion: string;
+    platform: string;
+    arch: string;
+    uptimeSeconds: number;
+    uptimeFormatted: string;
+    eventLoopLagMs: {
+        min: number;
+        max: number;
+        mean: number;
+        p50: number;
+        p99: number;
+    };
+    activeHandlesCount: number;
+    activeRequestsCount: number;
+    uvThreadPoolSize: number;
+}
+
+export interface SystemInfoSummary {
+    ram: {
+        systemMemoryUsed: string;
+        processRssOfSystem: string;
+        v8HeapUsedOfLimit: string;
+    };
+    cpu: {
+        coresGiven: number;
+        model: string;
+        processCpuOfTotalCores: string;
+    };
+    threads: {
+        activeHandles: number;
+        activeRequests: number;
+        uvThreadPoolGiven: number;
+        hardwareCoresGiven: number;
+    };
+    process: {
+        pid: number;
+        uptime: string;
+        nodeVersion: string;
+        environment: string;
+    };
+    disk?: {
+        used: string;
+        availablePercent: string;
+        status: string;
+    };
+}
+
+export interface SystemInfoResponse {
+    summary: SystemInfoSummary;
+    ram: SystemInfoMemory;
+    cpu: SystemInfoCpu;
+    process: SystemInfoProcess;
+    threads: SystemInfoThreads;
+    disk: SystemInfoDisk;
+    network: SystemInfoNetwork;
+    timestamp: string;
 }
 

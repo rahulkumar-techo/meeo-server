@@ -1,7 +1,9 @@
 import type { Job } from "bullmq";
+import { logger } from "@/common/observability/logger.js";
 import { orderEventsConsumer } from "./orderEvents.consumer.js";
 import { paymentEventsConsumer } from "./paymentEvents.consumer.js";
 import { notificationConsumer } from "./notification.consumer.js";
+import { systemAlertConsumer } from "./systemAlert.consumer.js";
 
 export class EventRouter {
     /**
@@ -11,7 +13,7 @@ export class EventRouter {
         const event = job.data;
         const eventType: string = event.eventType || job.name;
 
-        console.log(`[EventRouter] Routing event "${eventType}" (ID: ${event.id})`);
+        logger.info({ eventType, eventId: event.id }, "[EventRouter] Routing domain event to consumers");
 
         const consumersToCall = new Set<{ handleEvent: (event: any) => Promise<any> }>();
 
@@ -48,8 +50,18 @@ export class EventRouter {
             consumersToCall.add(notificationConsumer);
         }
 
+        // Route Operational & System Alert Events
+        if (
+            eventType === "SERVER_5XX_ALERT" ||
+            eventType.startsWith("SYSTEM_") ||
+            eventType.startsWith("ALERT_") ||
+            event.aggregateType === "System"
+        ) {
+            consumersToCall.add(systemAlertConsumer);
+        }
+
         if (consumersToCall.size === 0) {
-            console.warn(`[EventRouter] No consumers registered for event "${eventType}"`);
+            logger.warn({ eventType }, "[EventRouter] No consumers registered for domain event");
             return { routed: false, eventType };
         }
 

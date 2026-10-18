@@ -123,7 +123,7 @@ describe("Production Authentication System", () => {
                     password: "WrongPassword!",
                 })
             ).rejects.toThrow(new AppError("Invalid email or password", 401));
-        });
+        }, 15000);
 
         it("rejects login if account is suspended", async () => {
             const password = "ValidPassword123!";

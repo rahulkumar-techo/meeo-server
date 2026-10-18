@@ -215,6 +215,21 @@ Content-Type: application/json
 }
 ```
 
+### Adjusting Polling Policy & Alert Cooldown
+System Managers can adjust the client-side auto-refresh interval and alert email suppression cooldown dynamically:
+
+```http
+PUT /api/v1/observability/polling-policy
+Authorization: Bearer <adminToken>
+Content-Type: application/json
+
+{
+  "activeWindow": "1h",
+  "activeInterval": "30s",
+  "alertCooldownMinutes": 10
+}
+```
+
 ### Restoring Default Baselines
 If custom configurations cause alert noise, reset to recommended production baselines:
 ```http

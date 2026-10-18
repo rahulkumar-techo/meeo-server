@@ -39,8 +39,7 @@ import multipart from "@fastify/multipart";
 import { apiDescription, swaggerTags } from "./common/docs/apiDescription.js";
 import { docsDescriptionHtml } from "./common/docs/docsDescriptionPage.js";
 import { metricsService } from "./common/observability/metrics.service.js";
-import healthRouter, { metricsRouter } from "./modules/health/health.route.js";
-import { healthController } from "./modules/health/health.controller.js";
+import healthRouter from "./modules/health/health.route.js";
 import fastifyMetrics from "fastify-metrics";
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -52,7 +51,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     });
 
     await app.register(fastifyMetrics.default, {
-        endpoint: "/metrics",
+        endpoint: null,
         clearRegisterOnInit: true,
     });
 
@@ -165,22 +164,6 @@ export async function buildApp(): Promise<FastifyInstance> {
         (request as any).startTime = performance.now();
     });
 
-    // Protect /metrics with token in production if METRICS_TOKEN is set
-    app.addHook("onRequest", async (request, reply) => {
-        const path = request.url.split("?")[0];
-        if (path === "/metrics" || path === "/prom-metrics") {
-            const secret = process.env.METRICS_TOKEN;
-            if (process.env.NODE_ENV === "production" && secret) {
-                const auth = request.headers.authorization;
-                if (!auth || auth !== `Bearer ${secret}`) {
-                    return reply
-                        .status(401)
-                        .header("WWW-Authenticate", 'Bearer realm="metrics"')
-                        .send("Unauthorized");
-                }
-            }
-        }
-    });
 
     app.addHook("onResponse", async (request, reply) => {
         const startTime = (request as any).startTime || performance.now();
@@ -266,18 +249,10 @@ export async function buildApp(): Promise<FastifyInstance> {
     app.register(trackingRouter, { prefix: "/api/v1/tracking" });
     app.register(user360Router, { prefix: "/api/v1/track-user" });
     app.register(observabilityRouter, { prefix: "/api/v1/observability" });
+    app.register(observabilityRouter, { prefix: "/observability" });
 
     // --- Observability & System Health ---
     app.register(healthRouter, { prefix: "/health" });
-    app.register(metricsRouter, { prefix: "/metrics" });
-
-    // Prometheus scrape endpoint via prom-client
-    app.get("/prom-metrics", {
-        schema: {
-            tags: ["System - Observability"],
-            summary: "Prometheus metrics exported via prom-client",
-        },
-    }, healthController.promMetrics);
 
     app.get("/health", async (_req, reply) => {
         return reply.status(200).send({

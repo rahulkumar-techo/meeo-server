@@ -66,23 +66,3 @@ export default async function healthRouter(app: FastifyInstance) {
         },
     }, healthController.recentErrors);
 }
-
-/**
- * Registers JSON Metrics endpoint under /metrics/json.
- * Prometheus metrics are served at /metrics by fastify-metrics.
- */
-export async function metricsRouter(app: FastifyInstance) {
-    app.get("/json", {
-        schema: {
-            tags: ["System - Observability"],
-            summary: "JSON snapshot of system, HTTP latency, and database query metrics",
-        },
-    }, healthController.metricsJson);
-
-    app.get("/prom", {
-        schema: {
-            tags: ["System - Observability"],
-            summary: "Prometheus metrics exported via prom-client",
-        },
-    }, healthController.promMetrics);
-}

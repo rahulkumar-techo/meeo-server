@@ -4,6 +4,8 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { observabilityService } from "../services/observability.service.js";
 import { observabilityConfigService } from "../services/observabilityConfig.service.js";
+import { client } from "@/common/observability/promClient.js";
+import { metricsService } from "@/common/observability/metrics.service.js";
 import {
     configKeyParamSchema,
     labelParamSchema,
@@ -12,6 +14,7 @@ import {
     metricsInstantQuerySchema,
     metricsRangeQuerySchema,
     updateObservabilityConfigSchema,
+    updatePollingPolicySchema,
 } from "../validations/observability.validation.js";
 
 export class ObservabilityController {
@@ -281,6 +284,134 @@ export class ObservabilityController {
             status: "success",
             message: "Observability configurations reset to default baseline",
             data: configs,
+        });
+    }
+
+    /**
+     * Comprehensive system, hardware, memory, CPU, process, and thread usage ("using out of given").
+     */
+    async getSystemInfo(_req: FastifyRequest, reply: FastifyReply) {
+        const data = observabilityService.getSystemInfo();
+        return reply.status(200).send({
+            success: true,
+            status: "success",
+            data,
+        });
+    }
+
+    /**
+     * CPU utilization, core speed, load averages, and process CPU % of cores.
+     */
+    async getCpuInfo(_req: FastifyRequest, reply: FastifyReply) {
+        const data = observabilityService.getCpuInfo();
+        return reply.status(200).send({
+            success: true,
+            status: "success",
+            data,
+        });
+    }
+
+    /**
+     * System RAM, process heap allocation, and memory usage.
+     */
+    async getMemoryInfo(_req: FastifyRequest, reply: FastifyReply) {
+        const data = observabilityService.getMemoryInfo();
+        return reply.status(200).send({
+            success: true,
+            status: "success",
+            data,
+        });
+    }
+
+    /**
+     * Filesystem volume capacity, used/free bytes, and health status.
+     */
+    async getDiskInfo(_req: FastifyRequest, reply: FastifyReply) {
+        const data = observabilityService.getDiskInfo();
+        return reply.status(200).send({
+            success: true,
+            status: "success",
+            data,
+        });
+    }
+
+    /**
+     * Network interfaces, IP addresses, and active socket connections.
+     */
+    async getNetworkInfo(_req: FastifyRequest, reply: FastifyReply) {
+        const data = observabilityService.getNetworkInfo();
+        return reply.status(200).send({
+            success: true,
+            status: "success",
+            data,
+        });
+    }
+
+    /**
+     * Node.js event loop lag (p50/p99), process uptime, and concurrency handles.
+     */
+    async getProcessesInfo(_req: FastifyRequest, reply: FastifyReply) {
+        const data = observabilityService.getProcessesInfo();
+        return reply.status(200).send({
+            success: true,
+            status: "success",
+            data,
+        });
+    }
+
+    /**
+     * Prometheus scrapable text metrics exported via prom-client.
+     */
+    async getPrometheusMetrics(_req: FastifyRequest, reply: FastifyReply) {
+        const metrics = await client.register.metrics();
+        return reply
+            .header("Content-Type", client.register.contentType)
+            .status(200)
+            .send(metrics);
+    }
+
+    /**
+     * Snapshot of in-memory latency, throughput, error, and database metrics in JSON format.
+     */
+    async getMetricsJson(_req: FastifyRequest, reply: FastifyReply) {
+        const snapshot = metricsService.getMetricsSnapshot();
+        return reply.status(200).send({
+            success: true,
+            status: "success",
+            data: snapshot,
+        });
+    }
+
+    /**
+     * Resolves server-managed time window and auto-refresh intervals with L1/L2 caching.
+     */
+    async getPollingPolicy(_req: FastifyRequest, reply: FastifyReply) {
+        const policy = await observabilityConfigService.getPollingPolicy();
+        return reply.status(200).send({
+            success: true,
+            status: "success",
+            data: policy,
+        });
+    }
+
+    /**
+     * Updates server-managed time window, auto-refresh intervals, and alert cooldown with validation.
+     */
+    async updatePollingPolicy(req: FastifyRequest, reply: FastifyReply) {
+        const input = updatePollingPolicySchema.parse(req.body);
+        const adminUserId = (req as any).user?.id;
+        const updated = await observabilityConfigService.updatePollingPolicy(
+            input.activeWindow,
+            input.activeInterval,
+            input.alertCooldownMinutes,
+            adminUserId,
+        );
+
+        return reply.status(200).send({
+            success: true,
+            status: "success",
+            message: "Server polling and alert policy updated successfully",
+            data: updated,
         });
     }
 }

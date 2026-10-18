@@ -5,8 +5,20 @@ import { observabilityController } from "../controllers/observability.controller
 import { PERMISSIONS } from "@/modules/authorization/permission.constants.js";
 
 export async function observabilityRouter(app: FastifyInstance) {
-    // Require authentication and admin privileges
-    app.addHook("preHandler", app.authenticate);
+    // Require authentication and admin privileges, or valid METRICS_TOKEN for prometheus scrape
+    app.addHook("preHandler", async (req, reply) => {
+        const path = (req.url ? req.url.split("?")[0] : "") || "";
+        if (path.endsWith("/metrics/prom") || path.endsWith("/metrics/prometheus")) {
+            const secret = process.env.METRICS_TOKEN;
+            if (secret && req.headers.authorization === `Bearer ${secret}`) {
+                return;
+            }
+            if (!secret && process.env.NODE_ENV !== "production") {
+                return;
+            }
+        }
+        await (app as any).authenticate(req, reply);
+    });
 
     const observabilityAuth = [
         app.requireAnyPermission([PERMISSIONS.SYSTEM_MANAGE, PERMISSIONS.DASHBOARD_READ]),
@@ -76,6 +88,137 @@ export async function observabilityRouter(app: FastifyInstance) {
             },
         },
         observabilityController.getPresets.bind(observabilityController),
+    );
+
+    app.get(
+        "/metrics/prom",
+        {
+            schema: {
+                tags: ["System - Observability"],
+                summary: "Prometheus scrapable text metrics exported via prom-client",
+                description: "Standard Prometheus exposition format metrics for Prometheus server scraping.",
+            },
+        },
+        observabilityController.getPrometheusMetrics.bind(observabilityController),
+    );
+
+    app.get(
+        "/metrics/prometheus",
+        {
+            schema: {
+                tags: ["System - Observability"],
+                summary: "Prometheus scrapable text metrics alias",
+            },
+        },
+        observabilityController.getPrometheusMetrics.bind(observabilityController),
+    );
+
+    app.get(
+        "/metrics/json",
+        {
+            preHandler: observabilityAuth,
+            schema: {
+                tags: ["System - Observability"],
+                summary: "[Admin] In-memory latency, throughput, error, and database metrics in JSON format",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        observabilityController.getMetricsJson.bind(observabilityController),
+    );
+
+    // --- System & Hardware Telemetry ("Using out of given") ---
+
+    app.get(
+        "/systemInfo",
+        {
+            preHandler: observabilityAuth,
+            schema: {
+                tags: ["System - Observability"],
+                summary: "[Admin] Host hardware, RAM, CPU, Process & Threads telemetry out of given capacity",
+                description:
+                    "Returns real-time hardware capacity, memory usage (RSS vs System RAM, Heap vs V8 limit), CPU cores & load average, and active libuv handles & thread pool capacity.",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        observabilityController.getSystemInfo.bind(observabilityController),
+    );
+
+    app.get(
+        "/system-info",
+        {
+            preHandler: observabilityAuth,
+            schema: {
+                tags: ["System - Observability"],
+                summary: "[Admin] Host hardware, RAM, CPU, Process & Threads telemetry alias",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        observabilityController.getSystemInfo.bind(observabilityController),
+    );
+
+    app.get(
+        "/cpu",
+        {
+            preHandler: observabilityAuth,
+            schema: {
+                tags: ["System - Observability"],
+                summary: "[Admin] CPU utilization, core clock speed, load averages, and core usage",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        observabilityController.getCpuInfo.bind(observabilityController),
+    );
+
+    app.get(
+        "/memory",
+        {
+            preHandler: observabilityAuth,
+            schema: {
+                tags: ["System - Observability"],
+                summary: "[Admin] System RAM, process heap allocation, and memory usage",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        observabilityController.getMemoryInfo.bind(observabilityController),
+    );
+
+    app.get(
+        "/disk",
+        {
+            preHandler: observabilityAuth,
+            schema: {
+                tags: ["System - Observability"],
+                summary: "[Admin] Filesystem volume capacity, used/free bytes, and health status",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        observabilityController.getDiskInfo.bind(observabilityController),
+    );
+
+    app.get(
+        "/network",
+        {
+            preHandler: observabilityAuth,
+            schema: {
+                tags: ["System - Observability"],
+                summary: "[Admin] Network interfaces, IP addresses, and active socket connections",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        observabilityController.getNetworkInfo.bind(observabilityController),
+    );
+
+    app.get(
+        "/processes",
+        {
+            preHandler: observabilityAuth,
+            schema: {
+                tags: ["System - Observability"],
+                summary: "[Admin] Node.js event loop lag (p50/p99), process uptime, and concurrency handles",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        observabilityController.getProcessesInfo.bind(observabilityController),
     );
 
     // --- Logs Endpoints (Loki) ---
@@ -293,5 +436,45 @@ export async function observabilityRouter(app: FastifyInstance) {
             },
         },
         observabilityController.resetConfigs.bind(observabilityController),
+    );
+
+    // --- Server-Managed Dashboard Time Windows & Polling Intervals ---
+
+    app.get(
+        "/polling-policy",
+        {
+            preHandler: observabilityAuth,
+            schema: {
+                tags: ["System - Observability"],
+                summary: "[Admin] Get server-managed time windows and auto-refresh intervals",
+                description:
+                    "Returns server-enforced allowed windows (15m, 1h, 6h, 24h) and auto-refresh intervals (5s, 15s, 30s, Off) served from L1 Node.js memory cache.",
+                security: [{ bearerAuth: [] }],
+            },
+        },
+        observabilityController.getPollingPolicy.bind(observabilityController),
+    );
+
+    app.put(
+        "/polling-policy",
+        {
+            preHandler: [app.requireAnyPermission([PERMISSIONS.SYSTEM_MANAGE])],
+            schema: {
+                tags: ["System - Observability"],
+                summary: "[Admin] Update server-managed time window, auto-refresh intervals, and alert cooldown",
+                description:
+                    "Updates active window, interval, and email alert cooldown on server. Protects host, database, and admin mailboxes.",
+                security: [{ bearerAuth: [] }],
+                body: {
+                    type: "object",
+                    properties: {
+                        activeWindow: { type: "string", enum: ["15m", "1h", "6h", "24h"] },
+                        activeInterval: { type: "string", enum: ["5s", "15s", "30s", "Off"] },
+                        alertCooldownMinutes: { type: "integer", minimum: 1, maximum: 1440 },
+                    },
+                },
+            },
+        },
+        observabilityController.updatePollingPolicy.bind(observabilityController),
     );
 }

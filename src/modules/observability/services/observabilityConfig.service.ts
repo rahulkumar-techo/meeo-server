@@ -1,13 +1,14 @@
-// Manages observability thresholds and alert rules with L1 (In-Memory) and L2 (Redis) caching.
-// Guarantees zero continuous database polling on telemetry and request evaluation paths.
-
+import { AppError } from "@/common/errors/app-error.js";
 import { prisma } from "@/lib/prisma.js";
 import redis from "@/lib/redis.js";
 import { CACHE_KEYS, CACHE_TTL } from "@/common/cache/cache.keys.js";
 import { logger } from "@/common/observability/logger.js";
 import type {
+    AllowedAutoRefreshInterval,
+    AllowedTimeWindow,
     ObservabilityCategory,
     ObservabilityConfigItem,
+    ObservabilityPollingPolicy,
     ObservabilityThresholdConfig,
 } from "../types/observability.types.js";
 
@@ -28,6 +29,7 @@ export const DEFAULT_OBSERVABILITY_CONFIGS: Array<{
             evaluationWindowMinutes: 5,
             minimumRequestsPerMinute: 10,
             max5xxVolumePerMinute: 20,
+            cooldownMinutes: 15,
         },
     },
     {
@@ -62,6 +64,20 @@ export const DEFAULT_OBSERVABILITY_CONFIGS: Array<{
             orderFailureRatePercent: 1.0,
             backgroundJobDlqThreshold: 5,
             evaluationWindowMinutes: 5,
+        },
+    },
+    {
+        key: "preferences:polling_policy",
+        category: "preferences",
+        description: "Server-managed dashboard time windows, auto-refresh intervals, and alert cooldown policies",
+        value: {
+            allowedWindows: ["15m", "1h", "6h", "24h"],
+            activeWindow: "15m",
+            allowedIntervals: ["5s", "15s", "30s", "Off"],
+            activeInterval: "15s",
+            minIntervalSeconds: 5,
+            allowedAlertCooldownMinutes: [5, 10, 15, 30, 60],
+            alertCooldownMinutes: 15,
         },
     },
 ];
@@ -214,6 +230,9 @@ export class ObservabilityConfigService {
             ? { ...baseValue, ...updates.value }
             : baseValue;
 
+        const isValidUuid = typeof adminUserId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(adminUserId);
+        const validAdminUuid = isValidUuid ? adminUserId : null;
+
         const updated = await prisma.observabilityConfig.upsert({
             where: { key },
             create: {
@@ -222,13 +241,13 @@ export class ObservabilityConfigService {
                 value: mergedValue as any,
                 description: updates.description ?? existing?.description ?? null,
                 isEnabled: updates.isEnabled ?? true,
-                updatedBy: adminUserId ?? null,
+                updatedBy: validAdminUuid,
             },
             update: {
                 value: mergedValue as any,
                 ...(updates.isEnabled !== undefined ? { isEnabled: updates.isEnabled } : {}),
                 ...(updates.description !== undefined ? { description: updates.description } : {}),
-                ...(adminUserId !== undefined ? { updatedBy: adminUserId } : {}),
+                ...(adminUserId !== undefined ? { updatedBy: validAdminUuid } : {}),
             },
         });
 
@@ -283,6 +302,117 @@ export class ObservabilityConfigService {
         }
 
         return this.getAllConfigs();
+    }
+
+    /**
+     * Resolves server-dictated polling & window policy with L1 memory and L2 Redis caching.
+     * Prevents clients/hackers from hammering the server with arbitrary polling frequencies.
+     */
+    async getPollingPolicy(): Promise<ObservabilityPollingPolicy> {
+        const config = await this.getConfig("preferences:polling_policy");
+        const val = config?.value;
+
+        const allowedWindows: AllowedTimeWindow[] = ["15m", "1h", "6h", "24h"];
+        const allowedIntervals: AllowedAutoRefreshInterval[] = ["5s", "15s", "30s", "Off"];
+        const allowedAlertCooldownMinutes = [5, 10, 15, 30, 60];
+
+        const activeWindow = (val?.activeWindow && allowedWindows.includes(val.activeWindow as AllowedTimeWindow)
+            ? val.activeWindow
+            : "15m") as AllowedTimeWindow;
+
+        const activeInterval = (val?.activeInterval && allowedIntervals.includes(val.activeInterval as AllowedAutoRefreshInterval)
+            ? val.activeInterval
+            : "15s") as AllowedAutoRefreshInterval;
+
+        const alertCooldownMinutes = typeof val?.alertCooldownMinutes === "number" && val.alertCooldownMinutes > 0
+            ? (val.alertCooldownMinutes as number)
+            : 15;
+
+        return {
+            allowedWindows,
+            activeWindow,
+            allowedIntervals,
+            activeInterval,
+            minIntervalSeconds: (val?.minIntervalSeconds as number) || 5,
+            allowedAlertCooldownMinutes,
+            alertCooldownMinutes,
+            cacheTier: "L1-Memory (Node.js) / L2-Redis",
+            updatedAt: config?.updatedAt || new Date().toISOString(),
+        };
+    }
+
+    /**
+     * Updates server-dictated polling & window policy with validation and cache invalidation.
+     */
+    async updatePollingPolicy(
+        activeWindow?: AllowedTimeWindow,
+        activeInterval?: AllowedAutoRefreshInterval,
+        alertCooldownMinutes?: number,
+        adminUserId?: string,
+    ): Promise<ObservabilityPollingPolicy> {
+        const allowedWindows: AllowedTimeWindow[] = ["15m", "1h", "6h", "24h"];
+        const allowedIntervals: AllowedAutoRefreshInterval[] = ["5s", "15s", "30s", "Off"];
+        const allowedAlertCooldownMinutes = [5, 10, 15, 30, 60];
+
+        if (activeWindow && !allowedWindows.includes(activeWindow)) {
+            throw new AppError(`Invalid time window '${activeWindow}'. Allowed windows: ${allowedWindows.join(", ")}`, 400);
+        }
+
+        if (activeInterval && !allowedIntervals.includes(activeInterval)) {
+            throw new AppError(`Invalid auto-refresh interval '${activeInterval}'. Allowed intervals: ${allowedIntervals.join(", ")}`, 400);
+        }
+
+        if (alertCooldownMinutes !== undefined && (alertCooldownMinutes < 1 || alertCooldownMinutes > 1440)) {
+            throw new AppError("Alert cooldown must be between 1 and 1440 minutes", 400);
+        }
+
+        const currentPolicy = await this.getPollingPolicy();
+        const updatedPolicyValue = {
+            allowedWindows,
+            activeWindow: activeWindow || currentPolicy.activeWindow,
+            allowedIntervals,
+            activeInterval: activeInterval || currentPolicy.activeInterval,
+            minIntervalSeconds: 5,
+            allowedAlertCooldownMinutes,
+            alertCooldownMinutes: alertCooldownMinutes !== undefined ? alertCooldownMinutes : currentPolicy.alertCooldownMinutes,
+        };
+
+        await this.updateConfig(
+            "preferences:polling_policy",
+            {
+                value: updatedPolicyValue,
+                description: "Server-managed dashboard time windows, auto-refresh intervals, and alert cooldown policies",
+                isEnabled: true,
+            },
+            adminUserId,
+        );
+
+        // Synchronize thresholds:server_5xx cooldownMinutes if alertCooldownMinutes was updated
+        if (alertCooldownMinutes !== undefined) {
+            try {
+                const thresholdConfig = await this.getConfig("thresholds:server_5xx");
+                if (thresholdConfig) {
+                    await this.updateConfig(
+                        "thresholds:server_5xx",
+                        {
+                            value: {
+                                ...thresholdConfig.value,
+                                cooldownMinutes: alertCooldownMinutes,
+                            },
+                        },
+                        adminUserId,
+                    );
+                }
+            } catch (err: any) {
+                logger.warn({ err: err?.message || err }, "[ObservabilityConfig] Failed to sync cooldown to server_5xx threshold");
+            }
+        }
+
+        return {
+            ...updatedPolicyValue,
+            cacheTier: "L1-Memory (Node.js) / L2-Redis",
+            updatedAt: new Date().toISOString(),
+        };
     }
 
     // Seeds initial default configs when database is cold
