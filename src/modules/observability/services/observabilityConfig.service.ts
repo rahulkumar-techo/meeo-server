@@ -218,9 +218,14 @@ export class ObservabilityConfigService {
         },
         adminUserId?: string | undefined,
     ): Promise<ObservabilityConfigItem> {
-        const existing = await prisma.observabilityConfig.findUnique({
-            where: { key },
-        });
+        let existing: any = null;
+        try {
+            existing = await prisma.observabilityConfig.findUnique({
+                where: { key },
+            });
+        } catch {
+            existing = this.l1Cache.get(key) || null;
+        }
 
         const defaultFallback = DEFAULT_OBSERVABILITY_CONFIGS.find((c) => c.key === key);
         const baseValue = (existing?.value as Record<string, unknown>) ?? (defaultFallback?.value as Record<string, unknown>) ?? {};
@@ -233,35 +238,51 @@ export class ObservabilityConfigService {
         const isValidUuid = typeof adminUserId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(adminUserId);
         const validAdminUuid = isValidUuid ? adminUserId : null;
 
-        const updated = await prisma.observabilityConfig.upsert({
-            where: { key },
-            create: {
+        let normalized: ObservabilityConfigItem;
+        try {
+            const updated = await prisma.observabilityConfig.upsert({
+                where: { key },
+                create: {
+                    key,
+                    category: key.split(":")[1] || "custom",
+                    value: mergedValue as any,
+                    description: updates.description ?? existing?.description ?? null,
+                    isEnabled: updates.isEnabled ?? true,
+                    updatedBy: validAdminUuid,
+                },
+                update: {
+                    value: mergedValue as any,
+                    ...(updates.isEnabled !== undefined ? { isEnabled: updates.isEnabled } : {}),
+                    ...(updates.description !== undefined ? { description: updates.description } : {}),
+                    ...(adminUserId !== undefined ? { updatedBy: validAdminUuid } : {}),
+                },
+            });
+
+            normalized = {
+                id: updated.id,
+                key: updated.key,
+                category: updated.category,
+                value: (updated.value ?? {}) as ObservabilityThresholdConfig,
+                description: updated.description,
+                isEnabled: updated.isEnabled,
+                updatedBy: updated.updatedBy,
+                createdAt: updated.createdAt.toISOString(),
+                updatedAt: updated.updatedAt.toISOString(),
+            };
+        } catch (dbErr) {
+            logger.warn({ error: (dbErr as Error).message }, "[ObservabilityConfig] DB write failed, saving in L1 memory directly");
+            normalized = {
+                id: existing?.id || `fallback-${key}`,
                 key,
                 category: key.split(":")[1] || "custom",
-                value: mergedValue as any,
-                description: updates.description ?? existing?.description ?? null,
-                isEnabled: updates.isEnabled ?? true,
+                value: mergedValue as ObservabilityThresholdConfig,
+                description: updates.description ?? existing?.description ?? defaultFallback?.description ?? null,
+                isEnabled: updates.isEnabled ?? existing?.isEnabled ?? true,
                 updatedBy: validAdminUuid,
-            },
-            update: {
-                value: mergedValue as any,
-                ...(updates.isEnabled !== undefined ? { isEnabled: updates.isEnabled } : {}),
-                ...(updates.description !== undefined ? { description: updates.description } : {}),
-                ...(adminUserId !== undefined ? { updatedBy: validAdminUuid } : {}),
-            },
-        });
-
-        const normalized: ObservabilityConfigItem = {
-            id: updated.id,
-            key: updated.key,
-            category: updated.category,
-            value: (updated.value ?? {}) as ObservabilityThresholdConfig,
-            description: updated.description,
-            isEnabled: updated.isEnabled,
-            updatedBy: updated.updatedBy,
-            createdAt: updated.createdAt.toISOString(),
-            updatedAt: updated.updatedAt.toISOString(),
-        };
+                createdAt: existing?.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            };
+        }
 
         // Invalidate L2 and update local L1 immediately
         await this.invalidateAndPublish(normalized);
@@ -271,24 +292,28 @@ export class ObservabilityConfigService {
 
     // Resets all configurations to recommended baseline defaults
     async resetToDefaults(adminUserId?: string): Promise<ObservabilityConfigItem[]> {
-        for (const config of DEFAULT_OBSERVABILITY_CONFIGS) {
-            await prisma.observabilityConfig.upsert({
-                where: { key: config.key },
-                create: {
-                    key: config.key,
-                    category: config.category,
-                    value: config.value as any,
-                    description: config.description,
-                    isEnabled: true,
-                    updatedBy: adminUserId ?? null,
-                },
-                update: {
-                    value: config.value as any,
-                    description: config.description,
-                    isEnabled: true,
-                    updatedBy: adminUserId ?? null,
-                },
-            });
+        try {
+            for (const config of DEFAULT_OBSERVABILITY_CONFIGS) {
+                await prisma.observabilityConfig.upsert({
+                    where: { key: config.key },
+                    create: {
+                        key: config.key,
+                        category: config.category,
+                        value: config.value as any,
+                        description: config.description,
+                        isEnabled: true,
+                        updatedBy: adminUserId ?? null,
+                    },
+                    update: {
+                        value: config.value as any,
+                        description: config.description,
+                        isEnabled: true,
+                        updatedBy: adminUserId ?? null,
+                    },
+                });
+            }
+        } catch (dbErr) {
+            logger.warn({ error: (dbErr as Error).message }, "[ObservabilityConfig] DB reset failed, resetting in-memory defaults");
         }
 
         // Clear caches and reload
