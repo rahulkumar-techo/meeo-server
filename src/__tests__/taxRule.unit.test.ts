@@ -1,4 +1,109 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+
+// In-memory data store for isolated unit testing without external database dependency
+const { mockPrisma, classifications, rules, audits } = vi.hoisted(() => {
+    const classifications = new Map<string, any>();
+    const rules = new Map<string, any>();
+    const audits: any[] = [];
+
+    const mockPrisma = {
+        taxClassification: {
+            findUnique: vi.fn(async ({ where }: any) => {
+                if (where.hsnCode) return classifications.get(where.hsnCode) || null;
+                if (where.id) {
+                    for (const c of classifications.values()) {
+                        if (c.id === where.id) return c;
+                    }
+                }
+                return null;
+            }),
+            create: vi.fn(async ({ data }: any) => {
+                const item = { id: "tc-" + data.hsnCode, createdAt: new Date(), updatedAt: new Date(), ...data };
+                classifications.set(data.hsnCode, item);
+                return item;
+            }),
+            deleteMany: vi.fn(async () => {
+                classifications.clear();
+                return { count: 0 };
+            }),
+        },
+        gstRule: {
+            findFirst: vi.fn(async ({ where }: any) => {
+                for (const r of rules.values()) {
+                    if (r.hsnCode === where.hsnCode && (!where.status || r.status === where.status)) {
+                        return r;
+                    }
+                }
+                return null;
+            }),
+            findMany: vi.fn(async ({ where }: any) => {
+                const result: any[] = [];
+                for (const r of rules.values()) {
+                    if (where?.hsnCode && r.hsnCode !== where.hsnCode) continue;
+                    if (where?.status && r.status !== where.status) continue;
+                    result.push(r);
+                }
+                return result;
+            }),
+            findUnique: vi.fn(async ({ where }: any) => rules.get(where.id) || null),
+            create: vi.fn(async ({ data }: any) => {
+                const id = data.id || "rule-" + Math.random().toString(36).slice(2, 9);
+                const item = { id, createdAt: new Date(), updatedAt: new Date(), ...data };
+                rules.set(id, item);
+                return item;
+            }),
+            update: vi.fn(async ({ where, data }: any) => {
+                const existing = rules.get(where.id);
+                if (!existing) throw new Error("Rule not found");
+                const updated = { ...existing, ...data, updatedAt: new Date() };
+                rules.set(where.id, updated);
+                return updated;
+            }),
+            updateMany: vi.fn(async ({ where, data }: any) => {
+                let count = 0;
+                for (const [id, r] of rules.entries()) {
+                    if (where?.hsnCode && r.hsnCode !== where.hsnCode) continue;
+                    if (where?.status && r.status !== where.status) continue;
+                    if (where?.id?.not && r.id === where.id.not) continue;
+                    rules.set(id, { ...r, ...data, updatedAt: new Date() });
+                    count++;
+                }
+                return { count };
+            }),
+            deleteMany: vi.fn(async () => {
+                rules.clear();
+                return { count: 0 };
+            }),
+        },
+        gstRuleAudit: {
+            create: vi.fn(async ({ data }: any) => {
+                const item = { id: "audit-" + Math.random().toString(36).slice(2, 9), createdAt: new Date(), ...data };
+                audits.push(item);
+                return item;
+            }),
+            findMany: vi.fn(async ({ where }: any) => {
+                if (where?.ruleId) {
+                    return audits.filter((a) => a.ruleId === where.ruleId);
+                }
+                return audits;
+            }),
+            deleteMany: vi.fn(async () => {
+                audits.length = 0;
+                return { count: 0 };
+            }),
+        },
+        user: {
+            findFirst: vi.fn(async () => ({ id: "admin-user-id", email: "admin@meeo.com" })),
+        },
+        $transaction: vi.fn(async (cb: any) => cb(mockPrisma)),
+    };
+
+    return { mockPrisma, classifications, rules, audits };
+});
+
+vi.mock("@/lib/prisma.js", () => ({ prisma: mockPrisma }));
+vi.mock("../lib/prisma.js", () => ({ prisma: mockPrisma }));
+
 import { prisma } from "../lib/prisma.js";
 import { taxRuleService } from "../modules/tax/services/taxRule.service.js";
 import { AppError } from "../common/errors/app-error.js";

@@ -126,16 +126,34 @@ export class ObservabilityConfigService {
         }
 
         // 3. Fallback to Database (Only when caches are cold or empty)
-        let dbRecords = await prisma.observabilityConfig.findMany({
-            orderBy: { category: "asc" },
-        });
-
-        // Seed defaults if table is empty on initial setup
-        if (dbRecords.length === 0) {
-            await this.seedDefaultConfigs();
+        let dbRecords: any[] = [];
+        try {
             dbRecords = await prisma.observabilityConfig.findMany({
                 orderBy: { category: "asc" },
             });
+
+            // Seed defaults if table is empty on initial setup
+            if (dbRecords.length === 0) {
+                await this.seedDefaultConfigs();
+                dbRecords = await prisma.observabilityConfig.findMany({
+                    orderBy: { category: "asc" },
+                });
+            }
+        } catch (dbErr) {
+            logger.warn({ error: (dbErr as Error).message }, "[ObservabilityConfig] DB read failed, falling back to in-memory defaults");
+            const fallback = DEFAULT_OBSERVABILITY_CONFIGS.map((item, idx) => ({
+                id: `default-${idx}`,
+                key: item.key,
+                category: item.category,
+                value: item.value,
+                description: item.description,
+                isEnabled: true,
+                updatedBy: null,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            }));
+            this.populateL1(fallback);
+            return fallback;
         }
 
         const normalized = dbRecords.map((item) => ({

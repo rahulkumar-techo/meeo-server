@@ -1,4 +1,43 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const memoryDb = new Map<string, any>();
+
+vi.mock("@/lib/prisma.js", () => ({
+    prisma: {
+        observabilityConfig: {
+            findMany: vi.fn(async () => Array.from(memoryDb.values())),
+            findUnique: vi.fn(async ({ where }: any) => memoryDb.get(where.key) || null),
+            upsert: vi.fn(async ({ where, create, update }: any) => {
+                const existing = memoryDb.get(where.key);
+                const record = {
+                    id: existing?.id || "mock-id-" + where.key,
+                    createdAt: existing?.createdAt || new Date(),
+                    updatedAt: new Date(),
+                    ...(existing ? { ...existing, ...update } : create),
+                };
+                memoryDb.set(where.key, record);
+                return record;
+            }),
+            create: vi.fn(async ({ data }: any) => {
+                const record = { id: "mock-id-" + data.key, createdAt: new Date(), updatedAt: new Date(), ...data };
+                memoryDb.set(data.key, record);
+                return record;
+            }),
+            update: vi.fn(async ({ where, data }: any) => {
+                const existing = memoryDb.get(where.key) || { id: "mock-id", key: where.key, value: {} };
+                const record = {
+                    ...existing,
+                    ...data,
+                    value: typeof data.value === "object" ? { ...existing.value, ...data.value } : data.value,
+                    updatedAt: new Date(),
+                };
+                memoryDb.set(where.key, record);
+                return record;
+            }),
+        },
+    },
+}));
+
 import {
     observabilityConfigService,
     DEFAULT_OBSERVABILITY_CONFIGS,
