@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma.js";
+import { logger } from "@/common/observability/logger.js";
 
 export interface BackoffOptions {
     baseDelayMs?: number;
@@ -65,7 +66,7 @@ export class OutboxRetryService {
         });
 
         if (result.count > 0) {
-            console.log(`[OutboxRetryService] Unlocked ${result.count} stale outbox event(s).`);
+            logger.info({ unlockedCount: result.count }, "[OutboxRetryService] Unlocked stale outbox events");
         }
 
         return result.count;

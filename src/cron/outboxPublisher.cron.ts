@@ -1,5 +1,6 @@
 import cron, { type ScheduledTask } from "node-cron";
 import { outboxPublisherService } from "@/modules/outbox/services/outboxPublisher.service.js";
+import { logger } from "@/common/observability/logger.js";
 
 let outboxTask: ScheduledTask | null = null;
 let isPolling = false;
@@ -12,12 +13,18 @@ async function runOutboxPoll() {
         isPolling = true;
         const result = await outboxPublisherService.pollAndPublishBatch(50);
         if (result.claimedCount > 0) {
-            console.log(
-                `[Cron: Outbox] Claimed: ${result.claimedCount}, Published: ${result.publishedCount}, Failed: ${result.failedCount}, DLQ: ${result.deadLetteredCount}`,
+            logger.info(
+                {
+                    claimedCount: result.claimedCount,
+                    publishedCount: result.publishedCount,
+                    failedCount: result.failedCount,
+                    deadLetteredCount: result.deadLetteredCount,
+                },
+                "[Cron: Outbox] Processed outbox batch",
             );
         }
     } catch (err: any) {
-        console.error("[Cron: Outbox Error]:", err.message);
+        logger.error({ error: err.message }, "[Cron: Outbox Error]");
     } finally {
         isPolling = false;
     }
@@ -29,7 +36,7 @@ export function startOutboxPublisherCron(cronExpression = "*/5 * * * * *") {
     if (outboxTask) return;
     const expression = process.env.OUTBOX_CRON_EXPRESSION || cronExpression;
     outboxTask = cron.schedule(expression, runOutboxPoll);
-    console.log(`✅ Outbox poller cron scheduled with "${expression}"`);
+    logger.info(`Outbox poller cron scheduled with "${expression}"`);
 }
 
 // Stop outbox publisher cron

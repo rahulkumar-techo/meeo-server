@@ -6,7 +6,7 @@ import { socketAuthMiddleware } from "./socket.auth.js";
 import { SOCKET_ROOMS, canJoinAdminRoom, canJoinOrderRoom } from "./socket.rooms.js";
 import { SOCKET_EVENTS, createSocketPayload, type SocketEventType } from "./socket.events.js";
 import { prisma } from "@/lib/prisma.js";
-
+import { logger } from "@/common/observability/logger.js";
 import { randomUUID } from "node:crypto";
 
 export const REDIS_REALTIME_CHANNEL = "ecommerce:realtime:events";
@@ -210,11 +210,11 @@ function setupRedisSubscriber(): void {
     }
 
     try {
-        redisSubscriber = redis.duplicate();
+        redisSubscriber = redis.duplicate({ enableOfflineQueue: true });
 
         redisSubscriber.subscribe(REDIS_REALTIME_CHANNEL, (err) => {
             if (err) {
-                console.error("[Socket Redis Pub/Sub] Subscription error:", err.message);
+                logger.error({ error: err.message }, "[Socket Redis Pub/Sub] Subscription error");
             }
         });
 
@@ -230,11 +230,11 @@ function setupRedisSubscriber(): void {
                 const payload = createSocketPayload(parsed.event, parsed.data);
                 ioInstance.to(parsed.targetRoom).emit(parsed.event, payload);
             } catch (err) {
-                console.error("[Socket Redis Pub/Sub] Failed to parse message:", err);
+                logger.error({ error: (err as Error).message }, "[Socket Redis Pub/Sub] Failed to parse message");
             }
         });
     } catch (err) {
-        console.warn("[Socket Redis Pub/Sub] Subscriber setup skipped (Redis unavailable)");
+        logger.warn({ error: (err as Error).message }, "[Socket Redis Pub/Sub] Subscriber setup skipped (Redis unavailable)");
     }
 }
 

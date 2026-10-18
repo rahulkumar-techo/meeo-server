@@ -1,6 +1,7 @@
 import cron, { type ScheduledTask } from "node-cron";
 import { orderFulfillmentService } from "@/modules/orders/services/orderFulfillment.service.js";
 import { reservationService } from "@/modules/inventory/services/reservation.service.js";
+import { logger } from "@/common/observability/logger.js";
 
 let sweeperTask: ScheduledTask | null = null;
 let isSweeping = false;
@@ -17,13 +18,13 @@ async function runOrderSweep() {
         ]);
 
         if (expiredOrders.status === "fulfilled" && expiredOrders.value.expiredCount > 0) {
-            console.log(`[Cron: Order Sweeper] Expired ${expiredOrders.value.expiredCount} stale order(s)`);
+            logger.info({ expiredCount: expiredOrders.value.expiredCount }, "[Cron: Order Sweeper] Expired stale orders");
         }
         if (expiredReservations.status === "fulfilled" && expiredReservations.value.expiredCount > 0) {
-            console.log(`[Cron: Reservation Sweeper] Expired ${expiredReservations.value.expiredCount} reservation(s)`);
+            logger.info({ expiredCount: expiredReservations.value.expiredCount }, "[Cron: Reservation Sweeper] Expired reservations");
         }
     } catch (err: any) {
-        console.error("[Cron: Order Sweeper Error]:", err.message);
+        logger.error({ error: err.message }, "[Cron: Order Sweeper Error]");
     } finally {
         isSweeping = false;
     }
@@ -34,7 +35,7 @@ export function startOrderSweeperCron(cronExpression = "*/5 * * * *") {
     if (sweeperTask) return;
     const expression = process.env.ORDER_SWEEPER_CRON_EXPRESSION || cronExpression;
     sweeperTask = cron.schedule(expression, runOrderSweep);
-    console.log(`✅ Order sweeper cron scheduled with "${expression}"`);
+    logger.info(`Order sweeper cron scheduled with "${expression}"`);
 }
 
 // Stop order sweeper cron

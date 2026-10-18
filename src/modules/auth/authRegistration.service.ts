@@ -13,6 +13,7 @@ import redis from "@/lib/redis.js";
 import { Keys } from "@/const/keys.js";
 import { generateOtpEmail } from "@/templates/otp.template.js";
 import { notificationDeliveryService } from "@/workers/services/notificationDelivery.service.js";
+import { logger } from "@/common/observability/logger.js";
 
 export class AuthRegistrationService {
     async assertOtp(key: string, otp: string) {
@@ -250,7 +251,7 @@ export class AuthRegistrationService {
      * Generates a password reset OTP and dispatches email.
      */
     async forgotPassword({ email }: ForgotPasswordInput) {
-        console.log(`[ForgotPassword] 📥 Received request for email: "${email}"`);
+        logger.info({ email }, "[ForgotPassword] Received password reset request");
 
         const user = await prisma.user.findUnique({
             where: { email },

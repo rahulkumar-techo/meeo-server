@@ -1,6 +1,7 @@
 import cron, { type ScheduledTask } from "node-cron";
 import redis from "@/lib/redis.js";
 import { QUEUE_NAMES } from "@/lib/queue.js";
+import { logger } from "@/common/observability/logger.js";
 
 const WORKER_ID = `worker-${process.pid}-${Date.now().toString(36)}`;
 let heartbeatTask: ScheduledTask | null = null;
@@ -34,7 +35,7 @@ export function startWorkerHeartbeatCron(cronExpression = "3,18,33,48 * * * * *"
     const expression = process.env.HEARTBEAT_CRON_EXPRESSION || cronExpression;
     heartbeatTask = cron.schedule(expression, sendHeartbeat);
     sendHeartbeat().catch(() => {});
-    console.log(`✅ Worker heartbeat cron scheduled with "${expression}"`);
+    logger.info(`Worker heartbeat cron scheduled with "${expression}"`);
 }
 
 // Stop worker heartbeat cron and cleanup Redis key

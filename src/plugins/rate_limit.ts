@@ -4,6 +4,12 @@ import { getClientIp } from "@/common/security/clientIp.js";
 import redis from "@/lib/redis.js";
 
 export async function appRateLimit(app: FastifyInstance) {
+    // Allows disabling rate limiting temporarily for load testing or benchmarking
+    if (process.env.DISABLE_RATE_LIMIT === "true") {
+        app.log.warn("[RateLimit] Global rate limiting is temporarily DISABLED via DISABLE_RATE_LIMIT=true");
+        return;
+    }
+
     await app.register(rateLimit, {
         global: true,
         max: 300,

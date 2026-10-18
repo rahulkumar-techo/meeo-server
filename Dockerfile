@@ -26,6 +26,7 @@ RUN npm ci
 # Copy Prisma schema and configuration
 COPY prisma ./prisma
 COPY prisma7.config.ts ./
+COPY ecosystem.config.cjs ./
 
 # Generate Prisma Client
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
@@ -58,6 +59,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV NODE_ENV=production
 ENV PORT=5000
 ENV HOST=0.0.0.0
+ENV PM2_HOME=/home/node/.pm2
 
 # Copy built application and production dependencies
 COPY --chown=node:node --from=builder /app/package.json ./package.json
@@ -65,6 +67,10 @@ COPY --chown=node:node --from=builder /app/node_modules ./node_modules
 COPY --chown=node:node --from=builder /app/dist ./dist
 COPY --chown=node:node --from=builder /app/prisma ./prisma
 COPY --chown=node:node --from=builder /app/prisma7.config.ts ./prisma7.config.ts
+COPY --chown=node:node --from=builder /app/ecosystem.config.cjs ./ecosystem.config.cjs
+
+# Ensure PM2 runtime folder is pre-created and writable by node user
+RUN mkdir -p /home/node/.pm2 && chown -R node:node /home/node/.pm2
 
 USER node
 

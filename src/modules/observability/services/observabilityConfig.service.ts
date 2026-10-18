@@ -96,7 +96,7 @@ export class ObservabilityConfigService {
     private initializePubSubSubscriber() {
         try {
             if (process.env.NODE_ENV === "test") return;
-            const sub = redis.duplicate();
+            const sub = redis.duplicate({ enableOfflineQueue: true });
             sub.on("error", (err) => {
                 logger.warn({ error: err.message }, "[ObservabilityConfig] Redis pub/sub subscriber warning");
             });

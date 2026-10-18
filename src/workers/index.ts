@@ -1,4 +1,5 @@
 import type { Worker } from "bullmq";
+import { logger } from "@/common/observability/logger.js";
 import { createDomainWorker } from "./domainEvent.worker.js";
 import { createDeadLetterWorker } from "./deadLetter.worker.js";
 
@@ -16,7 +17,7 @@ export function startWorkers() {
     if (!dlqWorkerInstance) {
         dlqWorkerInstance = createDeadLetterWorker(2);
     }
-    console.log("✅ BullMQ workers started (domain-events & dead-letter-events)");
+    logger.info("BullMQ workers started (domain-events & dead-letter-events)");
     return {
         domainWorker: domainWorkerInstance,
         dlqWorker: dlqWorkerInstance,
@@ -37,5 +38,5 @@ export async function stopWorkers() {
     }
 
     await Promise.allSettled(promises);
-    console.log("🛑 BullMQ workers stopped");
+    logger.info("BullMQ workers stopped");
 }

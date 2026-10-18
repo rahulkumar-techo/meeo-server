@@ -1,4 +1,5 @@
 import { Redis, type RedisOptions } from "ioredis";
+import { logger } from "@/common/observability/logger.js";
 
 const redisOptions: RedisOptions = {
     maxRetriesPerRequest: null,
@@ -26,15 +27,15 @@ const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 const redis = new (Redis as unknown as { new (url: string, options?: RedisOptions): Redis })(redisUrl, redisOptions);
 
 redis.on("connect", () => {
-    console.log("[Redis] Connection established successfully.");
+    logger.info("[Redis] Connection established successfully.");
 });
 
 redis.on("ready", () => {
-    console.log("[Redis] Client is ready to receive commands.");
+    logger.info("[Redis] Client is ready to receive commands.");
 });
 
 redis.on("error", (err) => {
-    console.error("[Redis] Connection error:", err.message || err);
+    logger.error({ error: err.message || err }, "[Redis] Connection error");
 });
 
 export default redis;

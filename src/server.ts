@@ -26,7 +26,13 @@ const start = async (): Promise<void> => {
     // 3. Start Scheduled Cron Jobs (Sweepers & Heartbeats)
     startCronJobs();
 
-    app.log.info(`Server running on http://${host}:${port}`);
+    const instanceId = process.env.NODE_APP_INSTANCE ?? "standalone";
+    app.log.info(`Server running on http://${host}:${port} (Cluster Instance: ${instanceId})`);
+
+    // Signal PM2 cluster master that this worker is ready to receive traffic
+    if (typeof process.send === "function") {
+      process.send("ready");
+    }
 
     // Graceful shutdown handler
     const shutdown = async () => {
