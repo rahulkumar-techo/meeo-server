@@ -64,4 +64,9 @@ export const PERMISSIONS = {
     USER_BEHAVIOR_VIEW: "user_behavior:view",
     USER_INSIGHTS_VIEW: "user_insights:view",
     USER_ACTIVITY_VIEW: "user_activity:view",
+
+    // GST & Statutory Tax Management
+    TAX_READ: "tax:read",
+    TAX_MANAGE: "tax:manage",
+    TAX_APPROVE: "tax:approve",
 } as const;

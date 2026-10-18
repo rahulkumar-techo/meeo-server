@@ -1,0 +1,24 @@
+// Master table of official HSN/SAC codes under Indian GST regime.
+model TaxClassification {
+  id String @id @default(uuid()) @db.Uuid
+
+  hsnCode String @unique
+  description String
+  category String?
+
+  verificationStatus TaxVerificationStatus @default(UNVERIFIED)
+  verifiedAt DateTime?
+  verifiedById String? @db.Uuid
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  verifiedBy User? @relation("ClassificationVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  products Product[]
+  rules GstRule[]
+
+  @@index([verificationStatus])
+  @@map("tax_classifications")
+}

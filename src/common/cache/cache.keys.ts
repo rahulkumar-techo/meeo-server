@@ -76,5 +76,12 @@ export const CACHE_KEYS = {
     searchFacets: (hash: string) => `cache:search:facets:${hash}`,
     searchSuggestions: (query: string) => `cache:search:suggestions:${query.toLowerCase().trim()}`,
     searchPattern: () => "cache:search:*",
+
+    // Observability Thresholds & Rule Configurations
+    OBSERVABILITY: {
+        ALL_CONFIGS: () => "cache:observability:configs:all",
+        CONFIG_BY_KEY: (key: string) => `cache:observability:config:${key}`,
+        PUBSUB_CHANNEL: "channel:observability:config_changed",
+    },
 };
 

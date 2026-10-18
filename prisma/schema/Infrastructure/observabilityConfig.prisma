@@ -1,0 +1,30 @@
+// Stores dynamic observability settings, thresholds, and alert rules managed from admin panel.
+model ObservabilityConfig {
+  // Unique configuration record identifier
+  id          String   @id @default(uuid()) @db.Uuid
+
+  // Unique config key (e.g. thresholds:server_5xx, thresholds:client_4xx)
+  key         String   @unique
+
+  // Logical category: server_errors, client_errors, security, business
+  category    String
+
+  // Structured config values such as threshold percentages and window duration
+  value       Json
+
+  // Human-readable description for admin UI display
+  description String?
+
+  // Flag to enable or disable this alert/rule without deleting it
+  isEnabled   Boolean  @default(true)
+
+  // Admin user ID who last updated this configuration
+  updatedBy   String?  @db.Uuid
+
+  // Creation and update timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@map("observability_configs")
+}

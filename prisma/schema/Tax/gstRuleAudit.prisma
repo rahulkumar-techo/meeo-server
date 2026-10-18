@@ -1,0 +1,22 @@
+// Immutable audit log of all tax rule transitions and modifications.
+model GstRuleAudit {
+  id String @id @default(uuid()) @db.Uuid
+
+  ruleId String @db.Uuid
+  action String
+
+  previousState Json?
+  newState Json?
+
+  actorId String? @db.Uuid
+  reason String?
+  notificationRef String?
+
+  createdAt DateTime @default(now())
+
+  rule GstRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  actor User? @relation("GstRuleAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([ruleId, createdAt])
+  @@map("gst_rule_audits")
+}

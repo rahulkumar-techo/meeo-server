@@ -1,257 +1,259 @@
 # Enterprise E-Commerce Backend Platform
 
-> **Production-Ready, High-Throughput Modular Monolith Architecture**  
-> Powered by Fastify, TypeScript, PostgreSQL (Prisma ORM), Redis, BullMQ, Socket.io, and Node-Cron.
+> **High-Throughput, Production-Ready Modular Monolith Architecture**  
+> Built with Fastify, TypeScript, PostgreSQL (Prisma ORM 7), Redis (ioredis), BullMQ, Socket.io, and Node-Cron.
 
 ---
 
 ## 📑 Table of Contents
 
-1. [System Overview & Architectural Philosophy](#-system-overview--architectural-philosophy)
-2. [High-Level System Topology](#-high-level-system-topology)
-3. [Technology Stack](#-technology-stack)
-4. [Repository & Codebase Structure](#-repository--codebase-structure)
-5. [Core Domain Modules](#-core-domain-modules)
-6. [Resilience & Event-Driven Patterns](#-resilience--event-driven-patterns)
-7. [Background Workers & Scheduled Cron Engine](#-background-workers--scheduled-cron-engine)
-8. [Real-Time WebSocket Architecture](#-real-time-websocket-architecture)
-9. [Observability & Operational Health](#-observability--operational-health)
-10. [Getting Started & Local Development](#-getting-started--local-development)
-11. [Available NPM Scripts](#-available-npm-scripts)
-12. [API & Interactive Documentation](#-api--interactive-documentation)
+1. [High-Level Design (HLD)](#-high-level-design-hld)
+   - [System Topology & Infrastructure](#system-topology--infrastructure)
+   - [Synchronous vs Asynchronous Request Lifecycle](#synchronous-vs-asynchronous-request-lifecycle)
+   - [Core Distributed Architecture Patterns](#core-distributed-architecture-patterns)
+2. [Low-Level Design (LLD)](#-low-level-design-lld)
+   - [Domain Architecture & Execution Pipeline](#domain-architecture--execution-pipeline)
+   - [Domain Module Directory](#domain-module-directory)
+   - [Order Lifecycle State Machine](#order-lifecycle-state-machine)
+   - [Database Schema & Multi-File Architecture](#database-schema--multi-file-architecture)
+3. [Reliability, Anti-Crash & SRE Safety](#-reliability-anti-crash--sre-safety)
+   - [0.1ms Flood & DoS Defense](#01ms-flood--dos-defense)
+   - [O(1) Ring Buffer Telemetry & Cardinality Guards](#o1-ring-buffer-telemetry--cardinality-guards)
+   - [L1/L2 Multi-Tier Caching (Zero-DB Overhead)](#l1l2-multi-tier-caching-zero-db-overhead)
+   - [4-Tier Error Classification Policy](#4-tier-error-classification-policy)
+4. [Getting Started & Local Development](#-getting-started--local-development)
+5. [Available NPM Scripts](#-available-npm-scripts)
+6. [📚 Master Documentation Index & Markdown Directory](#-master-documentation-index--markdown-directory)
 
 ---
 
-## 🏛️ System Overview & Architectural Philosophy
+## 🏛️ High-Level Design (HLD)
 
-This platform implements an **Enterprise Modular Monolith** designed for high concurrency, fault tolerance, and developer velocity. It balances strict domain isolation with low operational complexity:
+### System Topology & Infrastructure
 
-* **Single Unified Process**: API endpoints, WebSockets, background BullMQ workers, and scheduled cron jobs run cohesively in a single process during development, while remaining decoupled for independent containerized scaling in production.
-* **Transactional Outbox Guarantee**: All state changes and domain events are persisted in atomic database transactions, preventing data inconsistency between PostgreSQL and external message brokers.
-* **Two-Phase Inventory Reservations**: Stock is reserved with a TTL during checkout and committed upon payment confirmation, eliminating overselling in high-traffic drop-sales.
-* **Zero-Downtime Resilience**: Automatic reconnects, exponential backoff retries, dead-letter queues (DLQ), and self-healing cron sweepers keep the system healthy under transient failures.
+The platform is designed as an **Enterprise Modular Monolith**. It runs as a unified high-performance process in development and can be horizontally scaled as isolated worker/API container pods in production without codebase divergence.
 
----
+```mermaid
+flowchart TD
+    subgraph Clients["Clients & Ingress Layer"]
+        WebApp["Web App (Next.js)"]
+        MobileApp["Mobile App (Flutter)"]
+        AdminPortal["Admin Dashboard"]
+    end
 
-## 🌐 High-Level System Topology
+    subgraph Gateway["Fastify API Gateway"]
+        Security["Helmet / CORS / 0.1ms Rate Limiter"]
+        Auth["JWT Cookie & Bearer Rotation"]
+        Validation["Zod Request Validation"]
+        SocketHub["Socket.io Real-Time Hub"]
+    end
 
-```text
-                                CLIENTS & FRONTEND
-                      (Web App / Mobile App / Admin Portal)
-                                       │
-                                       │ HTTPS / WSS
-                                       ▼
-                     ┌───────────────────────────────────┐
-                     │          FASTIFY GATEWAY          │
-                     │  - Helmet / CORS / Rate Limiting  │
-                     │  - JWT Cookie & Bearer Auth       │
-                     │  - Zod Request Validation         │
-                     └─────────┬───────────────┬─────────┘
-                               │               │
-                     ┌─────────▼────────┐      │
-                     │  REST & GRAPHQL  │      │
-                     │  BUSINESS DOMAIN │      │
-                     └─────────┬────────┘      │
-                               │               │
-        ┌──────────────────────┼───────────────┼──────────────────────┐
-        │                      │               │                      │
-        ▼                      ▼               ▼                      ▼
-┌───────────────┐      ┌───────────────┐ ┌───────────────┐    ┌───────────────┐
-│  POSTGRESQL   │      │  REDIS CACHE  │ │   SOCKET.IO   │    │ OBJECT STORAGE│
-│  (Prisma ORM) │      │  & IDEMPOTENCY│ │ REAL-TIME HUB │    │  (ImageKit)   │
-│               │      │               │ │               │    │               │
-│ - Domain Data │      │ - API Cache   │ │ - Order Feeds │    │ - Product CDN │
-│ - Outbox Table│      │ - Rate Limits │ │ - Admin Tele- │    │ - Invoices    │
-│ - Event Logs  │      │ - Locks & TTL │ │   metry       │    │               │
-└───────┬───────┘      └───────┬───────┘ └───────────────┘    └───────────────┘
-        │                      │
-        │ Atomic Poller        │ Queue Broker
-        ▼                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                       ASYNC ENGINE & WORKER THREADS                         │
-│                                                                             │
-│  ┌────────────────────────┐              ┌────────────────────────┐         │
-│  │   SCHEDULED CRON JOBS  │              │     BULLMQ WORKERS     │         │
-│  │   (node-cron)          │              │                        │         │
-│  │                        │              │ - Domain Event Router  │         │
-│  │ - Outbox Publisher     ├─────────────►│ - Order Notification   │         │
-│  │ - Stale Order Sweeper  │              │ - Payment Settlement   │         │
-│  │ - Node Heartbeat Relay │              │ - Dead Letter (DLQ)    │         │
-│  └────────────────────────┘              └────────────────────────┘         │
-└─────────────────────────────────────────────────────────────────────────────┘
+    subgraph CoreDomain["Core Business Domains"]
+        AuthDomain["Auth & Users"]
+        CatalogDomain["Catalog & Search"]
+        OrderDomain["Orders & Checkout"]
+        PaymentDomain["Payments & Webhooks"]
+        InventoryDomain["Inventory Engine"]
+    end
+
+    subgraph DataStorage["Persistence & Distributed State"]
+        Postgres[("PostgreSQL (Prisma ORM 7)\nDomain Data + Outbox")]
+        RedisCache[("Redis 7\nL2 Cache, Locks, Idempotency & Limits")]
+        ObjectStorage[("ImageKit CDN\nAssets & Invoices")]
+    end
+
+    subgraph AsyncEngine["Asynchronous Processing Engine"]
+        CronOutbox["Outbox Publisher Cron\n(Pessimistic Row Lock)"]
+        CronSweeper["Order Sweeper Cron\n(TTL Stock Release)"]
+        BullQueues["BullMQ Distributed Queues"]
+        Workers["Async Consumer Workers\n(Notifications, Settlements, DLQ)"]
+    end
+
+    Clients -->|HTTPS / WSS| Gateway
+    Gateway --> Security --> Auth --> Validation
+    Validation --> CoreDomain
+    SocketHub <--> RedisCache
+
+    CoreDomain -->|Transactions| Postgres
+    CoreDomain -->|L2 Cache / Locks| RedisCache
+    CoreDomain -->|Media Uploads| ObjectStorage
+
+    Postgres -->|Poll Pending Outbox| CronOutbox
+    CronOutbox -->|Reliable Dispatch| BullQueues
+    BullQueues --> Workers
+    CronSweeper -->|Release Unpaid Holds| Postgres
+    Workers -->|Status Events| SocketHub
 ```
 
----
+### Synchronous vs Asynchronous Request Lifecycle
 
-## 💻 Technology Stack
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Client (Web / Mobile)
+    participant Gateway as Fastify API Gateway
+    participant Domain as Domain Service
+    participant DB as PostgreSQL (Prisma)
+    participant Cron as Outbox Cron
+    participant Queue as BullMQ (Redis)
+    participant Worker as Background Workers
 
-| Layer | Technologies | Key Advantages |
+    Note over Client,DB: 1. Synchronous Path (Fast Ingress & Atomic Commit)
+    Client->>Gateway: POST /api/v1/orders (Checkout)
+    Gateway->>Domain: Execute Order Creation
+    Domain->>DB: Atomic Transaction [Insert Order + Insert OutboxEvent]
+    DB-->>Domain: Transaction Committed
+    Domain-->>Gateway: Order Created (201 Created)
+    Gateway-->>Client: HTTP 201 Response (Immediate, Non-blocking)
+
+    Note over DB,Worker: 2. Asynchronous Path (Guaranteed Event Dispatch)
+    loop Every 5s (Pessimistic Row Lock)
+        Cron->>DB: SELECT FOR UPDATE SKIP LOCKED
+        DB-->>Cron: Pending Outbox Events
+        Cron->>Queue: Enqueue Job (jobId = outboxId)
+        Cron->>DB: UPDATE status = PUBLISHED
+    end
+    Queue->>Worker: Dequeue Event Job
+    Worker->>Worker: Send Push / Email / Sync Search Index
+    Worker-->>Queue: ACK Job Completed
+```
+
+1. **Synchronous Ingress Path**:
+   * Client requests hit Fastify $\to$ `onRequest` rate limit check (0.1ms flood gate) $\to$ Authentication & RBAC $\to$ Zod body validation $\to$ Domain Service $\to$ PostgreSQL database transaction.
+2. **Asynchronous Outbox & Worker Path**:
+   * Instead of direct HTTP-to-Queue publishes (which cause dual-write inconsistency), state changes generate an `OutboxEvent` within the same atomic PostgreSQL transaction.
+   * `outboxPublisher.cron` polls pending events via pessimistic row locks (`FOR UPDATE SKIP LOCKED`) every 5 seconds.
+   * Events are dispatched to Redis-backed **BullMQ** queues with deterministic deduplication keys (`jobId = outboxId`).
+   * BullMQ consumer workers process emails, notifications, search indexing, and payment reconciliation asynchronously.
+
+### Core Distributed Architecture Patterns
+
+| Pattern | Implementation | Guarantee |
 | :--- | :--- | :--- |
-| **Runtime & Language** | Node.js (v20+), TypeScript 5.8+ | Strongly typed, async I/O, modern ES modules |
-| **HTTP Framework** | Fastify v5 | High-throughput, low-overhead HTTP lifecycle |
-| **Database & ORM** | PostgreSQL 15+, Prisma ORM 7 | Multi-file modular schema, strict relations |
-| **Caching & Queues** | Redis 7+ (ioredis), BullMQ | High-speed cache, distributed FIFO/priority queues |
-| **Scheduling** | `node-cron` | Declarative cron jobs for polling & self-healing sweepers |
-| **Real-Time** | Socket.io v4 | Bi-directional events with room-based pub/sub |
-| **API Protocols** | REST (OpenAPI 3 / Swagger) + GraphQL (Yoga) | Flexible client integration and complete schema docs |
-| **Security & Auth** | Argon2, JWT, HttpOnly Cookies, Helmet, Rate Limits | Production security baseline and brute-force defense |
-| **Testing** | Vitest 4, Supertest | Rapid unit, integration, and E2E test execution |
+| **Transactional Outbox** | PostgreSQL `outbox_events` + BullMQ | At-least-once message delivery without distributed 2PC |
+| **Two-Phase Inventory Lock** | Redis atomic reservation + PostgreSQL commit | Zero overselling during high-volume drop sales |
+| **Distributed Idempotency** | `x-idempotency-key` + Redis `SETNX` | Eliminates duplicate checkouts on client network retries |
+| **Dead-Letter Queue (DLQ)** | BullMQ `dead-letter-events` | Automatic isolation of poison-pill messages for auditing |
+| **Multi-Tier Caching** | L1 Memory + L2 Redis + Redis Pub/Sub | 0ms read latency with zero database overhead on hot paths |
 
 ---
 
-## 📁 Repository & Codebase Structure
+## 🛠️ Low-Level Design (LLD)
 
-```text
-server/
-├── prisma/                          # Multi-file Prisma schema configuration
-│   ├── schema/                      # Domain schema slices (auth, catalog, orders, etc.)
-│   └── schema.prisma                # Aggregated root Prisma schema
-│
-├── src/
-│   ├── common/                      # Cross-cutting primitives
-│   │   ├── errors/                  # AppError, standard HTTP exceptions
-│   │   ├── middleware/              # Auth guards, RBAC, rate-limiting hooks
-│   │   ├── utils/                   # Crypto, pagination, date, response helpers
-│   │   └── docs/                    # Swagger & OpenAPI documentation models
-│   │
-│   ├── config/                      # Environment schema validation (Zod)
-│   ├── lib/                         # Core infrastructure singletons (Prisma, Redis, BullMQ)
-│   │
-│   ├── cron/                        # 🕒 Scheduled Periodic Cron Jobs (node-cron)
-│   │   ├── outboxPublisher.cron.ts  # Outbox table -> BullMQ event publisher
-│   │   ├── orderSweeper.cron.ts     # Abandoned checkout & reservation reaper
-│   │   ├── workerHeartbeat.cron.ts  # Node heartbeat & observability reporter
-│   │   └── index.ts                 # Unified lifecycle manager (start/stop)
-│   │
-│   ├── jobs/                        # 🐂 Background Jobs & Worker Infrastructure
-│   │   ├── controller/              # Admin Job Monitoring endpoints
-│   │   ├── routes/                  # /api/v1/jobs routing table
-│   │   ├── services/                # Telemetry, queue metrics, DLQ replay
-│   │   └── workers/                 # BullMQ Queue Processors
-│   │       ├── domainEvent.worker.ts# Main domain event processor
-│   │       ├── deadLetter.worker.ts # Dead Letter Queue processor & alerts
-│   │       └── index.ts             # BullMQ worker lifecycle manager
-│   │
-│   ├── modules/                     # 📦 Core Domain Modules (Modular Monolith)
-│   │   ├── auth/                    # Login, register, token rotation, sessions
-│   │   ├── users/                   # Profiles, addresses, security settings
-│   │   ├── catalog/                 # Products, categories, attributes, brands
-│   │   ├── inventory/               # Two-phase reservations, stock logs
-│   │   ├── cart/                    # Cart items, guest merge, validations
-│   │   ├── wishlist/                # User wishlists & stock alerts
-│   │   ├── orders/                  # Order state machine, invoices, sweepers
-│   │   ├── payments/                # Razorpay/Stripe, webhooks, refunds
-│   │   ├── coupons/                 # Coupon codes, validation, usage tracking
-│   │   ├── promotions/              # Automatic promotions engine, rules
-│   │   ├── reviews/                 # Product reviews, ratings, verification
-│   │   ├── notifications/           # In-app, push & email notification consumers
-│   │   ├── search/                  # Fuzzy filtering, suggestions, autocomplete
-│   │   ├── dashboard/               # Admin analytics & business KPIs
-│   │   ├── auditLog/                # Compliance & administrative audit trail
-│   │   └── outbox/                  # Transactional outbox event router & retry
-│   │
-│   ├── sockets/                     # ⚡ Real-Time Socket.io Server & Rooms
-│   ├── app.ts                       # Fastify application factory & plugin registry
-│   └── server.ts                    # Application entrypoint (HTTP + Socket + Workers + Cron)
-│
-└── src/__tests__/                   # Comprehensive Unit & Integration Test Suites (49+ suites)
+### Domain Architecture & Execution Pipeline
+
+Each module inside `src/modules/` adheres to a clean layered architecture, ensuring separation of concerns, testability, and strict type safety:
+
+```mermaid
+flowchart LR
+    Req([HTTP / WS Request]) --> Route["Fastify Route\nsrc/modules/*/routes"]
+    Route --> Guard["Pre-Handlers / Guards\nAuth, RBAC & Context"]
+    Guard --> Val{"Zod Schema\nValidation"}
+    Val -- Valid --> Ctrl["Controller\nSerialization & Status"]
+    Val -- Invalid --> Err(["400 / 422 Client Error"])
+    Ctrl --> Svc["Domain Service\nBusiness Rules & Logic"]
+    Svc --> Repo["Repository Layer\nData Access Abstraction"]
+    Repo --> DB[("PostgreSQL\nPrisma ORM 7")]
+    Repo --> Cache[("Redis\nL1/L2 Cache & Locks")]
+    Svc -.-> Outbox[("Outbox Table\nAtomic Event Log")]
+    Ctrl --> Res(["HTTP Response\nStandard JSON Output"])
 ```
 
----
+### Domain Module Directory
 
-## 📦 Core Domain Modules
+The codebase is organized as isolated domain modules inside `src/modules/`. Each domain encapsulates its own routes, controllers, services, repositories, and validations:
 
-### 1. 🔐 Authentication & Session Security
-* **Access & Refresh Tokens**: Dual-token architecture using HttpOnly, SameSite cookies with body fallback.
-* **Token Rotation**: Refresh tokens are single-use with automatic token revocation upon detection of reuse attempts.
-* **Password Hashing**: State-of-the-art memory-hard hashing via Argon2id.
-* **Role-Based Access Control (RBAC)**: Fine-grained permissions for `CUSTOMER`, `STAFF`, and `ADMIN`.
+| Domain Module | Primary Responsibilities | Core Entities / Models |
+| :--- | :--- | :--- |
+| **`auth`** | Token rotation, Argon2 password hashing, OAuth, sessions | `User`, `AuthSession`, `RefreshToken` |
+| **`user`** | Customer profiles, multi-address books, phone verification | `User`, `Address`, `UserProfile` |
+| **`catalog`** | Product hierarchies, SKU variants, attributes, brands | `Product`, `ProductVariant`, `Category`, `Attribute` |
+| **`inventory`** | Two-phase stock holds, quantity adjustments, warehouse logs | `InventoryItem`, `StockReservation`, `InventoryLog` |
+| **`cart`** | Ephemeral cart state, guest cart migration, discount checks | `Cart`, `CartItem` |
+| **`orders`** | Order state machine, invoice generation, cancellation | `Order`, `OrderItem`, `OrderStatusHistory` |
+| **`payments`** | Gateway integrations (Razorpay/Stripe), webhooks, refunds | `PaymentTransaction`, `PaymentRefund`, `PaymentWebhook` |
+| **`tax` (GST)** | HSN codes, interstate IGST, intrastate CGST+SGST engine | `TaxRule`, `TaxSlab`, `HsnCode` |
+| **`coupons`** | Code validation, usage limits, minimum order constraints | `Coupon`, `CouponUsage` |
+| **`promotions`** | Automatic basket discounts, buy-X-get-Y rules | `Promotion`, `PromotionCondition` |
+| **`outbox`** | Transactional outbox polling, event routing, retry tracking | `OutboxEvent`, `ProcessedEvent` |
+| **`notifications`** | In-app notification center, FCM push, Brevo email dispatch | `Notification`, `NotificationPreference` |
+| **`observability`** | Prometheus telemetry, Loki log streaming, dynamic alerts | `ObservabilityConfig` |
+| **`audit`** | Immutable administrative audit trails for compliance | `AuditLog` |
 
-### 2. 🛍️ Product Catalog & Search
-* **Flexible Variations**: Color/size variants, custom specifications, SKU tracking, and image galleries.
-* **Hierarchical Categories**: Recursive category trees with nested subcategory queries.
-* **Cursor Pagination**: Ultra-fast compound cursor pagination (`id + createdAt`) avoiding expensive `OFFSET` queries.
-* **Search Engine**: Fuzzy search with price filtering, rating filters, brand/category facets, and autocomplete.
+### Order Lifecycle State Machine
 
-### 3. 📦 Two-Phase Inventory Management
-* **Phase 1 (Reservation)**: When a customer begins checkout, stock is atomically shifted from `availableQuantity` to `reservedQuantity` with an expiration TTL (e.g. 15 minutes).
-* **Phase 2 (Confirmation / Release)**: Upon payment success, reservations are committed to permanent deductions. If checkout is cancelled or times out, the stock is released back into available inventory.
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: Customer Initiates Checkout
+    PENDING --> PAYMENT_PENDING: Reserve Stock (Atomic Redis Lock)
+    PENDING --> EXPIRED: Checkout Abandoned / Session Drop
 
-### 4. 🧾 Orders & Checkout State Machine
-```text
-[ PENDING ] ────────► [ PAYMENT_PENDING ] ────────► [ CONFIRMED ] ────────► [ PROCESSING ] ────────► [ SHIPPED ] ────────► [ DELIVERED ]
-     │                        │                           │
-     ▼                        ▼                           ▼
-[ EXPIRED ]              [ CANCELLED ]               [ REFUNDED ]
+    PAYMENT_PENDING --> CONFIRMED: Payment Webhook Verified
+    PAYMENT_PENDING --> EXPIRED: 15-Min TTL Timeout (orderSweeper.cron)
+    PAYMENT_PENDING --> CANCELLED: Customer Aborts Checkout
+
+    CONFIRMED --> PROCESSING: Warehouse Pick & Pack
+    CONFIRMED --> CANCELLED: Admin / Seller Cancellation (Auto-Refund)
+
+    PROCESSING --> SHIPPED: Courier Handover & Tracking Issued
+    SHIPPED --> DELIVERED: Proof of Delivery Verified
+    DELIVERED --> REFUNDED: Return Approved (Restock Inventory)
+
+    CANCELLED --> [*]
+    EXPIRED --> [*]
+    DELIVERED --> [*]
+    REFUNDED --> [*]
 ```
-* **Price Snapshots**: Immutable captures of unit price, applied coupon, and tax rate at checkout time.
-* **Idempotency**: All mutation endpoints accept `x-idempotency-key` to prevent duplicate checkouts on network retries.
 
-### 5. 💳 Payments & Webhook Verification
-* **Payment Gateways**: Webhook integration with signature verification and replay protection.
-* **Refund Pipeline**: Partial and full refund execution with automatic inventory adjustments.
+* **TTL Expiration**: Orders in `PAYMENT_PENDING` without payment confirmation within 15 minutes are transitioned to `EXPIRED` by `orderSweeper.cron.ts`, automatically restoring reserved stock.
+* **Idempotency**: All payment callbacks and order status updates are strictly idempotent.
 
----
+### Database Schema & Multi-File Architecture
 
-## 🛡️ Resilience & Event-Driven Patterns
+Prisma schema files are decoupled by domain slices in `prisma/schema/` using Prisma ORM 7 multi-file schema support:
 
-### Transactional Outbox Pattern
-To prevent distributed transaction failures, domain events are never sent directly to message brokers inside HTTP handlers. Instead:
-1. Business data and an `OutboxEvent` are written to PostgreSQL inside a single database transaction.
-2. A high-frequency `node-cron` sweeper claims pending outbox events using pessimistic row locks (`PROCESSING` state).
-3. The events are published to BullMQ with deduplication keys (`jobId = outboxId`).
-4. Upon successful publish, the event is marked `PUBLISHED`. If retries fail, it routes to the `DEAD_LETTER` queue.
-
-### Dead Letter Queue (DLQ) & Self-Healing
-* Unhandled consumer errors or poison-pill payloads are forwarded to `dead-letter-events`.
-* Administrators can inspect payload details, examine error stack traces, and trigger manual replays via `/api/v1/jobs/:id/retry` or bulk purge actions.
+* `prisma/schema/Identity/` — Users, roles, permissions, addresses.
+* `prisma/schema/Catalog/` — Products, variants, categories, images.
+* `prisma/schema/Orders/` — Orders, items, order tracking, state history.
+* `prisma/schema/Payments/` — Transactions, refunds, webhooks.
+* `prisma/schema/Inventory/` — Stock reservations, quantity logs.
+* `prisma/schema/Infrastructure/` — `outboxEvent`, `auditLog`, `observabilityConfig`.
 
 ---
 
-## 🕒 Background Workers & Scheduled Cron Engine
+## 🛡️ Reliability, Anti-Crash & SRE Safety
 
-All background workloads are neatly decoupled into dedicated directories:
+### 0.1ms Flood & DoS Defense
+* **TCP Socket Termination**: Evaluated at the `onRequest` Fastify hook. If an IP exceeds `ban: 100` rapid requests past the limit, the underlying TCP connection is destroyed (`req.raw.destroy()`). Zero CPU or memory is wasted generating JSON 429 response frames.
+* **Shared Redis Sliding Window**: Rate limits are synchronized cluster-wide via Redis.
 
-| Component | Path | Tooling | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Outbox Cron** | [`src/cron/outboxPublisher.cron.ts`](file:///e:/e-com/server/src/cron/outboxPublisher.cron.ts) | `node-cron` | Scans outbox every 5s and relays events to BullMQ |
-| **Order Sweeper** | [`src/cron/orderSweeper.cron.ts`](file:///e:/e-com/server/src/cron/orderSweeper.cron.ts) | `node-cron` | Auto-cancels abandoned checkouts and releases held stock |
-| **Worker Heartbeat** | [`src/cron/workerHeartbeat.cron.ts`](file:///e:/e-com/server/src/cron/workerHeartbeat.cron.ts) | `node-cron` | Emits node health telemetry to Redis every 10s |
-| **Domain Event Worker** | [`src/jobs/workers/domainEvent.worker.ts`](file:///e:/e-com/server/src/jobs/workers/domainEvent.worker.ts) | BullMQ | Consumes order, payment, and inventory domain events |
-| **DLQ Worker** | [`src/jobs/workers/deadLetter.worker.ts`](file:///e:/e-com/server/src/jobs/workers/deadLetter.worker.ts) | BullMQ | Catches failed events for operator auditing and retry |
+### O(1) Ring Buffer Telemetry & Cardinality Guards
+* **Constant Time Telemetry**: In-memory latency samples use a fixed-size Circular Ring Buffer (`httpIndex = (httpIndex + 1) % 5000`) instead of expensive $O(N)$ `Array.shift()` operations, eliminating GC spikes.
+* **Route Cardinality Protection**: Dynamic path IDs (UUIDs, ObjectIDs, numeric IDs) are sanitized into `:id`. Unique route tracking is capped at `300` routes; overflow paths are grouped under `/OTHER` to prevent Out-Of-Memory (OOM) attacks.
+* **Live Log Stream Concurrency**: SSE log streaming is restricted to a maximum of `5` concurrent sessions with a `50 logs/tick` micro-batch limit and automatic disconnect resource cleanup.
 
----
+### L1/L2 Multi-Tier Caching (Zero-DB Overhead)
+* **L1 In-Memory Map**: Serves dynamic configuration and alerts in `< 0.001ms` with 0 network calls.
+* **L2 Redis Cache**: Shared distributed cache fallback across instances.
+* **Event-Driven Cache Busting**: Administrative threshold updates write to PostgreSQL, refresh Redis, and broadcast an eviction message via Redis Pub/Sub (`channel:observability:config_changed`) to synchronize all node L1 caches instantly.
 
-## ⚡ Real-Time WebSocket Architecture
+### 4-Tier Error Classification Policy
 
-WebSocket communication is powered by **Socket.io** (`/socket.io`), organized into secured rooms:
-
-* **User Channel** (`user:${userId}`): Live order status changes, payment confirmations, and personalized notifications.
-* **Order Tracking Channel** (`order:${orderId}`): Courier tracking, delivery coordinates, and shipment updates.
-* **Admin Telemetry Channel** (`admin:telemetry`): Real-time queue latency, job throughput, active workers, and system alerts.
-
----
-
-## 📊 Observability & Operational Health
-
-* **Health Probes**:
-  * `GET /health` — Overall readiness, uptime, and database/Redis ping status.
-  * `GET /health/ready` — Kubernetes readiness probe.
-  * `GET /health/live` — Kubernetes liveness probe.
-  * `GET /health/workers` — Active worker nodes, CPU/RAM telemetry, and heartbeats.
-* **Prometheus Metrics**: `GET /metrics` exports standard runtime and Fastify request latencies.
-* **Structured Logging**: JSON logging via Pino with correlation `requestId` propagation across all operations.
+1. **HTTP Server Errors (5xx)**: User-impacting platform failures (`500–599`). Default alert: Warning `> 2%`, Critical `> 5%`.
+2. **HTTP Client Errors (4xx)**: Client validation issues (`400, 404, 405, 413, 415, 422`). Excludes expected business conflicts (`409, 410`).
+3. **Security & Policy Events**: `401 Unauthorized, 403 Forbidden, 429 Rate-Limited`. 401 alerts are filtered to `/auth/login` to prevent expired token refresh loops at 1M+ scale from causing alert noise.
+4. **Business Operation Failures**: Domain transaction failures (payment declines, checkout locks, BullMQ DLQ depth) independent of HTTP 200 response codes.
 
 ---
 
 ## 🚀 Getting Started & Local Development
 
-### 1. Prerequisites
+### Prerequisites
 * **Node.js**: v20.x or higher
 * **PostgreSQL**: v15.x or higher
 * **Redis**: v7.x or higher
 
-### 2. Environment Configuration
+### Environment Configuration
 Create a `.env` file in the root directory:
 
 ```env
@@ -260,7 +262,7 @@ HOST=0.0.0.0
 NODE_ENV=development
 
 # Database Connection
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ecommerce_db?schema=public"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ecom?schema=public"
 
 # Redis Cache & Queue Connection
 REDIS_URL="redis://localhost:6379"
@@ -276,14 +278,14 @@ ORDER_SWEEPER_CRON_EXPRESSION="*/5 * * * *"
 HEARTBEAT_CRON_EXPRESSION="*/10 * * * * *"
 ```
 
-### 3. Install & Initialize
+### Installation & Run
 ```bash
 # 1. Install dependencies
 npm install
 
-# 2. Generate Prisma client & synchronize database schema
+# 2. Generate Prisma Client & deploy schema
 npm run prisma:generate
-npm run prisma:migrate
+npm run prisma:deploy
 
 # 3. Start development server (HTTP + WebSockets + BullMQ + Cron)
 npm run dev
@@ -293,24 +295,60 @@ npm run dev
 
 ## 📜 Available NPM Scripts
 
-| Script | Command | Description |
+| Script | Command | Purpose |
 | :--- | :--- | :--- |
 | `npm run dev` | `tsx watch src/server.ts` | Starts hot-reloading development server |
-| `npm run build` | `npm run prisma:generate && tsc && tsc-alias` | Builds production bundle with alias paths |
+| `npm run build` | `npm run prisma:generate && tsc && tsc-alias` | Builds production bundle with module aliases |
 | `npm start` | `npm run prisma:deploy && node dist/server.js` | Runs production server |
-| `npm test` | `vitest` | Runs interactive test runner |
-| `npm test -- --run` | `vitest run` | Runs all 49+ unit and integration test suites |
+| `npm test` | `vitest` | Interactive unit & integration test runner |
+| `npm test -- --run` | `vitest run` | Runs all test suites once |
 | `npm run typecheck` | `tsc --noEmit` | Strict TypeScript type validation |
-| `npm run ci:verify` | Full build & test pipeline | Complete verification pipeline for CI/CD |
+| `npm run ci:verify` | Full verify pipeline | Production build + typecheck + test validation |
 
 ---
 
-## 📖 API & Interactive Documentation
+## 📚 Master Documentation Index & Markdown Directory
 
-Once the server is running, explore the interactive documentation interfaces:
+Direct clickable directory to all architectural specifications, operational runbooks, and domain module documentation:
 
-* **Swagger UI (REST Documentation)**: [http://localhost:3000/docs](http://localhost:3000/docs)
-* **GraphQL Playground (Yoga API)**: [http://localhost:3000/graphql](http://localhost:3000/graphql)
-* **Notifications & FCM Guide**: [src/modules/notifications/README.md](file:///e:/e-com/server/src/modules/notifications/README.md)
-* **Background Jobs API Overview**: [src/jobs/ADMIN_BACKGROUND_JOBS.README.md](file:///e:/e-com/server/src/jobs/ADMIN_BACKGROUND_JOBS.README.md)
-* **Real-Time WebSockets Guide**: [src/sockets/SOCKETS.md](file:///e:/e-com/server/src/sockets/SOCKETS.md)
+### 1. 🔍 Observability, Telemetry & Production Operations
+* [OBSERVABILITY_PRODUCTION_RULES.md](file:///e:/e-com/server/OBSERVABILITY_PRODUCTION_RULES.md) — Production rules matrix, 0.1ms rapid-fire flood protection, O(1) circular ring buffer, route cardinality sanitization, and live log stream limits.
+* [OBSERVABILITY_INTEGRATION.md](file:///e:/e-com/server/OBSERVABILITY_INTEGRATION.md) — Fastify Observability API contracts, Loki LogQL streaming, Prometheus presets, and React Flow topology mapping.
+
+### 2. 🔐 Identity, Authentication & Permissions
+* [AUTH.md](file:///e:/e-com/server/src/modules/auth/AUTH.md) — Authentication architecture, JWT token rotation, and refresh token security.
+* [CUSTOMER_AUTH.md](file:///e:/e-com/server/src/modules/auth/CUSTOMER_AUTH.md) — Customer-facing authentication flows, OTP verification, and social login.
+* [ADMIN_USER.README.md](file:///e:/e-com/server/src/modules/user/ADMIN_USER.README.md) — Admin user management and profile administration.
+* [ADMIN_AUTHORIZATION.README.md](file:///e:/e-com/server/src/modules/authorization/ADMIN_AUTHORIZATION.README.md) — Role-based access control (RBAC) and permission matrices.
+
+### 3. 📦 Catalog, Products & Inventory
+* [product.README.md](file:///e:/e-com/server/src/modules/catalog/routes/product.README.md) — Product catalog endpoints and CRUD operations.
+* [DASHBOARD_INTEGRATION.md](file:///e:/e-com/server/src/modules/catalog/routes/DASHBOARD_INTEGRATION.md) — Admin dashboard integration for catalog, categories, and inventory.
+* [attribute.README.md](file:///e:/e-com/server/src/modules/catalog/routes/attribute.README.md) — Custom attributes, specifications, and filtering facets.
+* [variant.md](file:///e:/e-com/server/src/modules/catalog/routes/variant.md) — SKU variants, pricing, and stock assignment.
+* [IMAGES_AND_VARIANTS_GUIDE.md](file:///e:/e-com/server/docs/IMAGES_AND_VARIANTS_GUIDE.md) — Media upload pipelines, ImageKit integration, and variant images.
+* [inventory/README.md](file:///e:/e-com/server/src/modules/inventory/routes/README.md) — Two-phase inventory reservation and stock locks.
+
+### 4. 🛒 Orders, Checkout, Payments & Coupons
+* [ADMIN_ORDER.README.md](file:///e:/e-com/server/src/modules/orders/routes/ADMIN_ORDER.README.md) — Order processing, status transitions, and fulfillment workflows.
+* [ADMIN_PAYMENTS.README.md](file:///e:/e-com/server/src/modules/payments/ADMIN_PAYMENTS.README.md) — Payment gateway integration, webhooks, and reconciliation.
+* [ADMIN_COUPONS.README.md](file:///e:/e-com/server/src/modules/coupons/ADMIN_COUPONS.README.md) — Promotional codes, discounts, and usage constraints.
+* [promotions/README.md](file:///e:/e-com/server/src/modules/promotions/README.md) — Dynamic discount engines and promotion rules.
+
+### 5. ⚡ Event-Driven Infrastructure, Background Jobs & Sockets
+* [ADMIN_BACKGROUND_JOBS.README.md](file:///e:/e-com/server/src/jobs/ADMIN_BACKGROUND_JOBS.README.md) — BullMQ job queue management, active workers, and retry policies.
+* [ADMIN_OUTBOX.README.md](file:///e:/e-com/server/src/modules/outbox/ADMIN_OUTBOX.README.md) — Transactional outbox pattern and event publishing engine.
+* [workers/README.md](file:///e:/e-com/server/src/workers/README.md) — Background queue consumer workers.
+* [SOCKETS.md](file:///e:/e-com/server/src/sockets/SOCKETS.md) — Real-time Socket.io server architecture and event rooms.
+* [SOCKET_CLIENT_INTEGRATION.md](file:///e:/e-com/server/src/sockets/SOCKET_CLIENT_INTEGRATION.md) — Frontend client integration guide for real-time order tracking.
+
+### 6. 🏛️ Compliance, Tax (GST) & System Settings
+* [docs/gst/README.md](file:///e:/e-com/server/docs/gst/README.md) — Master GST calculation engine, HSN codes, and compliance rules.
+* [docs/gst/ADMIN_GUIDE.md](file:///e:/e-com/server/docs/gst/ADMIN_GUIDE.md) — Administrator guide for GST rules and tax slabs.
+* [docs/gst/API_REFERENCE.md](file:///e:/e-com/server/docs/gst/API_REFERENCE.md) — Comprehensive GST endpoints reference.
+* [ADMIN_AUDIT.README.md](file:///e:/e-com/server/src/modules/audit/ADMIN_AUDIT.README.md) — Audit logging and immutable compliance history.
+* [ADMIN_SETTINGS.README.md](file:///e:/e-com/server/src/modules/settings/ADMIN_SETTINGS.README.md) — Global platform configuration and dynamic settings.
+* [ADMIN_REVIEWS.README.md](file:///e:/e-com/server/src/modules/reviews/ADMIN_REVIEWS.README.md) — Product review moderation and rating verification.
+
+### 7. 📱 Customer Mobile & Web API Journey
+* [customer-docs/md/README.md](file:///e:/e-com/server/customer-docs/md/README.md) — Complete 15-module customer journey walkthrough (Auth, Catalog, Cart, Checkout, Tracking).

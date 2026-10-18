@@ -1,11 +1,16 @@
 import { prisma } from "@/lib/prisma.js";
 import { orderNumberService } from "./orderNumber.service.js";
-import { orderValidationService } from "./orderValidation.service.js";
+import { orderValidationService, DEFAULT_STANDARD_SHIPPING_FEE } from "./orderValidation.service.js";
 import { orderCouponService } from "./orderCoupon.service.js";
 import { orderInventoryService } from "./orderInventory.service.js";
 import { idempotencyService } from "./idempotency.service.js";
 import { promotionService } from "@/modules/promotions/services/promotion.service.js";
 import { promotionUsageService } from "@/modules/promotions/services/promotionUsage.service.js";
+import { AppError } from "@/common/errors/app-error.js";
+import { taxRuleService } from "@/modules/tax/services/taxRule.service.js";
+import { gstEngineService } from "@/modules/tax/services/gstEngine.service.js";
+import { sellerTaxService } from "@/modules/tax/services/sellerTax.service.js";
+import { settingService } from "@/modules/settings/services/setting.service.js";
 import type { CheckoutInput } from "../validations/order.validation.js";
 
 export class OrderCreationService {
@@ -49,8 +54,49 @@ export class OrderCreationService {
         const totalDiscount = Number(Math.min(subtotal, couponDiscount + promoResult.discountSubtotal).toFixed(2));
         const isFreeShipping = couponFreeShipping || promoResult.isFreeShipping;
 
-        const { shippingTotal, taxTotal } = orderValidationService.calculateFees(subtotal, isFreeShipping, { items });
-        const grandTotal = Number((subtotal - totalDiscount + shippingTotal + taxTotal).toFixed(2));
+        // 3. Resolve Seller Tax Profile & Calculate Statutory GST Breakdown
+        const defaultSeller = await sellerTaxService.getDefaultSellerProfile();
+        const settings = settingService.getSettingsSync();
+        const standardShippingFee = settings?.standardShippingFee ?? DEFAULT_STANDARD_SHIPPING_FEE;
+        const shippingRule = await taxRuleService.resolveApplicableRule("9968");
+        const shippingGstRate = shippingRule ? Number(shippingRule.igstRate) : undefined;
+
+        const gstResult = gstEngineService.calculateOrderGst({
+            sellerState: defaultSeller.stateCode,
+            customerState: shippingAddress.state,
+            items: items.map((i) => {
+                if (!i.hsnCode) {
+                    throw new AppError(`Product "${i.productName || i.productId}" is missing an HSN code`, 422);
+                }
+                if (i.taxRate === undefined || i.taxRate === null) {
+                    throw new AppError(`Product "${i.productName || i.productId}" has no applicable tax rate`, 422);
+                }
+                return {
+                    id: i.cartItemId,
+                    productId: i.productId,
+                    productName: i.productName,
+                    sku: i.sku,
+                    hsnCode: i.hsnCode,
+                    quantity: i.quantity,
+                    unitPrice: i.unitPrice,
+                    taxRate: i.taxRate,
+                    cgstRate: i.cgstRate,
+                    sgstRate: i.sgstRate,
+                    igstRate: i.igstRate,
+                    cessRate: i.cessRate,
+                    taxTreatment: i.taxTreatment,
+                    gstRuleId: i.gstRuleId,
+                };
+            }),
+            totalDiscount,
+            shippingFee: standardShippingFee,
+            isFreeShipping,
+            ...(shippingGstRate !== undefined && { shippingGstRate }),
+        });
+
+        const shippingTotal = gstResult.totals.shippingTotal;
+        const taxTotal = gstResult.totals.totalTaxAmount;
+        const grandTotal = gstResult.totals.grandTotal;
 
         return {
             isValid: true,
@@ -63,6 +109,19 @@ export class OrderCreationService {
                 taxTotal,
                 grandTotal: Math.max(0, grandTotal),
                 currency: input?.currency || "INR",
+                taxBreakdown: {
+                    sellerGstin: defaultSeller.gstin,
+                    sellerTradeName: defaultSeller.tradeName,
+                    customerGstin: input?.customerGstin ?? null,
+                    placeOfSupply: gstResult.placeOfSupply,
+                    totalTaxableAmount: gstResult.totals.totalTaxableAmount,
+                    cgstTotal: gstResult.totals.totalCgstAmount,
+                    sgstTotal: gstResult.totals.totalSgstAmount,
+                    igstTotal: gstResult.totals.totalIgstAmount,
+                    cessTotal: gstResult.totals.totalCessAmount,
+                    totalTax: gstResult.totals.totalTaxAmount,
+                    shippingTax: gstResult.shipping.totalTaxAmount,
+                },
             },
             coupon: coupon ? { code: coupon.code, type: coupon.type, discountAmount: couponDiscount } : null,
             promotions: promoResult.appliedPromotions,
@@ -124,9 +183,50 @@ export class OrderCreationService {
             const totalDiscount = Number(Math.min(subtotal, couponDiscount + promoResult.discountSubtotal).toFixed(2));
             const isFreeShipping = couponFreeShipping || promoResult.isFreeShipping;
 
-            // 5. Calculate Shipping, Taxes, and Grand Total
-            const { shippingTotal, taxTotal } = orderValidationService.calculateFees(subtotal, isFreeShipping, { items });
-            const grandTotal = Number((subtotal - totalDiscount + shippingTotal + taxTotal).toFixed(2));
+            // 5. Resolve Seller Profile & Calculate GST Breakdown
+            const defaultSeller = await sellerTaxService.getDefaultSellerProfile();
+            const settings = settingService.getSettingsSync();
+            const standardShippingFee = settings?.standardShippingFee ?? DEFAULT_STANDARD_SHIPPING_FEE;
+
+            const shippingRule = await taxRuleService.resolveApplicableRule("9968");
+            const shippingGstRate = shippingRule ? Number(shippingRule.igstRate) : undefined;
+
+            const gstResult = gstEngineService.calculateOrderGst({
+                sellerState: defaultSeller.stateCode,
+                customerState: shippingAddress.state,
+                items: items.map((i) => {
+                    if (!i.hsnCode) {
+                        throw new AppError(`Product "${i.productName || i.productId}" is missing an HSN code`, 422);
+                    }
+                    if (i.taxRate === undefined || i.taxRate === null) {
+                        throw new AppError(`Product "${i.productName || i.productId}" has no applicable tax rate`, 422);
+                    }
+                    return {
+                        id: i.cartItemId,
+                        productId: i.productId,
+                        productName: i.productName,
+                        sku: i.sku,
+                        hsnCode: i.hsnCode,
+                        quantity: i.quantity,
+                        unitPrice: i.unitPrice,
+                        taxRate: i.taxRate,
+                        cgstRate: i.cgstRate,
+                        sgstRate: i.sgstRate,
+                        igstRate: i.igstRate,
+                        cessRate: i.cessRate,
+                        taxTreatment: i.taxTreatment,
+                        gstRuleId: i.gstRuleId,
+                    };
+                }),
+                totalDiscount,
+                shippingFee: standardShippingFee,
+                isFreeShipping,
+                ...(shippingGstRate !== undefined && { shippingGstRate }),
+            });
+
+            const shippingTotal = gstResult.totals.shippingTotal;
+            const taxTotal = gstResult.totals.totalTaxAmount;
+            const grandTotal = gstResult.totals.grandTotal;
             const orderNumber = orderNumberService.generateOrderNumber();
 
             // mark cod as confirmed and online as pending after payment via online mark as confirmed
@@ -152,9 +252,14 @@ export class OrderCreationService {
                     },
                 });
 
-                // B. Create immutable OrderItem snapshots
+                // B. Create immutable OrderItem snapshots and OrderItemTaxSnapshots
                 for (const item of items) {
-                    await tx.orderItem.create({
+                    const gstItem = gstResult.items.find((gi) => gi.id === item.cartItemId);
+                    const allocatedDiscount = gstItem ? gstItem.allocatedDiscount : 0;
+                    const itemTax = gstItem ? gstItem.totalTaxAmount : (item.taxTotal ?? 0);
+                    const itemTotal = gstItem ? gstItem.finalLineTotal : item.lineTotal;
+
+                    const createdOrderItem = await tx.orderItem.create({
                         data: {
                             orderId: createdOrder.id,
                             productId: item.productId,
@@ -164,9 +269,63 @@ export class OrderCreationService {
                             variantSnapshot: item.variantSnapshot,
                             unitPrice: item.unitPrice,
                             quantity: item.quantity,
-                            discountTotal: 0,
-                            taxTotal: item.taxTotal ?? 0,
-                            total: item.lineTotal,
+                            discountTotal: allocatedDiscount,
+                            taxTotal: itemTax,
+                            total: itemTotal,
+                        },
+                    });
+
+                    if (gstItem && tx.orderItemTaxSnapshot?.create) {
+                        await tx.orderItemTaxSnapshot.create({
+                            data: {
+                                orderItemId: createdOrderItem.id,
+                                gstRuleId: gstItem.gstRuleId ?? null,
+                                hsnCode: gstItem.hsnCode,
+                                taxTreatment: gstItem.taxTreatment,
+                                grossLineTotal: gstItem.grossLineTotal,
+                                allocatedDiscountAmount: gstItem.allocatedDiscount,
+                                netTaxableAmount: gstItem.netTaxableAmount,
+                                cgstRate: gstItem.cgstRate,
+                                sgstRate: gstItem.sgstRate,
+                                igstRate: gstItem.igstRate,
+                                cessRate: gstItem.cessRate,
+                                cgstAmount: gstItem.cgstAmount,
+                                sgstAmount: gstItem.sgstAmount,
+                                igstAmount: gstItem.igstAmount,
+                                cessAmount: gstItem.cessAmount,
+                                totalTaxAmount: gstItem.totalTaxAmount,
+                                isInclusivePrice: gstItem.isInclusive,
+                            },
+                        });
+                    }
+                }
+
+                // C. Create immutable OrderTaxSnapshot if model supported
+                if (tx.orderTaxSnapshot?.create) {
+                    await tx.orderTaxSnapshot.create({
+                        data: {
+                            orderId: createdOrder.id,
+                            sellerProfileId: defaultSeller.id,
+                            sellerLegalName: defaultSeller.legalBusinessName,
+                            sellerTradeName: defaultSeller.tradeName,
+                            sellerGstin: defaultSeller.gstin,
+                            sellerStateCode: defaultSeller.stateCode,
+                            customerGstin: input?.customerGstin ?? null,
+                            placeOfSupplyStateCode: gstResult.placeOfSupply.customerStateCode,
+                            placeOfSupplyStateName: gstResult.placeOfSupply.customerStateName,
+                            isInterState: gstResult.placeOfSupply.isInterState,
+                            totalTaxableAmount: gstResult.totals.totalTaxableAmount,
+                            totalCgstAmount: gstResult.totals.totalCgstAmount,
+                            totalSgstAmount: gstResult.totals.totalSgstAmount,
+                            totalIgstAmount: gstResult.totals.totalIgstAmount,
+                            totalCessAmount: gstResult.totals.totalCessAmount,
+                            totalTaxAmount: gstResult.totals.totalTaxAmount,
+                            shippingTaxableAmount: gstResult.shipping.taxableAmount,
+                            shippingGstRate: gstResult.shipping.gstRate,
+                            shippingCgstAmount: gstResult.shipping.cgstAmount,
+                            shippingSgstAmount: gstResult.shipping.sgstAmount,
+                            shippingIgstAmount: gstResult.shipping.igstAmount,
+                            calculationVersion: gstResult.calculationVersion,
                         },
                     });
                 }
@@ -363,7 +522,35 @@ export class OrderCreationService {
                 taxTotal: Number(item.taxTotal),
                 total: Number(item.total),
                 variantSnapshot: item.variantSnapshot,
+                hsnCode: item.taxSnapshot?.hsnCode ?? null,
+                taxTreatment: item.taxSnapshot?.taxTreatment ?? null,
+                taxBreakdown: item.taxSnapshot ? {
+                    netTaxableAmount: Number(item.taxSnapshot.netTaxableAmount),
+                    cgstRate: Number(item.taxSnapshot.cgstRate),
+                    cgstAmount: Number(item.taxSnapshot.cgstAmount),
+                    sgstRate: Number(item.taxSnapshot.sgstRate),
+                    sgstAmount: Number(item.taxSnapshot.sgstAmount),
+                    igstRate: Number(item.taxSnapshot.igstRate),
+                    igstAmount: Number(item.taxSnapshot.igstAmount),
+                    cessAmount: Number(item.taxSnapshot.cessAmount),
+                } : null,
             })),
+            taxSnapshot: order.taxSnapshot ? {
+                sellerGstin: order.taxSnapshot.sellerGstin,
+                sellerTradeName: order.taxSnapshot.sellerTradeName,
+                customerGstin: order.taxSnapshot.customerGstin,
+                placeOfSupplyStateCode: order.taxSnapshot.placeOfSupplyStateCode,
+                placeOfSupplyStateName: order.taxSnapshot.placeOfSupplyStateName,
+                isInterState: order.taxSnapshot.isInterState,
+                totalTaxableAmount: Number(order.taxSnapshot.totalTaxableAmount),
+                cgstTotal: Number(order.taxSnapshot.totalCgstAmount),
+                sgstTotal: Number(order.taxSnapshot.totalSgstAmount),
+                igstTotal: Number(order.taxSnapshot.totalIgstAmount),
+                cessTotal: Number(order.taxSnapshot.totalCessAmount),
+                totalTax: Number(order.taxSnapshot.totalTaxAmount),
+                shippingTaxableAmount: Number(order.taxSnapshot.shippingTaxableAmount),
+                shippingGstRate: Number(order.taxSnapshot.shippingGstRate),
+            } : null,
             coupon: order.couponUsages?.[0] ? {
                 code: order.couponUsages[0].coupon.code,
                 type: order.couponUsages[0].coupon.type,

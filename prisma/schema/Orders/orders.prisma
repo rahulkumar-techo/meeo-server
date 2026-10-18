@@ -45,6 +45,8 @@ model Order {
 
   promotionUsages PromotionUsage[]
 
+  taxSnapshot OrderTaxSnapshot?
+
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([userId, status, createdAt])

@@ -1,0 +1,77 @@
+// Immutable order-level tax calculation snapshot.
+model OrderTaxSnapshot {
+  id String @id @default(uuid()) @db.Uuid
+
+  orderId String @unique @db.Uuid
+  sellerProfileId String? @db.Uuid
+
+  sellerLegalName String
+  sellerTradeName String
+  sellerGstin String
+  sellerStateCode String @db.Char(2)
+
+  customerGstin String?
+  placeOfSupplyStateCode String @db.Char(2)
+  placeOfSupplyStateName String
+
+  isInterState Boolean
+
+  totalTaxableAmount Decimal @db.Decimal(12, 2)
+  totalCgstAmount Decimal @default(0) @db.Decimal(12, 2)
+  totalSgstAmount Decimal @default(0) @db.Decimal(12, 2)
+  totalIgstAmount Decimal @default(0) @db.Decimal(12, 2)
+  totalCessAmount Decimal @default(0) @db.Decimal(12, 2)
+  totalTaxAmount Decimal @db.Decimal(12, 2)
+
+  shippingTaxableAmount Decimal @default(0) @db.Decimal(12, 2)
+  shippingGstRate Decimal @default(0) @db.Decimal(5, 2)
+  shippingCgstAmount Decimal @default(0) @db.Decimal(12, 2)
+  shippingSgstAmount Decimal @default(0) @db.Decimal(12, 2)
+  shippingIgstAmount Decimal @default(0) @db.Decimal(12, 2)
+
+  calculationVersion String @default("v1.0")
+  calculatedAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sellerProfile SellerTaxProfile? @relation(fields: [sellerProfileId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([placeOfSupplyStateCode])
+  @@map("order_tax_snapshots")
+}
+
+// Immutable order-item-level tax calculation snapshot.
+model OrderItemTaxSnapshot {
+  id String @id @default(uuid()) @db.Uuid
+
+  orderItemId String @unique @db.Uuid
+  gstRuleId String? @db.Uuid
+
+  hsnCode String
+  taxTreatment GstTaxTreatment @default(TAXABLE)
+
+  grossLineTotal Decimal @db.Decimal(12, 2)
+  allocatedDiscountAmount Decimal @default(0) @db.Decimal(12, 2)
+  netTaxableAmount Decimal @db.Decimal(12, 2)
+
+  cgstRate Decimal @default(0) @db.Decimal(5, 2)
+  sgstRate Decimal @default(0) @db.Decimal(5, 2)
+  igstRate Decimal @default(0) @db.Decimal(5, 2)
+  cessRate Decimal @default(0) @db.Decimal(5, 2)
+
+  cgstAmount Decimal @default(0) @db.Decimal(12, 2)
+  sgstAmount Decimal @default(0) @db.Decimal(12, 2)
+  igstAmount Decimal @default(0) @db.Decimal(12, 2)
+  cessAmount Decimal @default(0) @db.Decimal(12, 2)
+  totalTaxAmount Decimal @db.Decimal(12, 2)
+
+  isInclusivePrice Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  gstRule GstRule? @relation(fields: [gstRuleId], references: [id], onDelete: SetNull)
+
+  @@index([orderItemId])
+  @@index([hsnCode])
+  @@map("order_item_tax_snapshots")
+}

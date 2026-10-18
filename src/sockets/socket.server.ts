@@ -138,6 +138,61 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
             socket.leave(SOCKET_ROOMS.ADMIN_INVENTORY);
             socket.leave(SOCKET_ROOMS.ADMIN_PAYMENTS);
         });
+
+        // Event: Admin subscribes to live Loki logs via WebSockets
+        let activeLogSession: { close: () => void } | null = null;
+
+        socket.on("join:logs", async (payload?: { query?: string }, callback?: (res: { success: boolean; error?: string }) => void) => {
+            const hasAccess = canJoinAdminRoom(user);
+            if (!hasAccess) {
+                callback?.({ success: false, error: "Forbidden: Admin privileges required" });
+                return;
+            }
+
+            const query = payload?.query || '{job="docker"}';
+            socket.join(SOCKET_ROOMS.ADMIN_LOGS);
+
+            // Close existing session if re-joining with different query
+            if (activeLogSession) {
+                activeLogSession.close();
+                activeLogSession = null;
+            }
+
+            try {
+                const { observabilityService } = await import("@/modules/observability/services/observability.service.js");
+                activeLogSession = observabilityService.streamLiveLogs(
+                    query,
+                    (entries) => {
+                        for (const entry of entries) {
+                            socket.emit(SOCKET_EVENTS.OBSERVABILITY_LOG, createSocketPayload(SOCKET_EVENTS.OBSERVABILITY_LOG, entry));
+                        }
+                    },
+                    (err) => {
+                        socket.emit(SOCKET_EVENTS.ERROR, createSocketPayload(SOCKET_EVENTS.ERROR, { message: err.message }));
+                    },
+                );
+
+                callback?.({ success: true });
+            } catch (err: unknown) {
+                callback?.({ success: false, error: (err as Error)?.message || "Failed to start log stream" });
+            }
+        });
+
+        // Event: Admin unsubscribes from live logs
+        socket.on("leave:logs", () => {
+            socket.leave(SOCKET_ROOMS.ADMIN_LOGS);
+            if (activeLogSession) {
+                activeLogSession.close();
+                activeLogSession = null;
+            }
+        });
+
+        socket.on("disconnect", () => {
+            if (activeLogSession) {
+                activeLogSession.close();
+                activeLogSession = null;
+            }
+        });
     });
 
     // 3. Setup Redis Pub/Sub Subscriber for Horizontal Scaling

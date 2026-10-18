@@ -15,7 +15,7 @@ export const QUEUE_NAMES = {
 export const DEFAULT_EVENT_JOB_OPTIONS: JobsOptions = {
     attempts: 3,
     backoff: {
-        type: "exponential",
+        type: "exponential", 
         delay: 2000,
     },
     removeOnComplete: {

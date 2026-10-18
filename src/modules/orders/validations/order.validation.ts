@@ -25,6 +25,7 @@ export const checkoutSchema = z.object({
     billingAddress: addressSnapshotSchema.optional(),
     couponCode: z.string().trim().max(50).optional(),
     promoCode: z.string().trim().max(50).optional(),
+    customerGstin: z.string().trim().toUpperCase().max(15).optional(),
     notes: z.string().trim().max(500).optional(),
     paymentMethod: z.enum(["RAZORPAY", "COD"]).default("RAZORPAY"),
     currency: z.string().trim().length(3, "Currency must be a 3-letter ISO code").default("INR"),

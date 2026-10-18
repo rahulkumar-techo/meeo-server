@@ -222,3 +222,36 @@ enum UserEventType {
   COUPON_APPLIED
   COUPON_FAILED
 }
+
+enum TaxVerificationStatus {
+  VERIFIED
+  UNVERIFIED
+  FLAGGED_FOR_REVIEW
+}
+
+enum GstTaxTreatment {
+  TAXABLE
+  NIL_RATED
+  EXEMPT
+  ZERO_RATED
+  NON_TAXABLE
+}
+
+enum GstRuleStatus {
+  DRAFT
+  APPROVED
+  SCHEDULED
+  ACTIVE
+  RETIRED
+}
+
+enum SellerGstRegistrationType {
+  REGULAR
+  COMPOSITION
+  UNREGISTERED
+}
+
+enum SellerTaxStatus {
+  ACTIVE
+  SUSPENDED
+}

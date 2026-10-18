@@ -1,0 +1,45 @@
+// Central statutory tax rules specifying HSN code, rates, and effective date intervals.
+model GstRule {
+  id String @id @default(uuid()) @db.Uuid
+
+  taxClassificationId String @db.Uuid
+  hsnCode String
+
+  taxTreatment GstTaxTreatment @default(TAXABLE)
+
+  cgstRate Decimal @default(0) @db.Decimal(5, 2)
+  sgstRate Decimal @default(0) @db.Decimal(5, 2)
+  igstRate Decimal @default(0) @db.Decimal(5, 2)
+  cessRate Decimal @default(0) @db.Decimal(5, 2)
+
+  effectiveFrom DateTime
+  effectiveTo DateTime?
+
+  notificationRef String?
+  jurisdiction String @default("IN")
+
+  status GstRuleStatus @default(DRAFT)
+  version Int @default(1)
+
+  createdById String? @db.Uuid
+  approvedById String? @db.Uuid
+  publishedById String? @db.Uuid
+
+  approvedAt DateTime?
+  publishedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  taxClassification TaxClassification @relation(fields: [taxClassificationId], references: [id], onDelete: Cascade)
+  creator User? @relation("GstRuleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  approver User? @relation("GstRuleApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  publisher User? @relation("GstRulePublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+
+  audits GstRuleAudit[]
+  itemSnapshots OrderItemTaxSnapshot[]
+
+  @@index([hsnCode, status, effectiveFrom, effectiveTo])
+  @@index([status, effectiveFrom])
+  @@map("gst_rules")
+}

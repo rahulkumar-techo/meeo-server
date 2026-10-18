@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
 import { settingService } from "@/modules/settings/services/setting.service.js";
+import { taxRuleService } from "@/modules/tax/services/taxRule.service.js";
 import type { AddressSnapshotInput } from "../validations/order.validation.js";
 
 export const DEFAULT_STANDARD_SHIPPING_FEE = 10.0;
@@ -20,6 +21,12 @@ export interface ValidatedCartItem {
     taxRate?: number;
     taxTotal?: number;
     hsnCode?: string | null;
+    cgstRate?: number | undefined;
+    sgstRate?: number | undefined;
+    igstRate?: number | undefined;
+    cessRate?: number | undefined;
+    gstRuleId?: string | null | undefined;
+    taxTreatment?: "TAXABLE" | "NIL_RATED" | "EXEMPT" | "ZERO_RATED" | "NON_TAXABLE" | undefined;
     variantSnapshot: any;
     availableStock: number;
 }
@@ -116,10 +123,8 @@ export class OrderValidationService {
                 })),
             };
 
-            const fallbackTaxRate = settingService.getSettingsSync()?.defaultTaxRate ?? 8.0;
-            const itemTaxRate = (product as any).taxRate !== undefined && (product as any).taxRate !== null
-                ? Number((product as any).taxRate)
-                : fallbackTaxRate;
+            const taxDetails = await taxRuleService.resolveTaxDetailsFromProduct(product);
+            const itemTaxRate = taxDetails.combinedRate;
             const itemTaxTotal = Number(((lineTotal * itemTaxRate) / 100).toFixed(2));
 
             validatedItems.push({
@@ -134,7 +139,13 @@ export class OrderValidationService {
                 lineTotal,
                 taxRate: itemTaxRate,
                 taxTotal: itemTaxTotal,
-                hsnCode: (product as any).hsnCode ?? null,
+                hsnCode: taxDetails.hsnCode,
+                cgstRate: taxDetails.cgstRate,
+                sgstRate: taxDetails.sgstRate,
+                igstRate: taxDetails.igstRate,
+                cessRate: taxDetails.cessRate,
+                taxTreatment: taxDetails.taxTreatment,
+                gstRuleId: taxDetails.gstRuleId,
                 variantSnapshot,
                 availableStock,
             });

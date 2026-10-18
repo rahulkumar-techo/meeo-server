@@ -28,6 +28,9 @@ export const SOCKET_EVENTS = {
     // Customer Notification Events
     NOTIFICATION_CREATED: "notification.created",
 
+    // Observability Events
+    OBSERVABILITY_LOG: "observability.log",
+
     // System / Connection Events
     CONNECT_SUCCESS: "system.connect_success",
     ERROR: "system.error",

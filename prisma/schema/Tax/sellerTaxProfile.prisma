@@ -1,0 +1,32 @@
+// Stores supplier identity, GSTIN registration, and State/UT jurisdiction.
+model SellerTaxProfile {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String? @db.Uuid
+
+  legalBusinessName String
+  tradeName String
+  gstin String @unique
+  stateCode String @db.Char(2)
+  stateName String
+
+  addressLine1 String
+  addressLine2 String?
+  city String
+  postalCode String
+
+  registrationType SellerGstRegistrationType @default(REGULAR)
+  status SellerTaxStatus @default(ACTIVE)
+
+  isDefaultPlatformSeller Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User? @relation("UserSellerTaxProfiles", fields: [userId], references: [id], onDelete: SetNull)
+  orderSnapshots OrderTaxSnapshot[]
+
+  @@index([stateCode])
+  @@index([isDefaultPlatformSeller])
+  @@map("seller_tax_profiles")
+}

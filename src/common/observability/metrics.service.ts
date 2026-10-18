@@ -18,13 +18,28 @@ export class MetricsService {
         "5xx": 0,
     };
     private routeStats: Map<string, { count: number; totalDurationMs: number }> = new Map();
+    private readonly MAX_TRACKED_ROUTES = 300;
     private httpDurations: number[] = [];
-    private maxLatencySamples = 5000;
+    private httpIndex: number = 0;
+    private readonly maxLatencySamples = 5000;
 
     // Database query metrics
     private totalDbQueries: number = 0;
     private slowDbQueries: number = 0;
     private dbDurations: number[] = [];
+    private dbIndex: number = 0;
+    private readonly maxDbSamples = 2000;
+
+    /**
+     * Sanitizes dynamic IDs from route paths to prevent metric cardinality explosion.
+     */
+    private sanitizeRoute(rawRoute: string): string {
+        if (!rawRoute) return "unknown";
+        return rawRoute
+            .replace(/\b[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-\b[0-9a-fA-F]{12}\b/g, ":id")
+            .replace(/\b[0-9a-fA-F]{24}\b/g, ":id")
+            .replace(/\/\d+(?=\/|$)/g, "/:id");
+    }
 
     /**
      * Records an HTTP request completion with method, route, status, and duration.
@@ -38,31 +53,47 @@ export class MetricsService {
         else if (statusCode >= 400 && statusCode < 500) this.statusCodes["4xx"]++;
         else if (statusCode >= 500) this.statusCodes["5xx"]++;
 
-        // Route statistics
-        const routeKey = `${method.toUpperCase()} ${route || "unknown"}`;
-        const current = this.routeStats.get(routeKey) || { count: 0, totalDurationMs: 0 };
-        current.count++;
-        current.totalDurationMs += durationMs;
-        this.routeStats.set(routeKey, current);
+        // Route statistics with cardinality cap
+        const cleanRoute = this.sanitizeRoute(route);
+        const routeKey = `${method.toUpperCase()} ${cleanRoute}`;
 
-        // Latency sample buffer
-        this.httpDurations.push(durationMs);
-        if (this.httpDurations.length > this.maxLatencySamples) {
-            this.httpDurations.shift();
+        if (this.routeStats.has(routeKey) || this.routeStats.size < this.MAX_TRACKED_ROUTES) {
+            const current = this.routeStats.get(routeKey) || { count: 0, totalDurationMs: 0 };
+            current.count++;
+            current.totalDurationMs += durationMs;
+            this.routeStats.set(routeKey, current);
+        } else {
+            // Group overflow routes under OTHER to prevent memory leaks from malicious URL flooding
+            const otherKey = `${method.toUpperCase()} /OTHER`;
+            const current = this.routeStats.get(otherKey) || { count: 0, totalDurationMs: 0 };
+            current.count++;
+            current.totalDurationMs += durationMs;
+            this.routeStats.set(otherKey, current);
+        }
+
+        // O(1) circular ring buffer for latency samples
+        if (this.httpDurations.length < this.maxLatencySamples) {
+            this.httpDurations.push(durationMs);
+        } else {
+            this.httpDurations[this.httpIndex] = durationMs;
+            this.httpIndex = (this.httpIndex + 1) % this.maxLatencySamples;
         }
     }
 
     /**
-     * Records a database query execution.
+     * Records a database query execution using O(1) ring buffer.
      */
     recordDbQuery(durationMs: number, isSlow: boolean = false) {
         this.totalDbQueries++;
         if (isSlow) {
             this.slowDbQueries++;
         }
-        this.dbDurations.push(durationMs);
-        if (this.dbDurations.length > 2000) {
-            this.dbDurations.shift();
+
+        if (this.dbDurations.length < this.maxDbSamples) {
+            this.dbDurations.push(durationMs);
+        } else {
+            this.dbDurations[this.dbIndex] = durationMs;
+            this.dbIndex = (this.dbIndex + 1) % this.maxDbSamples;
         }
     }
 
@@ -204,9 +235,11 @@ export class MetricsService {
         this.statusCodes = { "2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0 };
         this.routeStats.clear();
         this.httpDurations = [];
+        this.httpIndex = 0;
         this.totalDbQueries = 0;
         this.slowDbQueries = 0;
         this.dbDurations = [];
+        this.dbIndex = 0;
     }
 }
 

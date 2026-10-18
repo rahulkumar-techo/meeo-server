@@ -56,6 +56,13 @@ model User {
   promotionUsages   PromotionUsage[]
   auditLogs         AuditLog[]       @relation("AuditActor")
 
+  verifiedTaxClassifications TaxClassification[] @relation("ClassificationVerifiedBy")
+  createdGstRules            GstRule[]           @relation("GstRuleCreatedBy")
+  approvedGstRules           GstRule[]           @relation("GstRuleApprovedBy")
+  publishedGstRules          GstRule[]           @relation("GstRulePublishedBy")
+  gstRuleAudits              GstRuleAudit[]      @relation("GstRuleAuditActor")
+  sellerTaxProfiles          SellerTaxProfile[]  @relation("UserSellerTaxProfiles")
+
   // Indexes.
   @@index([status])
   @@index([createdAt])

@@ -21,6 +21,9 @@ import dashboardRouter from "./modules/dashboard/routes/dashboard.route.js";
 import auditLogRouter from "./modules/audit/routes/auditLog.route.js";
 import jobRouter from "./jobs/routes/job.route.js";
 import settingRouter from "./modules/settings/routes/setting.route.js";
+import { observabilityRouter } from "./modules/observability/routes/observability.route.js";
+import { traceTrackerService } from "./modules/observability/services/traceTracker.service.js";
+import taxRouter from "./modules/tax/routes/tax.route.js";
 import trackingRouter from "./modules/tracking/routes/tracking.route.js";
 import user360Router from "./modules/tracking/routes/user360.route.js";
 import helmetPlugin from "./plugins/helmet.plugin.js";
@@ -162,27 +165,29 @@ export async function buildApp(): Promise<FastifyInstance> {
         (request as any).startTime = performance.now();
     });
 
-    // for grafana protect ,can only be access through the grafa
+    // Protect /metrics with token in production if METRICS_TOKEN is set
     app.addHook("onRequest", async (request, reply) => {
         const path = request.url.split("?")[0];
         if (path === "/metrics" || path === "/prom-metrics") {
-            const auth = request.headers.authorization;
-            const secret = process.env.METRICS_TOKEN ;
-            if (!auth || auth !== `Bearer ${secret}`) {
-                return reply
-                    .status(401)
-                    .header("WWW-Authenticate", 'Bearer realm="metrics"')
-                    .send("Unauthorized");
+            const secret = process.env.METRICS_TOKEN;
+            if (process.env.NODE_ENV === "production" && secret) {
+                const auth = request.headers.authorization;
+                if (!auth || auth !== `Bearer ${secret}`) {
+                    return reply
+                        .status(401)
+                        .header("WWW-Authenticate", 'Bearer realm="metrics"')
+                        .send("Unauthorized");
+                }
             }
         }
     });
-
 
     app.addHook("onResponse", async (request, reply) => {
         const startTime = (request as any).startTime || performance.now();
         const durationMs = Number((performance.now() - startTime).toFixed(2));
         const route = request.routeOptions?.url || request.url;
         metricsService.recordHttpRequest(request.method, route, reply.statusCode, durationMs);
+        traceTrackerService.recordTrace(request.method, route, reply.statusCode, durationMs, request.id);
 
         const logMsg = formatHttpLog(request.method, request.url, reply.statusCode, durationMs, request.id);
         if (reply.statusCode >= 500) {
@@ -242,6 +247,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     app.register(wishlistRouter, { prefix: "/api/v1/wishlist" });
     app.register(orderRouter, { prefix: "/api/v1/orders" });
     app.register(paymentRouter, { prefix: "/api/v1/payments" });
+    app.register(taxRouter, { prefix: "/api/v1/tax" });
 
     // --- Marketing, Discovery & Engagement ---
     app.register(couponRouter, { prefix: "/api/v1/coupons" });
@@ -259,6 +265,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     app.register(auditLogRouter, { prefix: "/api/v1/admin/audit-logs" });
     app.register(trackingRouter, { prefix: "/api/v1/tracking" });
     app.register(user360Router, { prefix: "/api/v1/track-user" });
+    app.register(observabilityRouter, { prefix: "/api/v1/observability" });
 
     // --- Observability & System Health ---
     app.register(healthRouter, { prefix: "/health" });

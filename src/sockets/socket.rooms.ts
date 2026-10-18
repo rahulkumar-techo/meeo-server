@@ -17,6 +17,7 @@ export const SOCKET_ROOMS = {
     ADMIN_ORDERS: "admin:orders",
     ADMIN_INVENTORY: "admin:inventory",
     ADMIN_PAYMENTS: "admin:payments",
+    ADMIN_LOGS: "admin:logs",
 } as const;
 
 export interface SocketUserContext {

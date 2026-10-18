@@ -33,9 +33,10 @@ export class OrderQueryService {
                 take: limit,
                 orderBy: { createdAt: "desc" },
                 include: {
-                    items: true,
+                    items: { include: { taxSnapshot: true } },
                     address: true,
                     statusHistory: { orderBy: { createdAt: "desc" }, take: 1 },
+                    taxSnapshot: true,
                 },
             }),
         ]);
@@ -87,9 +88,10 @@ export class OrderQueryService {
                 take: limit,
                 orderBy: { createdAt: "desc" },
                 include: {
-                    items: true,
+                    items: { include: { taxSnapshot: true } },
                     address: true,
                     statusHistory: { orderBy: { createdAt: "desc" }, take: 1 },
+                    taxSnapshot: true,
                     user: { select: { id: true, email: true, firstName: true, lastName: true } },
                 },
             }),
@@ -116,12 +118,13 @@ export class OrderQueryService {
         const order = await prisma.order.findUnique({
             where: { id: orderId },
             include: {
-                items: true,
+                items: { include: { taxSnapshot: true } },
                 address: true,
                 statusHistory: { orderBy: { createdAt: "desc" } },
                 couponUsages: { include: { coupon: { select: { code: true, type: true } } } },
                 reservations: true,
                 payments: true,
+                taxSnapshot: true,
                 user: { select: { id: true, email: true, firstName: true, lastName: true } },
             },
         });
@@ -148,12 +151,13 @@ export class OrderQueryService {
         const order = await prisma.order.findUnique({
             where: { orderNumber },
             include: {
-                items: true,
+                items: { include: { taxSnapshot: true } },
                 address: true,
                 statusHistory: { orderBy: { createdAt: "desc" } },
                 couponUsages: { include: { coupon: { select: { code: true, type: true } } } },
                 reservations: true,
                 payments: true,
+                taxSnapshot: true,
                 user: { select: { id: true, email: true, firstName: true, lastName: true } },
             },
         });

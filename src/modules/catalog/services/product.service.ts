@@ -81,7 +81,7 @@ export class ProductService {
             isFeatured: input.isFeatured,
             seoTitle: input.seoTitle ?? input.name,
             seoDescription: input.seoDescription ?? (input.description ? input.description.slice(0, 160) : null),
-            taxRate: input.taxRate !== undefined ? new Prisma.Decimal(input.taxRate) : new Prisma.Decimal(18.0),
+            ...(input.taxRate !== undefined && input.taxRate !== null && { taxRate: new Prisma.Decimal(input.taxRate) }),
             hsnCode: input.hsnCode ?? null,
             createdById: creatorId ?? null,
             ...(input.bannerImage !== undefined && {

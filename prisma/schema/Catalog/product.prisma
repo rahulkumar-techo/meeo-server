@@ -20,6 +20,7 @@ model Product {
 
   taxRate Decimal @default(18.0) @db.Decimal(5, 2)
   hsnCode String?
+  taxClassificationId String? @db.Uuid
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -28,6 +29,7 @@ model Product {
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   brand    Brand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
   creator  User?     @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  taxClassification TaxClassification? @relation(fields: [taxClassificationId], references: [id], onDelete: SetNull)
 
   bannerImage    Json?
   specifications Json?
@@ -48,6 +50,7 @@ model Product {
   @@index([status, createdAt])
   @@index([categoryId, status])
   @@index([brandId, status])
+  @@index([taxClassificationId])
   @@map("products")
 }
 
