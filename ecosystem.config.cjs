@@ -43,15 +43,18 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: process.env.PM2_MAX_MEMORY || "1G",
-      // Zero-downtime rolling restart / reload support (server.ts sends 'ready')
-      wait_ready: true,
+      // Boot workers in parallel for rapid container startup and instant port binding
       listen_timeout: 10000,
       kill_timeout: 5000,
       env: {
         NODE_ENV: "production",
+        PORT: process.env.PORT || 5000,
+        HOST: process.env.HOST || "0.0.0.0",
       },
       env_production: {
         NODE_ENV: "production",
+        PORT: process.env.PORT || 5000,
+        HOST: process.env.HOST || "0.0.0.0",
       },
     },
   ],
