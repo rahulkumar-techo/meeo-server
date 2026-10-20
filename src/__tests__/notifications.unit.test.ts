@@ -98,6 +98,9 @@ describe("Notifications Unit Tests", () => {
             });
             expect(orderConfirmed.title).toBe("Order Confirmed");
             expect(orderConfirmed.pushTitle).toContain("Order Confirmed");
+            expect(orderConfirmed.html).toContain("Total Amount:</strong> $ 50.00");
+            expect(orderConfirmed.html).toContain("Payment Method:</strong> Cash on Delivery (COD)");
+            expect(orderConfirmed.html).toContain("Payment Status:</strong> Pending (Pay on Delivery)");
             expect(isCustomerEvent("ORDER_CONFIRMED")).toBe(true);
 
             // 2. Payment Category

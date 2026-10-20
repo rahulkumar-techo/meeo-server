@@ -71,6 +71,7 @@ const { prismaMock } = vi.hoisted(() => ({
             create: vi.fn(),
             findFirst: vi.fn(),
             update: vi.fn(),
+            updateMany: vi.fn(),
         },
         $transaction: vi.fn((callback: (tx: any) => any) => {
             if (typeof callback === "function") {

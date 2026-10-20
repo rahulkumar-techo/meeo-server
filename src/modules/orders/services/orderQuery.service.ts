@@ -93,15 +93,33 @@ export class OrderQueryService {
                     statusHistory: { orderBy: { createdAt: "desc" }, take: 1 },
                     taxSnapshot: true,
                     user: { select: { id: true, email: true, firstName: true, lastName: true } },
+                    payments: {
+                        select: {
+                            id: true,
+                            provider: true,
+                            paymentMethod: true,
+                            status: true,
+                            amount: true,
+                            paidAmount: true,
+                        },
+                        orderBy: { createdAt: "desc" },
+                    },
                 },
             }),
         ]);
 
         return {
-            items: orders.map((o) => ({
-                ...orderCreationService.formatOrderResponse(o),
-                customer: o.user,
-            })),
+            items: orders.map((o) => {
+                const formatted = orderCreationService.formatOrderResponse(o);
+                const latestPayment = o.payments?.[0];
+                return {
+                    ...formatted,
+                    customer: o.user,
+                    paymentProvider: latestPayment?.provider ?? null,
+                    paymentMethod: latestPayment?.paymentMethod ?? latestPayment?.provider ?? null,
+                    paymentStatus: latestPayment?.status ?? null,
+                };
+            }),
             pagination: {
                 page,
                 limit,

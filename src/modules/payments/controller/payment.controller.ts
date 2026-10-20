@@ -7,7 +7,9 @@ import {
     RetryPaymentSchema,
     CreateRefundSchema,
     ReconcilePaymentSchema,
+    type QueryPaymentsInput,
     QueryPaymentsSchema,
+    UpdatePaymentStatusSchema,
 } from "../validations/payment.validation.js";
 
 export class PaymentController {
@@ -179,6 +181,30 @@ export class PaymentController {
         return reply.status(200).send({
             success: true,
             ...result,
+        });
+    }
+
+    /**
+     * Admin manual payment status update (e.g. for COD collection, offline bank wire, etc.).
+     */
+    async updatePaymentStatus(request: FastifyRequest, reply: FastifyReply) {
+        const adminId = (request.user as any)?.userId || (request.user as any)?.id;
+        const { id } = request.params as { id: string };
+        const parsed = UpdatePaymentStatusSchema.safeParse(request.body);
+
+        if (!parsed.success) {
+            return reply.status(400).send({
+                success: false,
+                message: "Validation failed",
+                errors: parsed.error.issues,
+            });
+        }
+
+        const result = await paymentService.updatePaymentStatus(id, parsed.data, adminId);
+        return reply.status(200).send({
+            success: true,
+            message: "Payment status updated successfully",
+            data: result,
         });
     }
 }

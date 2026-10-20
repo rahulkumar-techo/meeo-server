@@ -61,31 +61,22 @@ describe("DashboardService Unit Tests", () => {
 
     describe("getExecutiveOverview", () => {
         it("calculates KPIs correctly with orders, revenue, refunds, users, inventory, payments, reviews, and coupons", async () => {
-            // Mock orders
-            prismaMock.order.findMany.mockResolvedValue([
+            // Mock order grouping
+            prismaMock.order.groupBy.mockResolvedValue([
                 {
-                    id: "order-1",
                     status: "CONFIRMED",
-                    grandTotal: 1000,
-                    subtotal: 900,
-                    discountTotal: 50,
-                    createdAt: new Date("2026-09-01T10:00:00Z"),
+                    _count: { id: 1 },
+                    _sum: { grandTotal: 1000, discountTotal: 50 },
                 },
                 {
-                    id: "order-2",
                     status: "DELIVERED",
-                    grandTotal: 2500,
-                    subtotal: 2400,
-                    discountTotal: 100,
-                    createdAt: new Date("2026-09-02T10:00:00Z"),
+                    _count: { id: 1 },
+                    _sum: { grandTotal: 2500, discountTotal: 100 },
                 },
                 {
-                    id: "order-3",
                     status: "CANCELLED",
-                    grandTotal: 500,
-                    subtotal: 500,
-                    discountTotal: 0,
-                    createdAt: new Date("2026-09-03T10:00:00Z"),
+                    _count: { id: 1 },
+                    _sum: { grandTotal: 500, discountTotal: 0 },
                 },
             ]);
 
@@ -94,49 +85,37 @@ describe("DashboardService Unit Tests", () => {
                 _sum: { amount: 200 },
             });
 
-            // Mock user counts
-            prismaMock.user.count
-                .mockResolvedValueOnce(500) // total
-                .mockResolvedValueOnce(450) // active
-                .mockResolvedValueOnce(30) // suspended
-                .mockResolvedValueOnce(20) // blocked
-                .mockResolvedValueOnce(25); // new in period
-
-            // Mock inventory list
-            prismaMock.inventory.findMany.mockResolvedValue([
-                {
-                    availableQuantity: 5,
-                    reservedQuantity: 2,
-                    reorderLevel: 10,
-                    variant: { id: "var-1", status: "ACTIVE" },
-                },
-                {
-                    availableQuantity: 0,
-                    reservedQuantity: 0,
-                    reorderLevel: 10,
-                    variant: { id: "var-2", status: "ACTIVE" },
-                },
-                {
-                    availableQuantity: 50,
-                    reservedQuantity: 10,
-                    reorderLevel: 10,
-                    variant: { id: "var-3", status: "ACTIVE" },
-                },
+            // Mock user status groups & new users count
+            prismaMock.user.groupBy.mockResolvedValue([
+                { status: "ACTIVE", _count: { _all: 450 } },
+                { status: "SUSPENDED", _count: { _all: 30 } },
+                { status: "BLOCKED", _count: { _all: 20 } },
             ]);
+            prismaMock.user.count.mockResolvedValue(25);
 
-            // Mock payment attempts
-            prismaMock.paymentAttempt.findMany.mockResolvedValue([
-                { id: "att-1", status: "SUCCESS", payment: { provider: "STRIPE" } },
-                { id: "att-2", status: "FAILED", payment: { provider: "RAZORPAY" } },
+            // Mock inventory stats and payment attempts SQL raw queries
+            prismaMock.$queryRaw
+                .mockResolvedValueOnce([
+                    {
+                        totalTrackedVariants: 3,
+                        totalPhysicalUnits: 55,
+                        totalReservedUnits: 12,
+                        lowStockCount: 1,
+                        outOfStockCount: 1,
+                        inStockCount: 2,
+                    },
+                ])
+                .mockResolvedValueOnce([
+                    { status: "SUCCESS", provider: "STRIPE", count: 1 },
+                    { status: "FAILED", provider: "RAZORPAY", count: 1 },
+                ]);
+
+            // Mock review groups & rating
+            prismaMock.review.groupBy.mockResolvedValue([
+                { status: "APPROVED", _count: { id: 70 } },
+                { status: "PENDING", _count: { id: 5 } },
+                { status: "REJECTED", _count: { id: 5 } },
             ]);
-
-            // Mock review counts & rating
-            prismaMock.review.count
-                .mockResolvedValueOnce(80) // total
-                .mockResolvedValueOnce(5) // pending
-                .mockResolvedValueOnce(70) // approved
-                .mockResolvedValueOnce(5); // rejected
-
             prismaMock.review.aggregate.mockResolvedValue({
                 _avg: { rating: 4.6 },
             });
@@ -186,12 +165,14 @@ describe("DashboardService Unit Tests", () => {
         });
 
         it("handles empty database safely without NaN or zero division crashes", async () => {
-            prismaMock.order.findMany.mockResolvedValue([]);
+            prismaMock.order.groupBy.mockResolvedValue([]);
             prismaMock.refund.aggregate.mockResolvedValue({ _sum: { amount: null } });
+            prismaMock.user.groupBy.mockResolvedValue([]);
             prismaMock.user.count.mockResolvedValue(0);
-            prismaMock.inventory.findMany.mockResolvedValue([]);
-            prismaMock.paymentAttempt.findMany.mockResolvedValue([]);
-            prismaMock.review.count.mockResolvedValue(0);
+            prismaMock.$queryRaw
+                .mockResolvedValueOnce([])
+                .mockResolvedValueOnce([]);
+            prismaMock.review.groupBy.mockResolvedValue([]);
             prismaMock.review.aggregate.mockResolvedValue({ _avg: { rating: null } });
             prismaMock.reviewReport.count.mockResolvedValue(0);
             prismaMock.coupon.count.mockResolvedValue(0);

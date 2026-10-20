@@ -139,4 +139,32 @@ export default async function paymentRouter(app: FastifyInstance) {
         },
         paymentController.listPayments.bind(paymentController),
     );
+
+    // ----------------------------------------------------
+    // Admin Manual Status Update
+    // ----------------------------------------------------
+    app.patch(
+        "/:id/status",
+        {
+            preHandler: [
+                app.authenticate,
+                app.requirePermission(PERMISSIONS.PAYMENT_UPDATE),
+            ],
+            schema: {
+                tags: ["Payments & Transactions"],
+                summary: "[Admin: payment:update] Update payment status manually",
+                description: "Manually updates payment status (e.g. for Cash on Delivery collection, offline bank wire) and cascades to order confirmation.",
+                security: [{ bearerAuth: [] }],
+                params: {
+                    type: "object",
+                    required: ["id"],
+                    properties: {
+                        id: { type: "string", format: "uuid" },
+                    },
+                },
+                body: paymentSwaggerSchemas.updatePaymentStatus,
+            },
+        },
+        paymentController.updatePaymentStatus.bind(paymentController),
+    );
 }

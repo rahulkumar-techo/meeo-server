@@ -55,6 +55,7 @@ enum PaymentStatus {
   CANCELLED
   PARTIALLY_REFUNDED
   REFUNDED
+  PAID
 }
 
 enum PaymentAttemptStatus {

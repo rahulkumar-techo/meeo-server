@@ -37,6 +37,15 @@ export class PaymentReconciliationService {
             }).catch(() => null);
 
             actionTaken = "RECONCILED_TO_SUCCESS";
+        } else if (payment.status !== "FAILED" && remoteDetails.status === "FAILED") {
+            await paymentVerificationService.recordPaymentFailure({
+                orderId: payment.orderId,
+                failureCode: "GATEWAY_RECONCILED_FAILURE",
+                failureMessage: "Payment reported as failed by gateway during reconciliation",
+                providerPaymentId,
+            }).catch(() => null);
+
+            actionTaken = "RECONCILED_TO_FAILED";
         }
 
         // Fetch fresh state after potential reconciliation

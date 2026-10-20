@@ -12,6 +12,7 @@ import type {
     RetryPaymentInput,
     CreateRefundInput,
     QueryPaymentsInput,
+    UpdatePaymentStatusInput,
 } from "../validations/payment.validation.js";
 
 /**
@@ -34,6 +35,11 @@ export class PaymentService {
 
     async failPayment(input: RecordPaymentFailureInput) {
         return paymentVerificationService.recordPaymentFailure(input);
+    }
+
+    // Admin Manual Status Update
+    async updatePaymentStatus(paymentId: string, input: UpdatePaymentStatusInput, adminId?: string) {
+        return paymentVerificationService.updatePaymentStatus(paymentId, input, adminId);
     }
 
     // Refunds

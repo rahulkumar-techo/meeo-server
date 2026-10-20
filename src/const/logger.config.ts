@@ -44,10 +44,10 @@ export function formatHttpLog(
 }
 
 export function createLoggerTransport() {
-    const lokiUrl = process.env.LOKI_URL;
-    const lokiUser = process.env.LOKI_USER_ID;
-    const lokiToken = process.env.GRAFANA_LOKI_TOKEN;
-    const hasLoki = Boolean(lokiUrl && lokiUser && lokiToken);
+    const rawLokiUrl = process.env.LOKI_URL?.replace(/^["']|["']$/g, "").trim();
+    const lokiUser = process.env.LOKI_USER_ID?.replace(/^["']|["']$/g, "").trim();
+    const lokiToken = process.env.GRAFANA_LOKI_TOKEN?.replace(/^["']|["']$/g, "").trim();
+    const hasLoki = Boolean(rawLokiUrl && lokiUser && lokiToken);
 
     if (!hasLoki) {
         return isProduction
@@ -64,10 +64,17 @@ export function createLoggerTransport() {
               };
     }
 
+    let parsedHost: string;
+    try {
+        parsedHost = new URL(rawLokiUrl!).origin;
+    } catch {
+        return isProduction ? undefined : { target: "pino-pretty" };
+    }
+
     const lokiTarget = {
         target: "pino-loki",
         options: {
-            host: new URL(lokiUrl!).origin,
+            host: parsedHost,
             basicAuth: {
                 username: lokiUser!,
                 password: lokiToken!,

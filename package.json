@@ -27,6 +27,7 @@
     "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.1",
+    "@fastify/http-proxy": "^11.6.4",
     "@fastify/jwt": "^10.2.2",
     "@fastify/multipart": "^10.1.1",
     "@fastify/rate-limit": "^11.2.0",
@@ -83,6 +84,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma db push",
     "prisma:studio": "prisma studio",
+    "seed:rbac": "tsx prisma/seed-superadmin.ts",
     "notify:all": "tsx scripts/seed-notify-all-devices.ts"
   }
 }

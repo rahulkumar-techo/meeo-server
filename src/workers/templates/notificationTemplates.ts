@@ -62,8 +62,10 @@ export const NOTIFICATION_TEMPLATES: Record<string, NotificationTemplateDefiniti
                     <p>Dear <strong>{{customerName}}</strong>,</p>
                     <p>Thank you for your purchase. We have received your order <strong>#{{orderNumber}}</strong> and are preparing it for shipment.</p>
                     <div style="background: #f3f4f6; border-radius: 6px; padding: 16px; margin: 20px 0;">
+                        <p style="margin: 0 0 6px 0;"><strong>Order Status:</strong> Confirmed</p>
+                        <p style="margin: 0 0 6px 0;"><strong>Payment Method:</strong> {{paymentMethod}}</p>
+                        <p style="margin: 0 0 6px 0;"><strong>Payment Status:</strong> {{paymentStatus}}</p>
                         <p style="margin: 0;"><strong>Total Amount:</strong> {{currency}} {{totalAmount}}</p>
-                        <p style="margin: 4px 0 0 0;"><strong>Status:</strong> Confirmed</p>
                     </div>
                 </div>
             </div>
@@ -149,8 +151,9 @@ export const NOTIFICATION_TEMPLATES: Record<string, NotificationTemplateDefiniti
                     <p>Dear <strong>{{customerName}}</strong>,</p>
                     <p>Your payment for order <strong>#{{orderNumber}}</strong> was successfully processed.</p>
                     <div style="background: #f9fafb; border-radius: 6px; padding: 16px; margin: 20px 0; border: 1px solid #e5e7eb;">
+                        <p style="margin: 0 0 6px 0;"><strong>Payment Status:</strong> Successful</p>
+                        <p style="margin: 0 0 6px 0;"><strong>Payment Method:</strong> {{paymentMethod}}</p>
                         <p style="margin: 0;"><strong>Amount Paid:</strong> {{currency}} {{amount}}</p>
-                        <p style="margin: 4px 0 0 0;"><strong>Payment Method:</strong> {{provider}}</p>
                     </div>
                 </div>
             </div>
@@ -173,6 +176,9 @@ export const NOTIFICATION_TEMPLATES: Record<string, NotificationTemplateDefiniti
                     <p>Dear <strong>{{customerName}}</strong>,</p>
                     <p>Thank you for your purchase. We have received your payment for order <strong>#{{orderNumber}}</strong>.</p>
                     <div style="background: #f3f4f6; border-radius: 6px; padding: 16px; margin: 20px 0;">
+                        <p style="margin: 0 0 6px 0;"><strong>Order Status:</strong> Confirmed</p>
+                        <p style="margin: 0 0 6px 0;"><strong>Payment Method:</strong> {{paymentMethod}}</p>
+                        <p style="margin: 0 0 6px 0;"><strong>Payment Status:</strong> {{paymentStatus}}</p>
                         <p style="margin: 0;"><strong>Total Paid:</strong> {{currency}} {{totalAmount}}</p>
                     </div>
                 </div>
@@ -492,13 +498,25 @@ export function renderNotificationContent(
         html: `<p>A new ${eventType} event has occurred.</p>`,
     };
 
+    const resolvedVars: Record<string, any> = {
+        currency: variables.currency === "INR" ? "₹" : (variables.currency || "₹"),
+        totalAmount: variables.totalAmount !== undefined && variables.totalAmount !== null ? String(variables.totalAmount) : (variables.amount !== undefined && variables.amount !== null ? String(variables.amount) : "0.00"),
+        amount: variables.amount !== undefined && variables.amount !== null ? String(variables.amount) : (variables.totalAmount !== undefined && variables.totalAmount !== null ? String(variables.totalAmount) : "0.00"),
+        paymentMethod: variables.paymentMethod || (variables.provider === "COD" ? "Cash on Delivery (COD)" : variables.provider === "RAZORPAY" ? "Online (Razorpay)" : "Cash on Delivery (COD)"),
+        paymentStatus: variables.paymentStatus || (eventType === "ORDER_PAID" || eventType === "PAYMENT_SUCCESS" ? "Paid" : "Pending (Pay on Delivery)"),
+        ...variables,
+    };
+    if (resolvedVars.currency === "INR") {
+        resolvedVars.currency = "₹";
+    }
+
     return {
-        subject: variables.subject ? interpolateVariables(variables.subject, variables) : interpolateVariables(template.subject, variables),
-        title: variables.title ? interpolateVariables(variables.title, variables) : interpolateVariables(template.title, variables),
-        body: variables.body ? interpolateVariables(variables.body, variables) : interpolateVariables(template.body, variables),
-        html: variables.html ? interpolateVariables(variables.html, variables) : interpolateVariables(template.html, variables),
-        pushTitle: interpolateVariables(variables.pushTitle || template.pushTitle || template.title, variables),
-        pushBody: interpolateVariables(variables.pushBody || template.pushBody || template.body, variables),
+        subject: variables.subject ? interpolateVariables(variables.subject, resolvedVars) : interpolateVariables(template.subject, resolvedVars),
+        title: variables.title ? interpolateVariables(variables.title, resolvedVars) : interpolateVariables(template.title, resolvedVars),
+        body: variables.body ? interpolateVariables(variables.body, resolvedVars) : interpolateVariables(template.body, resolvedVars),
+        html: variables.html ? interpolateVariables(variables.html, resolvedVars) : interpolateVariables(template.html, resolvedVars),
+        pushTitle: interpolateVariables(variables.pushTitle || template.pushTitle || template.title, resolvedVars),
+        pushBody: interpolateVariables(variables.pushBody || template.pushBody || template.body, resolvedVars),
         data: variables,
     };
 }

@@ -34,40 +34,102 @@ export class NotificationConsumer {
                 let email = (payload.customerEmail || payload.email) as string | undefined;
                 let customerName = (payload.customerName || payload.name) as string | undefined;
 
-                // If Order aggregate and missing user/email details, query order to resolve recipient
-                if (aggregateType === "Order" && (!userId || !email) && prisma.order?.findUnique) {
-                    const order = await prisma.order.findUnique({
-                        where: { id: aggregateId },
-                        include: { user: true, address: true },
-                    }).catch(() => null);
+                // If Order aggregate or orderId provided, resolve recipient and enrich financial/payment details
+                const orderId = aggregateType === "Order" ? aggregateId : payload.orderId;
+                if (orderId && (!userId || !email || payload.totalAmount === undefined || !payload.paymentMethod) && typeof prisma.order?.findUnique === "function") {
+                    const order = await Promise.resolve(
+                        prisma.order.findUnique({
+                            where: { id: orderId },
+                            include: {
+                                user: true,
+                                address: true,
+                                payments: { orderBy: { createdAt: "desc" }, take: 1 },
+                            },
+                        }),
+                    ).catch(() => null);
 
                     if (order) {
                         userId = userId || (order.userId ?? undefined);
                         email = email || (order.user?.email ?? undefined);
                         customerName = customerName || (order.user ? `${order.user.firstName || ""} ${order.user.lastName || ""}`.trim() : (order.address?.recipientName ?? undefined));
+
+                        payload.orderNumber = payload.orderNumber || order.orderNumber;
+                        payload.currency = payload.currency || (order.currency === "INR" ? "₹" : order.currency) || "₹";
+                        if (payload.totalAmount === undefined && payload.amount === undefined) {
+                            payload.totalAmount = order.grandTotal != null ? Number(order.grandTotal).toFixed(2) : "0.00";
+                            payload.amount = payload.totalAmount;
+                        } else if (payload.totalAmount === undefined) {
+                            payload.totalAmount = payload.amount;
+                        }
+
+                        const latestPayment = order.payments?.[0];
+                        const isCod = latestPayment?.provider === "COD" || latestPayment?.paymentMethod === "CASH_ON_DELIVERY" || payload.paymentMethod === "COD";
+
+                        if (!payload.paymentMethod) {
+                            if (isCod) {
+                                payload.paymentMethod = "Cash on Delivery (COD)";
+                            } else if (latestPayment?.provider === "RAZORPAY") {
+                                payload.paymentMethod = "Online (Razorpay)";
+                            } else if (latestPayment?.paymentMethod) {
+                                payload.paymentMethod = latestPayment.paymentMethod;
+                            } else {
+                                payload.paymentMethod = "Cash on Delivery (COD)";
+                            }
+                        }
+
+                        if (!payload.paymentStatus) {
+                            if (latestPayment?.status === "SUCCESS" || latestPayment?.status === "PAID") {
+                                payload.paymentStatus = "Paid";
+                            } else if (latestPayment?.status === "FAILED") {
+                                payload.paymentStatus = "Failed";
+                            } else if (isCod) {
+                                payload.paymentStatus = "Pending (Pay on Delivery)";
+                            } else {
+                                payload.paymentStatus = latestPayment?.status || "Pending";
+                            }
+                        }
                     }
                 }
 
-                // If Payment / Refund aggregate and missing user/email details, query payment
-                if ((aggregateType === "Payment" || aggregateType === "Refund") && (!userId || !email) && prisma.payment?.findUnique) {
-                    const payment = await prisma.payment.findUnique({
-                        where: { id: aggregateId },
-                        include: { order: { include: { user: true, address: true } } },
-                    }).catch(() => null);
+                // If Payment / Refund aggregate, resolve details
+                const paymentId = (aggregateType === "Payment" || aggregateType === "Refund") ? aggregateId : payload.paymentId;
+                if (paymentId && (!userId || !email || payload.totalAmount === undefined || !payload.paymentMethod) && typeof prisma.payment?.findUnique === "function") {
+                    const payment = await Promise.resolve(
+                        prisma.payment.findUnique({
+                            where: { id: paymentId },
+                            include: { order: { include: { user: true, address: true } } },
+                        }),
+                    ).catch(() => null);
 
-                    if (payment?.order) {
-                        userId = userId || (payment.order.userId ?? undefined);
-                        email = email || (payment.order.user?.email ?? undefined);
-                        customerName = customerName || (payment.order.user ? `${payment.order.user.firstName || ""} ${payment.order.user.lastName || ""}`.trim() : (payment.order.address?.recipientName ?? undefined));
+                    if (payment) {
+                        if (payment.order) {
+                            userId = userId || (payment.order.userId ?? undefined);
+                            email = email || (payment.order.user?.email ?? undefined);
+                            customerName = customerName || (payment.order.user ? `${payment.order.user.firstName || ""} ${payment.order.user.lastName || ""}`.trim() : (payment.order.address?.recipientName ?? undefined));
+                            payload.orderNumber = payload.orderNumber || payment.order.orderNumber;
+                        }
+                        payload.currency = payload.currency || (payment.currency === "INR" ? "₹" : payment.currency) || "₹";
+                        if (payload.totalAmount === undefined && payload.amount === undefined) {
+                            payload.totalAmount = payment.amount != null ? Number(payment.amount).toFixed(2) : "0.00";
+                            payload.amount = payload.totalAmount;
+                        }
+                        if (!payload.paymentMethod) {
+                            payload.paymentMethod = payment.paymentMethod || (payment.provider === "COD" ? "Cash on Delivery (COD)" : payment.provider === "RAZORPAY" ? "Online (Razorpay)" : payment.provider);
+                        }
+                        if (!payload.paymentStatus) {
+                            payload.paymentStatus = payment.status === "SUCCESS" ? "Paid" : payment.status;
+                        }
                     }
                 }
 
                 // If User security aggregate, query user
-                if (aggregateType === "User" && (!userId || !email) && prisma.user?.findUnique) {
-                    const user = await prisma.user.findUnique({
-                        where: { id: aggregateId },
-                        select: { id: true, email: true, firstName: true, lastName: true },
-                    }).catch(() => null);
+                if (aggregateType === "User" && (!userId || !email) && typeof prisma.user?.findUnique === "function") {
+                    const user = await Promise.resolve(
+                        prisma.user.findUnique({
+                            where: { id: aggregateId },
+                            select: { id: true, email: true, firstName: true, lastName: true },
+                        }),
+                    ).catch(() => null);
 
                     if (user) {
                         userId = userId || user.id;

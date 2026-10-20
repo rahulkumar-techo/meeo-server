@@ -43,11 +43,19 @@ export class NotificationDeliveryService {
         const templateDef = NOTIFICATION_TEMPLATES[eventType];
         const category = templateDef?.category ?? "order";
 
-        // Enrich variables with recipient details
+        // Enrich variables with recipient details and payment defaults
         const enrichedVars: Record<string, any> = {
             customerName: recipient.customerName || "Valued Customer",
+            currency: variables.currency === "INR" ? "₹" : (variables.currency || "₹"),
+            paymentMethod: variables.paymentMethod || (variables.provider === "COD" ? "Cash on Delivery (COD)" : variables.provider === "RAZORPAY" ? "Online (Razorpay)" : "Cash on Delivery (COD)"),
+            paymentStatus: variables.paymentStatus || (eventType === "ORDER_PAID" || eventType === "PAYMENT_SUCCESS" ? "Paid" : "Pending (Pay on Delivery)"),
+            totalAmount: variables.totalAmount !== undefined && variables.totalAmount !== null ? String(variables.totalAmount) : (variables.amount !== undefined && variables.amount !== null ? String(variables.amount) : "0.00"),
+            amount: variables.amount !== undefined && variables.amount !== null ? String(variables.amount) : (variables.totalAmount !== undefined && variables.totalAmount !== null ? String(variables.totalAmount) : "0.00"),
             ...variables,
         };
+        if (enrichedVars.currency === "INR") {
+            enrichedVars.currency = "₹";
+        }
 
         const { userId } = recipient;
         let targetEmail = recipient.email;

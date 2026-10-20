@@ -41,6 +41,7 @@ import { docsDescriptionHtml } from "./common/docs/docsDescriptionPage.js";
 import { metricsService } from "./common/observability/metrics.service.js";
 import healthRouter from "./modules/health/health.route.js";
 import fastifyMetrics from "fastify-metrics";
+import { apiGateway } from "./config/api-gateway.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
     const app = Fastify({
@@ -56,6 +57,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     });
 
     await app.register(helmetPlugin);
+
+    // API GATEWAY
+    await apiGateway(app);
 
     await app.register(swagger, {
         openapi: {

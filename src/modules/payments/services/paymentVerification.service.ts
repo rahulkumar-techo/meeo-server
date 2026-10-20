@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
-import type { VerifyPaymentInput, RecordPaymentFailureInput } from "../validations/payment.validation.js";
+import type { VerifyPaymentInput, RecordPaymentFailureInput, UpdatePaymentStatusInput } from "../validations/payment.validation.js";
 import { logger } from "@/common/observability/logger.js";
 
 export class PaymentVerificationService {
@@ -178,6 +178,8 @@ export class PaymentVerificationService {
                         totalAmount: paidAmount,
                         amount: paidAmount,
                         currency: payment.currency || "INR",
+                        paymentMethod: payment.paymentMethod || "Online (Razorpay)",
+                        paymentStatus: "Paid",
                         userId: payment.order?.userId ?? undefined,
                         email: customerEmail,
                         customerEmail,
@@ -289,6 +291,128 @@ export class PaymentVerificationService {
             status: "FAILED",
             message: "Payment failure recorded. Order is eligible for payment retry.",
         };
+    }
+
+    /**
+     * Admin manual payment update (e.g. for COD collection, offline wire transfer, or manual adjustment).
+     */
+    async updatePaymentStatus(paymentId: string, input: UpdatePaymentStatusInput, adminId?: string) {
+        const payment = await prisma.payment.findUnique({
+            where: { id: paymentId },
+            include: { order: true },
+        });
+
+        if (!payment) {
+            throw new AppError("Payment record not found", 404);
+        }
+
+        const newStatus = input.status;
+        const paidAmount = input.paidAmount !== undefined ? input.paidAmount : Number(payment.amount);
+
+        await prisma.$transaction(async (tx) => {
+            const updateData: any = {
+                status: newStatus,
+            };
+            if (input.paymentMethod) {
+                updateData.paymentMethod = input.paymentMethod;
+            }
+            if (newStatus === "SUCCESS") {
+                updateData.paidAmount = paidAmount;
+                updateData.paidAt = new Date();
+            } else if (newStatus === "FAILED") {
+                updateData.failedAt = new Date();
+            }
+
+            await tx.payment.update({
+                where: { id: paymentId },
+                data: updateData,
+            });
+
+            // Record transaction ledger entry
+            const transactionStatus =
+                newStatus === "SUCCESS"
+                    ? "SUCCESS"
+                    : newStatus === "FAILED" || newStatus === "CANCELLED"
+                      ? "FAILED"
+                      : newStatus === "PROCESSING"
+                        ? "PROCESSING"
+                        : "PENDING";
+
+            await tx.paymentTransaction.create({
+                data: {
+                    paymentId,
+                    type: newStatus === "REFUNDED" ? "REFUND" : "CHARGE",
+                    status: transactionStatus,
+                    amount: paidAmount,
+                    currency: payment.currency,
+                    providerTransactionId: input.transactionId || `manual_${Date.now()}`,
+                    failureMessage: input.reason || null,
+                },
+            });
+
+            // If payment is marked SUCCESS, ensure order status is updated if it was PENDING or PAYMENT_PENDING
+            if (newStatus === "SUCCESS" && payment.order) {
+                if (payment.order.status === "PENDING" || payment.order.status === "PAYMENT_PENDING") {
+                    await tx.order.update({
+                        where: { id: payment.order.id },
+                        data: { status: "CONFIRMED" },
+                    });
+
+                    await tx.orderStatusHistory.create({
+                        data: {
+                            orderId: payment.order.id,
+                            previousStatus: payment.order.status,
+                            newStatus: "CONFIRMED",
+                            changedBy: adminId ?? null,
+                            reason: input.reason || `Payment marked SUCCESS manually by admin (${input.paymentMethod || payment.provider})`,
+                        },
+                    });
+                }
+
+                await tx.outboxEvent.create({
+                    data: {
+                        eventType: "ORDER_PAID",
+                        aggregateType: "Payment",
+                        aggregateId: payment.id,
+                        status: "PENDING",
+                        payload: {
+                            paymentId: payment.id,
+                            orderId: payment.orderId,
+                            orderNumber: payment.order.orderNumber,
+                            totalAmount: paidAmount,
+                            amount: paidAmount,
+                            currency: payment.currency,
+                            paymentMethod: input.paymentMethod || payment.paymentMethod || payment.provider,
+                            paymentStatus: "Paid",
+                            userId: payment.order.userId ?? undefined,
+                            changedBy: adminId ?? null,
+                            reason: input.reason ?? "Manual payment update by admin",
+                            paidAt: new Date().toISOString(),
+                        },
+                    },
+                });
+            } else if (newStatus === "FAILED") {
+                await tx.outboxEvent.create({
+                    data: {
+                        eventType: "PAYMENT_FAILED",
+                        aggregateType: "Payment",
+                        aggregateId: payment.id,
+                        status: "PENDING",
+                        payload: {
+                            paymentId: payment.id,
+                            orderId: payment.orderId,
+                            failureCode: "MANUAL_STATUS_FAILED",
+                            failureMessage: input.reason || "Payment marked as failed by admin",
+                        },
+                    },
+                });
+            }
+        });
+
+        return prisma.payment.findUnique({
+            where: { id: paymentId },
+            include: { order: true, transactions: { orderBy: { createdAt: "desc" }, take: 1 } },
+        });
     }
 }
 

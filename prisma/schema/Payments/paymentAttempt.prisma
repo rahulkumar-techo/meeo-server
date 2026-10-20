@@ -25,5 +25,6 @@ model PaymentAttempt {
 
   @@unique([paymentId, attemptNumber])
   @@index([paymentId])
+  @@index([initiatedAt])
   @@map("payment_attempts")
 }

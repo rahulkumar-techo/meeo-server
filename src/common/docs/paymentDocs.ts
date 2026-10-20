@@ -83,4 +83,19 @@ export const paymentSwaggerSchemas = {
             provider: { type: "string" },
         },
     },
+
+    updatePaymentStatus: {
+        type: "object",
+        required: ["status"],
+        properties: {
+            status: {
+                type: "string",
+                enum: ["SUCCESS", "FAILED", "PENDING", "PROCESSING", "CANCELLED", "REFUNDED"],
+            },
+            paymentMethod: { type: "string" },
+            paidAmount: { type: "number", minimum: 0 },
+            transactionId: { type: "string" },
+            reason: { type: "string" },
+        },
+    },
 };

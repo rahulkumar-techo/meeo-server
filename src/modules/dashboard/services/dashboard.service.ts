@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma.js";
+import { Prisma } from "@/generated/prisma/client.js";
+import { cacheService } from "@/common/cache/cache.service.js";
+import { CACHE_TTL } from "@/common/cache/cache.keys.js";
 import { dashboardAnalyticsService } from "./dashboardAnalytics.service.js";
 import { dashboardOperationsService } from "./dashboardOperations.service.js";
 import type {
@@ -24,34 +27,46 @@ export class DashboardService {
      * High-level Executive KPI Overview across Revenue, Orders, Users, Inventory, Payments, and Reviews.
      */
     async getExecutiveOverview(query: DashboardPeriodQueryInput) {
+        const cacheKey = `cache:dashboard:overview:${query.period ?? "30d"}:${query.startDate ?? ""}:${query.endDate ?? ""}`;
+        const cached = await cacheService.get<any>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
         const dateFilter = this.resolveDateRange(query.period, query.startDate, query.endDate);
         const orderWhereDate = dateFilter.gte ? { createdAt: dateFilter } : {};
         const paymentWhereDate = dateFilter.gte ? { initiatedAt: dateFilter } : {};
         const refundWhereDate = dateFilter.gte ? { requestedAt: dateFilter } : {};
+        const userWhereDate = {
+            deletedAt: null,
+            ...(dateFilter.gte ? { createdAt: dateFilter } : {}),
+        };
 
-        // fix:expensive computations - Use targeted field selects to optimize payload sizes and database throughput
+        const paymentWhereSql = dateFilter.gte
+            ? Prisma.sql`WHERE pa."initiatedAt" >= ${dateFilter.gte} ${dateFilter.lte ? Prisma.sql`AND pa."initiatedAt" <= ${dateFilter.lte}` : Prisma.empty}`
+            : Prisma.empty;
+
         const [
-            allOrders,
+            orderGroups,
             refundsAgg,
-            userCounts,
+            userGroups,
             newUsersCount,
-            inventoryList,
-            paymentAttempts,
-            reviewCounts,
+            inventoryStatsRows,
+            paymentAttemptRows,
+            reviewGroups,
+            ratingAgg,
             pendingReportsCount,
             activeCouponsCount,
         ] = await Promise.all([
-            prisma.order.findMany({
+            // 1. Order status counts and revenue sums (P0: replace order.findMany with groupBy)
+            prisma.order.groupBy({
+                by: ["status"],
                 where: orderWhereDate,
-                select: {
-                    id: true,
-                    status: true,
-                    grandTotal: true,
-                    subtotal: true,
-                    discountTotal: true,
-                    createdAt: true,
-                },
+                _count: { id: true },
+                _sum: { grandTotal: true, discountTotal: true },
             }),
+
+            // 2. Refunds aggregate
             prisma.refund.aggregate({
                 where: {
                     status: "SUCCESS",
@@ -59,46 +74,78 @@ export class DashboardService {
                 },
                 _sum: { amount: true },
             }),
-            Promise.all([
-                prisma.user.count(),
-                prisma.user.count({ where: { status: "ACTIVE" } }),
-                prisma.user.count({ where: { status: "SUSPENDED" } }),
-                prisma.user.count({ where: { status: "BLOCKED" } }),
-            ]),
+
+            // 3. User status grouping (P1: consolidate 4 user count queries into 1 groupBy)
+            prisma.user.groupBy({
+                by: ["status"],
+                where: { deletedAt: null },
+                _count: { _all: true },
+            }),
+
+            // 4. New users registered in period (P1: dedicated createdAt filter and deletedAt: null)
             prisma.user.count({
-                where: { deletedAt: null, ...orderWhereDate },
+                where: userWhereDate,
             }),
-            prisma.inventory.findMany({
-                select: {
-                    availableQuantity: true,
-                    reservedQuantity: true,
-                    reorderLevel: true,
-                    variant: { select: { id: true, status: true } },
-                },
+
+            // 5. Inventory unit totals & conditional stock counts (P0: eliminate inventory.findMany)
+            prisma.$queryRaw<Array<{
+                totalTrackedVariants: number | bigint;
+                totalPhysicalUnits: number | bigint;
+                totalReservedUnits: number | bigint;
+                outOfStockCount: number | bigint;
+                lowStockCount: number | bigint;
+                inStockCount: number | bigint;
+            }>>`
+                SELECT 
+                    COUNT(*)::int AS "totalTrackedVariants",
+                    COALESCE(SUM("availableQuantity"), 0)::bigint::int AS "totalPhysicalUnits",
+                    COALESCE(SUM("reservedQuantity"), 0)::bigint::int AS "totalReservedUnits",
+                    COUNT(CASE WHEN "availableQuantity" <= 0 THEN 1 END)::int AS "outOfStockCount",
+                    COUNT(CASE WHEN "availableQuantity" > 0 AND "availableQuantity" <= COALESCE("reorderLevel", 10) THEN 1 END)::int AS "lowStockCount",
+                    COUNT(CASE WHEN "availableQuantity" > 0 THEN 1 END)::int AS "inStockCount"
+                FROM "inventory";
+            `,
+
+            // 6. Payment attempts status & provider grouping with join (P0: eliminate paymentAttempt.findMany)
+            prisma.$queryRaw<Array<{
+                status: string;
+                provider: string | null;
+                count: number | bigint;
+            }>>`
+                SELECT 
+                    pa.status::text AS status,
+                    p.provider::text AS provider,
+                    COUNT(*)::int AS count
+                FROM "payment_attempts" pa
+                LEFT JOIN "payments" p ON pa."paymentId" = p.id
+                ${paymentWhereSql}
+                GROUP BY pa.status, p.provider;
+            `,
+
+            // 7. Review status grouping (P1: consolidate 4 review count queries into 1 groupBy)
+            prisma.review.groupBy({
+                by: ["status"],
+                _count: { id: true },
             }),
-            prisma.paymentAttempt.findMany({
-                where: paymentWhereDate,
-                select: {
-                    id: true,
-                    status: true,
-                    payment: { select: { provider: true } },
-                },
+
+            // 8. Approved reviews average rating
+            prisma.review.aggregate({
+                where: { status: "APPROVED" },
+                _avg: { rating: true },
             }),
-            Promise.all([
-                prisma.review.count(),
-                prisma.review.count({ where: { status: "PENDING" } }),
-                prisma.review.count({ where: { status: "APPROVED" } }),
-                prisma.review.count({ where: { status: "REJECTED" } }),
-                prisma.review.aggregate({
-                    where: { status: "APPROVED" },
-                    _avg: { rating: true },
-                }),
-            ]),
+
+            // 9. Pending abuse reports
             prisma.reviewReport.count({ where: { status: "PENDING" } }),
+
+            // 10. Active coupons
             prisma.coupon.count({ where: { status: "ACTIVE" } }),
         ]);
 
-        const totalOrders = allOrders.length;
+        // Process Orders
+        let totalOrders = 0;
+        let grossRevenue = 0;
+        let totalDiscountGranted = 0;
+        let successfulOrderCount = 0;
         const statusBreakdown: Record<string, number> = {
             PENDING: 0,
             PAYMENT_PENDING: 0,
@@ -110,19 +157,19 @@ export class DashboardService {
             EXPIRED: 0,
             REFUNDED: 0,
         };
-
-        let grossRevenue = 0;
-        let totalDiscountGranted = 0;
-        let successfulOrderCount = 0;
-
+        // Business revenue considers CONFIRMED, PROCESSING, SHIPPED, DELIVERED orders
         const PAID_ORDER_STATUSES = new Set(["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"]);
 
-        for (const ord of allOrders) {
-            statusBreakdown[ord.status] = (statusBreakdown[ord.status] || 0) + 1;
-            if (PAID_ORDER_STATUSES.has(ord.status)) {
-                grossRevenue += Number(ord.grandTotal);
-                totalDiscountGranted += Number(ord.discountTotal);
-                successfulOrderCount++;
+        if (Array.isArray(orderGroups)) {
+            for (const group of orderGroups) {
+                const count = group._count?.id ?? 0;
+                totalOrders += count;
+                statusBreakdown[group.status] = count;
+                if (PAID_ORDER_STATUSES.has(group.status)) {
+                    grossRevenue += Number(group._sum?.grandTotal ?? 0);
+                    totalDiscountGranted += Number(group._sum?.discountTotal ?? 0);
+                    successfulOrderCount += count;
+                }
             }
         }
 
@@ -138,39 +185,46 @@ export class DashboardService {
                 ? Number(((deliveredCount / totalOrders) * 100).toFixed(1))
                 : 0;
 
-        const [totalUsers, activeUsers, suspendedUsers, blockedUsers] = userCounts;
+        // Process Users
+        let totalUsers = 0;
+        let activeUsers = 0;
+        let suspendedUsers = 0;
+        let blockedUsers = 0;
 
-        let totalPhysicalUnits = 0;
-        let totalReservedUnits = 0;
-        let outOfStockCount = 0;
-        let lowStockCount = 0;
-        let inStockCount = 0;
-
-        for (const inv of inventoryList) {
-            totalPhysicalUnits += inv.availableQuantity;
-            totalReservedUnits += inv.reservedQuantity;
-            const threshold = inv.reorderLevel ?? 10;
-
-            if (inv.availableQuantity <= 0) {
-                outOfStockCount++;
-            } else if (inv.availableQuantity <= threshold) {
-                lowStockCount++;
-                inStockCount++;
-            } else {
-                inStockCount++;
+        if (Array.isArray(userGroups)) {
+            for (const g of userGroups) {
+                const count = g._count?._all ?? 0;
+                totalUsers += count;
+                if (g.status === "ACTIVE") activeUsers = count;
+                else if (g.status === "SUSPENDED") suspendedUsers = count;
+                else if (g.status === "BLOCKED") blockedUsers = count;
             }
         }
 
-        const totalPaymentAttempts = paymentAttempts.length;
+        // Process Inventory
+        const invRow = Array.isArray(inventoryStatsRows) ? inventoryStatsRows[0] : null;
+        const totalTrackedVariants = Number(invRow?.totalTrackedVariants ?? 0);
+        const totalPhysicalUnits = Number(invRow?.totalPhysicalUnits ?? 0);
+        const totalReservedUnits = Number(invRow?.totalReservedUnits ?? 0);
+        const outOfStockCount = Number(invRow?.outOfStockCount ?? 0);
+        const lowStockCount = Number(invRow?.lowStockCount ?? 0);
+        const inStockCount = Number(invRow?.inStockCount ?? 0);
+
+        // Process Payment Attempts
+        let totalPaymentAttempts = 0;
         let successfulPayments = 0;
         let failedPayments = 0;
         const gatewayBreakdown: Record<string, number> = {};
 
-        for (const att of paymentAttempts) {
-            const provider = att.payment?.provider ?? "UNKNOWN";
-            gatewayBreakdown[provider] = (gatewayBreakdown[provider] || 0) + 1;
-            if (att.status === "SUCCESS") successfulPayments++;
-            if (att.status === "FAILED") failedPayments++;
+        if (Array.isArray(paymentAttemptRows)) {
+            for (const row of paymentAttemptRows) {
+                const count = Number(row.count ?? 0);
+                totalPaymentAttempts += count;
+                const provider = row.provider ?? "UNKNOWN";
+                gatewayBreakdown[provider] = (gatewayBreakdown[provider] || 0) + count;
+                if (row.status === "SUCCESS") successfulPayments += count;
+                if (row.status === "FAILED") failedPayments += count;
+            }
         }
 
         const paymentFailureRate =
@@ -178,9 +232,23 @@ export class DashboardService {
                 ? Number(((failedPayments / totalPaymentAttempts) * 100).toFixed(1))
                 : 0;
 
-        const [totalReviews, pendingReviews, approvedReviews, rejectedReviews, ratingAgg] = reviewCounts;
+        // Process Reviews
+        let totalReviews = 0;
+        let pendingReviews = 0;
+        let approvedReviews = 0;
+        let rejectedReviews = 0;
 
-        return {
+        if (Array.isArray(reviewGroups)) {
+            for (const g of reviewGroups) {
+                const count = g._count?.id ?? 0;
+                totalReviews += count;
+                if (g.status === "PENDING") pendingReviews = count;
+                else if (g.status === "APPROVED") approvedReviews = count;
+                else if (g.status === "REJECTED") rejectedReviews = count;
+            }
+        }
+
+        const result = {
             period: query.period ?? "30d",
             revenue: {
                 grossRevenue: Number(grossRevenue.toFixed(2)),
@@ -203,7 +271,7 @@ export class DashboardService {
                 newUsersInPeriod: newUsersCount,
             },
             inventory: {
-                totalTrackedVariants: inventoryList.length,
+                totalTrackedVariants,
                 totalPhysicalUnits,
                 totalReservedUnits,
                 inStockCount,
@@ -223,12 +291,16 @@ export class DashboardService {
                 approvedReviews,
                 rejectedReviews,
                 pendingAbuseReports: pendingReportsCount,
-                averagePlatformRating: Number((ratingAgg._avg.rating ?? 0).toFixed(1)),
+                averagePlatformRating: Number((ratingAgg?._avg?.rating ?? 0).toFixed(1)),
             },
             promotions: {
                 activeCouponsCount,
             },
         };
+
+        await cacheService.set(cacheKey, result, CACHE_TTL.ONE_MINUTE);
+
+        return result;
     }
 
     getSalesAndRevenueChart(query: SalesTrendQueryInput) {

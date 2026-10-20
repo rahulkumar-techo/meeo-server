@@ -86,13 +86,81 @@ export class OrderStatusService {
                 },
             });
 
-            // 3. If transitioning to CANCELLED or EXPIRED, release inventory reservations
+            // 3. If transitioning to DELIVERED, automatically resolve any pending COD payment
+            if (newStatus === "DELIVERED") {
+                const pendingCodPayment = await tx.payment.findFirst({
+                    where: {
+                        orderId,
+                        provider: "COD",
+                        status: "PENDING",
+                    },
+                });
+
+                if (pendingCodPayment) {
+                    await tx.payment.update({
+                        where: { id: pendingCodPayment.id },
+                        data: {
+                            status: "SUCCESS",
+                            paidAmount: pendingCodPayment.amount,
+                            paidAt: new Date(),
+                        },
+                    });
+
+                    await tx.paymentTransaction.create({
+                        data: {
+                            paymentId: pendingCodPayment.id,
+                            type: "CHARGE",
+                            status: "SUCCESS",
+                            amount: Number(pendingCodPayment.amount),
+                            currency: pendingCodPayment.currency,
+                            providerTransactionId: `cod_delivered_${Date.now()}`,
+                        },
+                    });
+
+                    await tx.outboxEvent.create({
+                        data: {
+                            eventType: "ORDER_PAID",
+                            aggregateType: "Payment",
+                            aggregateId: pendingCodPayment.id,
+                            status: "PENDING",
+                            payload: {
+                                paymentId: pendingCodPayment.id,
+                                orderId,
+                                orderNumber: order.orderNumber,
+                                totalAmount: Number(pendingCodPayment.amount),
+                                amount: Number(pendingCodPayment.amount),
+                                currency: pendingCodPayment.currency || "INR",
+                                paymentMethod: "Cash on Delivery (COD)",
+                                paymentStatus: "Paid",
+                                userId: order.userId ?? undefined,
+                                provider: "COD",
+                                paidAt: new Date().toISOString(),
+                            },
+                        },
+                    });
+                }
+            }
+
+            // 4. If transitioning to CANCELLED or EXPIRED, release inventory reservations and fail pending payments
             if (newStatus === "CANCELLED" || newStatus === "EXPIRED") {
                 await orderInventoryService.releaseOrderReservations(
                     tx,
                     orderId,
                     input.reason ?? `Order transitioned to ${newStatus}`,
                 );
+
+                if (tx.payment?.updateMany) {
+                    await tx.payment.updateMany({
+                        where: {
+                            orderId,
+                            status: "PENDING",
+                        },
+                        data: {
+                            status: "FAILED",
+                            failedAt: new Date(),
+                        },
+                    });
+                }
             }
 
             // 4. Create Outbox Domain Event
@@ -104,6 +172,10 @@ export class OrderStatusService {
                     payload: {
                         orderId,
                         orderNumber: order.orderNumber,
+                        totalAmount: Number(order.grandTotal).toFixed(2),
+                        amount: Number(order.grandTotal).toFixed(2),
+                        currency: order.currency || "INR",
+                        userId: order.userId ?? null,
                         previousStatus,
                         newStatus,
                         changedBy: changedBy ?? null,

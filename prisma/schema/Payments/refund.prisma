@@ -25,5 +25,6 @@ model Refund {
   requestedByUser User? @relation("RefundRequestedBy", fields: [requestedBy], references: [id])
 
   @@index([paymentId])
+  @@index([status, requestedAt])
   @@map("refunds")
 }

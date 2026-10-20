@@ -68,3 +68,20 @@ export const QueryPaymentsSchema = z.object({
 });
 
 export type QueryPaymentsInput = z.infer<typeof QueryPaymentsSchema>;
+
+export const UpdatePaymentStatusSchema = z.object({
+    status: z.enum([
+        "SUCCESS",
+        "FAILED",
+        "PENDING",
+        "PROCESSING",
+        "CANCELLED",
+        "REFUNDED",
+    ]),
+    paymentMethod: z.string().trim().max(100).optional(),
+    paidAmount: z.coerce.number().min(0).optional(),
+    transactionId: z.string().trim().max(255).optional(),
+    reason: z.string().trim().max(500).optional(),
+});
+
+export type UpdatePaymentStatusInput = z.infer<typeof UpdatePaymentStatusSchema>;

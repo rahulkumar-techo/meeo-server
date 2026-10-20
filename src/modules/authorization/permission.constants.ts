@@ -28,6 +28,7 @@ export const PERMISSIONS = {
     INVENTORY_UPDATE: "inventory:update",
 
     PAYMENT_READ: "payment:read",
+    PAYMENT_UPDATE: "payment:update",
     PAYMENT_REFUND: "payment:refund",
 
     USER_READ: "user:read",
@@ -69,4 +70,17 @@ export const PERMISSIONS = {
     TAX_READ: "tax:read",
     TAX_MANAGE: "tax:manage",
     TAX_APPROVE: "tax:approve",
+
+    // RAG AI Agent & Retrieval Permissions
+    RAG_PRODUCTS_READ: "rag:products:read",
+    RAG_ORDERS_READ_OWN: "rag:orders:read_own",
+    RAG_ORDERS_READ_SELLER: "rag:orders:read_seller",
+    RAG_ORDERS_READ_ALL: "rag:orders:read_all",
+    RAG_CUSTOMERS_READ_OWN: "rag:customers:read_own",
+    RAG_CUSTOMERS_READ_ALL: "rag:customers:read_all",
+    RAG_ANALYTICS_READ_ALL: "rag:analytics:read_all",
+    RAG_INTERNAL_READ: "rag:internal:read",
+    RAG_KNOWLEDGE_MANAGE: "rag:knowledge:manage",
+    RAG_PERMISSIONS_MANAGE: "rag:permissions:manage",
 } as const;
+
