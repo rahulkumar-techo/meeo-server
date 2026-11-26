@@ -64,8 +64,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "npm run prisma:generate && tsc && tsc-alias",
-    "start": "npm run prisma:deploy && pm2-runtime start ecosystem.config.cjs",
-    "start:node": "npm run prisma:deploy && node dist/server.js",
+    "start": "npm run prisma:deploy && npm run seed:prod && pm2-runtime start ecosystem.config.cjs",
+    "start:node": "npm run prisma:deploy && npm run seed:prod && node dist/server.js",
     "pm2:start": "pm2 start ecosystem.config.cjs",
     "pm2:stop": "pm2 stop ecosystem.config.cjs",
     "pm2:reload": "pm2 reload ecosystem.config.cjs",
@@ -85,6 +85,7 @@
     "prisma:deploy": "prisma db push",
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
+    "seed:prod": "node dist/seed/seed.js",
     "seed:rbac": "tsx prisma/seed-superadmin.ts",
     "notify:all": "tsx scripts/seed-notify-all-devices.ts"
   }
