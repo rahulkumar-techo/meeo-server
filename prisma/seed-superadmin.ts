@@ -1,10 +1,33 @@
 import 'dotenv/config';
+import { pathToFileURL } from 'node:url';
+import argon2 from 'argon2';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client.js';
 import { PERMISSIONS } from '../src/modules/authorization/permission.constants.js';
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
-const prisma = new PrismaClient({ adapter });
+const DEFAULT_ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL?.trim() || 'admin123@gmail.com';
+const DEFAULT_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD?.trim() || 'admin@123';
+
+export async function createSeedPrismaClient(): Promise<PrismaClient> {
+  const rawUrl = process.env.SEED_DATABASE_URL?.trim() || process.env.DATABASE_URL!;
+  const primaryAdapter = new PrismaPg({ connectionString: rawUrl });
+  const primaryClient = new PrismaClient({ adapter: primaryAdapter });
+
+  try {
+    await primaryClient.$queryRaw`SELECT 1`;
+    return primaryClient;
+  } catch (err: any) {
+    const isDockerHost = rawUrl.includes('host.docker.internal');
+    if (!isDockerHost) throw err;
+
+    await primaryClient.$disconnect().catch(() => null);
+    const localUrl = new URL(rawUrl);
+    localUrl.hostname = 'localhost';
+    console.log('ℹ️ host.docker.internal unreachable/denied from host, retrying with localhost...');
+    const localAdapter = new PrismaPg({ connectionString: localUrl.toString() });
+    return new PrismaClient({ adapter: localAdapter });
+  }
+}
 
 // Role to Permission Matrix based on the RAG Security Specification
 const ROLE_DEFINITIONS: Record<
@@ -86,7 +109,7 @@ const ROLE_DEFINITIONS: Record<
   },
 };
 
-async function main() {
+export async function seedRbacAndSuperAdmin(prisma: PrismaClient) {
   console.log('🚀 Starting RBAC & RAG Permission Seed...\n');
 
   // 1. Ensure updatedAt default on roles table
@@ -168,33 +191,94 @@ async function main() {
   }
   console.log('');
 
-  // 6. Assign SUPER_ADMIN role to default admin user if configured
-  const email = process.env.ADMIN_EMAIL?.trim();
-  if (email) {
-    const user = await prisma.user.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } },
+  // 6. Create or update default credentials SuperAdmin user (fallback when not using Google Auth)
+  const superAdminRole = await prisma.role.findUnique({ where: { name: 'SUPER_ADMIN' } });
+  const passwordHash = await argon2.hash(DEFAULT_ADMIN_PASSWORD);
+
+  const superAdminUser = await prisma.user.upsert({
+    where: { email: DEFAULT_ADMIN_EMAIL },
+    update: {
+      passwordHash,
+      emailVerified: true,
+      status: 'ACTIVE',
+      deletedAt: null,
+      firstName: 'Super',
+      lastName: 'Admin',
+    },
+    create: {
+      email: DEFAULT_ADMIN_EMAIL,
+      passwordHash,
+      emailVerified: true,
+      status: 'ACTIVE',
+      firstName: 'Super',
+      lastName: 'Admin',
+    },
+  });
+
+  await prisma.authAccount.upsert({
+    where: {
+      userId_provider_unique: {
+        userId: superAdminUser.id,
+        provider: 'PASSWORD',
+      },
+    },
+    update: {
+      providerAccountId: DEFAULT_ADMIN_EMAIL,
+      passwordHash,
+    },
+    create: {
+      userId: superAdminUser.id,
+      provider: 'PASSWORD',
+      providerAccountId: DEFAULT_ADMIN_EMAIL,
+      passwordHash,
+    },
+  });
+
+  if (superAdminRole) {
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: superAdminUser.id, roleId: superAdminRole.id } },
+      update: {},
+      create: { userId: superAdminUser.id, roleId: superAdminRole.id },
     });
-    if (user) {
-      const superAdminRole = await prisma.role.findUnique({ where: { name: 'SUPER_ADMIN' } });
-      if (superAdminRole) {
-        await prisma.userRole.upsert({
-          where: { userId_roleId: { userId: user.id, roleId: superAdminRole.id } },
-          update: {},
-          create: { userId: user.id, roleId: superAdminRole.id },
-        });
-        console.log(`👑 SUPER_ADMIN role assigned to configured admin (${user.email})`);
-      }
+    console.log(`👑 SUPER_ADMIN credentials user ready (${DEFAULT_ADMIN_EMAIL})`);
+  }
+
+  // 7. Also assign SUPER_ADMIN role to optional ADMIN_EMAIL (e.g. Google Auth admin) if registered
+  const envAdminEmail = process.env.ADMIN_EMAIL?.trim();
+  if (envAdminEmail && envAdminEmail.toLowerCase() !== DEFAULT_ADMIN_EMAIL.toLowerCase()) {
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: envAdminEmail, mode: 'insensitive' } },
+    });
+    if (user && superAdminRole) {
+      await prisma.userRole.upsert({
+        where: { userId_roleId: { userId: user.id, roleId: superAdminRole.id } },
+        update: {},
+        create: { userId: user.id, roleId: superAdminRole.id },
+      });
+      console.log(`👑 SUPER_ADMIN role assigned to configured admin (${user.email})`);
     } else {
-      console.log(`ℹ️ Admin user (${email}) not yet registered in database.`);
+      console.log(`ℹ️ Optional ADMIN_EMAIL (${envAdminEmail}) not yet registered in database.`);
     }
   }
 
   console.log('\n🎉 RBAC & RAG Permission Seed completed successfully!');
+  return superAdminUser;
 }
 
-main()
-  .catch((e) => {
-    console.error('❌ Seed failed:', e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+const isDirectRun =
+  process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+
+if (isDirectRun) {
+  createSeedPrismaClient()
+    .then(async (prisma) => {
+      try {
+        await seedRbacAndSuperAdmin(prisma);
+      } finally {
+        await prisma.$disconnect();
+      }
+    })
+    .catch((e) => {
+      console.error('❌ Seed failed:', e);
+      process.exit(1);
+    });
+}

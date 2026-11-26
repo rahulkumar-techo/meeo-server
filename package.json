@@ -84,6 +84,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma db push",
     "prisma:studio": "prisma studio",
+    "seed": "tsx prisma/seed.ts",
     "seed:rbac": "tsx prisma/seed-superadmin.ts",
     "notify:all": "tsx scripts/seed-notify-all-devices.ts"
   }
