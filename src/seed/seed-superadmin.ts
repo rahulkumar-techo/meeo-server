@@ -175,12 +175,9 @@ export async function seedRbacAndSuperAdmin(prisma: PrismaClient) {
   const superAdminUser = await prisma.user.upsert({
     where: { email: DEFAULT_ADMIN_EMAIL },
     update: {
-      passwordHash,
       emailVerified: true,
       status: 'ACTIVE',
       deletedAt: null,
-      firstName: 'Super',
-      lastName: 'Admin',
     },
     create: {
       email: DEFAULT_ADMIN_EMAIL,
@@ -199,10 +196,7 @@ export async function seedRbacAndSuperAdmin(prisma: PrismaClient) {
         provider: 'PASSWORD',
       },
     },
-    update: {
-      providerAccountId: DEFAULT_ADMIN_EMAIL,
-      passwordHash,
-    },
+    update: {},
     create: {
       userId: superAdminUser.id,
       provider: 'PASSWORD',

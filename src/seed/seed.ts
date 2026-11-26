@@ -319,13 +319,7 @@ export async function runSeed(prisma: PrismaClient) {
   for (const t of TAX_SEED) {
     const tc = await prisma.taxClassification.upsert({
       where: { hsnCode: t.hsnCode },
-      update: {
-        description: t.description,
-        category: t.category,
-        verificationStatus: 'VERIFIED',
-        verifiedAt: now,
-        verifiedById: superAdmin.id,
-      },
+      update: {},
       create: {
         hsnCode: t.hsnCode,
         description: t.description,
@@ -379,13 +373,7 @@ export async function runSeed(prisma: PrismaClient) {
 
     const cat = await prisma.category.upsert({
       where: { slug: c.slug },
-      update: {
-        name: c.name,
-        description: c.description,
-        sortOrder: c.sortOrder,
-        imageUrl,
-        status: 'ACTIVE',
-      },
+      update: {},
       create: {
         name: c.name,
         slug: c.slug,
@@ -413,12 +401,7 @@ export async function runSeed(prisma: PrismaClient) {
 
     const brand = await prisma.brand.upsert({
       where: { slug: b.slug },
-      update: {
-        name: b.name,
-        description: b.description,
-        logoUrl,
-        status: 'ACTIVE',
-      },
+      update: {},
       create: {
         name: b.name,
         slug: b.slug,
@@ -437,7 +420,7 @@ export async function runSeed(prisma: PrismaClient) {
   for (const attrDef of ATTRIBUTE_SEED) {
     const attr = await prisma.productAttribute.upsert({
       where: { name: attrDef.name },
-      update: { isGlobal: true, status: 'ACTIVE' },
+      update: {},
       create: { name: attrDef.name, isGlobal: true, status: 'ACTIVE' },
     });
 
@@ -482,22 +465,7 @@ export async function runSeed(prisma: PrismaClient) {
 
     const product = await prisma.product.upsert({
       where: { slug: p.slug },
-      update: {
-        name: p.name,
-        description: p.description,
-        categoryId,
-        brandId,
-        status: 'ACTIVE',
-        isFeatured: p.isFeatured,
-        seoTitle: p.name.slice(0, 70),
-        seoDescription: p.description.slice(0, 160),
-        taxRate: taxInfo?.rate ?? 18,
-        hsnCode: p.hsnCode,
-        taxClassificationId: taxInfo?.id ?? null,
-        bannerImage: bannerImage as any,
-        specifications: p.specifications,
-        deletedAt: null,
-      },
+      update: {},
       create: {
         name: p.name,
         slug: p.slug,
@@ -547,14 +515,7 @@ export async function runSeed(prisma: PrismaClient) {
 
     const variant = await prisma.productVariant.upsert({
       where: { sku: p.sku },
-      update: {
-        productId: product.id,
-        barcode: p.barcode,
-        price: p.price,
-        compareAtPrice: p.compareAtPrice,
-        costPrice: p.costPrice,
-        status: 'ACTIVE',
-      },
+      update: {},
       create: {
         productId: product.id,
         sku: p.sku,
@@ -609,10 +570,7 @@ export async function runSeed(prisma: PrismaClient) {
 
     await prisma.inventory.upsert({
       where: { variantId: variant.id },
-      update: {
-        availableQuantity: p.stock,
-        reorderLevel: p.reorderLevel,
-      },
+      update: {},
       create: {
         variantId: variant.id,
         availableQuantity: p.stock,
@@ -641,17 +599,7 @@ export async function runSeed(prisma: PrismaClient) {
   for (const c of COUPON_SEED) {
     await prisma.coupon.upsert({
       where: { code: c.code },
-      update: {
-        type: c.type,
-        value: c.value,
-        minimumOrderAmount: c.minimumOrderAmount,
-        maximumDiscountAmount: c.maximumDiscountAmount,
-        usageLimit: c.usageLimit,
-        usageLimitPerUser: c.usageLimitPerUser,
-        startsAt: now,
-        expiresAt: futureDate,
-        status: 'ACTIVE',
-      },
+      update: {},
       create: {
         code: c.code,
         type: c.type,
@@ -691,27 +639,7 @@ export async function runSeed(prisma: PrismaClient) {
   for (const promo of PROMOTION_SEED) {
     await prisma.promotion.upsert({
       where: { slug: promo.slug },
-      update: {
-        name: promo.name,
-        type: promo.type,
-        status: 'ACTIVE',
-        priority: promo.priority,
-        isAutomatic: promo.isAutomatic,
-        code: promo.code ?? null,
-        discountValue: promo.discountValue ?? null,
-        minOrderSubtotal: promo.minOrderSubtotal ?? null,
-        buyXQuantity: promo.buyXQuantity ?? null,
-        getYQuantity: promo.getYQuantity ?? null,
-        getYDiscountPercentage: promo.getYDiscountPercentage ?? null,
-        firstOrderOnly: promo.firstOrderOnly ?? false,
-        customerSegment: promo.customerSegment ?? 'ALL',
-        daysOfWeek: promo.daysOfWeek ?? [],
-        targetCategoryIds: promo.targetCategoryIds ?? [],
-        targetBrandIds: promo.targetBrandIds ?? [],
-        targetProductIds: promo.targetProductIds ?? [],
-        startsAt: now,
-        endsAt: futureDate,
-      },
+      update: {},
       create: {
         name: promo.name,
         slug: promo.slug,
