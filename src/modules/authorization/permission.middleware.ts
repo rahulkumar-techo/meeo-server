@@ -3,11 +3,12 @@ import { AppError } from "@/common/errors/app-error.js";
 import { PERMISSIONS } from "./permission.constants.js";
 
 type PermissionRequest = FastifyRequest & {
-    user?: { permissions: string[] };
+    user?: { roles?: string[]; permissions: string[] };
 };
 
 const checkPermissions = (permissions: string[], mode: "any" | "all") => async (request: PermissionRequest) => {
     if (!request.user) throw new AppError("Authentication required", 401);
+    if (request.user.roles?.includes("SUPER_ADMIN")) return;
     const granted = new Set(request.user.permissions);
     if (granted.has(PERMISSIONS.SYSTEM_MANAGE)) return;
 

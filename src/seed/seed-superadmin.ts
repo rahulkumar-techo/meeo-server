@@ -220,23 +220,6 @@ export async function seedRbacAndSuperAdmin(prisma: PrismaClient) {
     console.log(`👑 SUPER_ADMIN credentials user ready (${DEFAULT_ADMIN_EMAIL})`);
   }
 
-  const envAdminEmail = process.env.ADMIN_EMAIL?.trim();
-  if (envAdminEmail && envAdminEmail.toLowerCase() !== DEFAULT_ADMIN_EMAIL.toLowerCase()) {
-    const user = await prisma.user.findFirst({
-      where: { email: { equals: envAdminEmail, mode: 'insensitive' } },
-    });
-    if (user && superAdminRole) {
-      await prisma.userRole.upsert({
-        where: { userId_roleId: { userId: user.id, roleId: superAdminRole.id } },
-        update: {},
-        create: { userId: user.id, roleId: superAdminRole.id },
-      });
-      console.log(`👑 SUPER_ADMIN role assigned to configured admin (${user.email})`);
-    } else {
-      console.log(`ℹ️ Optional ADMIN_EMAIL (${envAdminEmail}) not yet registered in database.`);
-    }
-  }
-
   console.log('\n🎉 RBAC & RAG Permission Seed completed successfully!');
   return superAdminUser;
 }

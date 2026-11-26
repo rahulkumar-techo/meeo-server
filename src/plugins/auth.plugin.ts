@@ -4,6 +4,7 @@ import { AppError } from "@/common/errors/app-error.js";
 import { verifyAccessToken, type TokenPayload } from "@/common/utils/token.js";
 import { getAuthContext, setAuthContext } from "@/common/utils/auth-cache.js";
 import { prisma } from "@/lib/prisma.js";
+import { PERMISSIONS } from "@/modules/authorization/permission.constants.js";
 import { requireAllPermissions, requireAnyPermission, requirePermission } from "@/modules/authorization/permission.middleware.js";
 
 export interface AuthorizationContext extends TokenPayload {
@@ -71,9 +72,21 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 		try {
 			const cachedContext = await getAuthContext(tokenPayload.userId, tokenPayload.sessionId);
 			if (cachedContext) {
+				if (cachedContext.status && cachedContext.status !== "ACTIVE") {
+					throw new AppError("Authentication required", 401);
+				}
+
+				const cachedRoles = cachedContext.roles ?? [];
+				const cachedPermissions = cachedContext.permissions ?? [];
+				if (cachedRoles.includes("SUPER_ADMIN") && !cachedPermissions.includes(PERMISSIONS.SYSTEM_MANAGE)) {
+					cachedPermissions.push(PERMISSIONS.SYSTEM_MANAGE);
+				}
+
 				request.user = {
 					...tokenPayload,
 					...cachedContext,
+					roles: cachedRoles,
+					permissions: cachedPermissions,
 					id: cachedContext.id ?? cachedContext.userId ?? tokenPayload.userId,
 					userId: cachedContext.userId ?? tokenPayload.userId,
 					email: cachedContext.email ?? tokenPayload.email,
@@ -93,6 +106,7 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 					emailVerified: true,
 					phoneVerified: true,
 					status: true,
+					deletedAt: true,
 					createdAt: true,
 					updatedAt: true,
 					roles: {
@@ -120,7 +134,7 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 				},
 			});
 
-			if (!user || user.status !== "ACTIVE") {
+			if (!user || user.deletedAt || user.status !== "ACTIVE") {
 				throw new AppError("Authentication required", 401);
 			}
 
