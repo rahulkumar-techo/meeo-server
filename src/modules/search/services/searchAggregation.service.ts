@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma.js";
+import { fuzzySearchItems } from "@/common/utils/fuzzySearch.js";
 import type { SearchSuggestionsQueryInput } from "../validations/search.validation.js";
 import type { SearchProductItem } from "./search.service.js";
 
@@ -40,51 +41,76 @@ export class SearchAggregationService {
     }
 
     /**
-     * Autocomplete search suggestions (products, brands, categories).
+     * Autocomplete search suggestions (products, brands, categories) using tokenized fuzzy matching.
      */
     async getSearchSuggestions(query: SearchSuggestionsQueryInput) {
         const q = query.q.trim();
         const limit = query.limit ?? 8;
 
-        const [products, brands, categories] = await Promise.all([
+        const [rawProducts, rawBrands, rawCategories] = await Promise.all([
             prisma.product.findMany({
                 where: {
                     status: "ACTIVE",
-                    name: { contains: q, mode: "insensitive" },
                 },
                 select: {
                     id: true,
                     name: true,
                     slug: true,
+                    brand: { select: { name: true } },
+                    category: { select: { name: true } },
                     images: { take: 1, select: { url: true } },
                 },
-                take: limit,
+                take: 250,
             }),
             prisma.brand.findMany({
-                where: {
-                    name: { contains: q, mode: "insensitive" },
-                },
+                where: { status: "ACTIVE" },
                 select: {
                     id: true,
                     name: true,
                     slug: true,
                     _count: { select: { products: true } },
                 },
-                take: 5,
+                take: 100,
             }),
             prisma.category.findMany({
-                where: {
-                    name: { contains: q, mode: "insensitive" },
-                },
+                where: { status: "ACTIVE" },
                 select: {
                     id: true,
                     name: true,
                     slug: true,
                     _count: { select: { products: true } },
                 },
-                take: 5,
+                take: 100,
             }),
         ]);
+
+        const products = fuzzySearchItems(
+            rawProducts.map((p) => ({
+                ...p,
+                brandName: p.brand?.name ?? "",
+                categoryName: p.category?.name ?? "",
+            })),
+            q,
+            {
+                keys: [
+                    { name: "name", weight: 3 },
+                    { name: "brandName", weight: 2 },
+                    { name: "categoryName", weight: 1.5 },
+                    { name: "slug", weight: 1 },
+                ],
+                limit,
+            },
+        );
+
+        const brands = fuzzySearchItems(rawBrands, q, {
+            keys: [{ name: "name", weight: 2 }, { name: "slug", weight: 1 }],
+            limit: 5,
+        });
+
+        const categories = fuzzySearchItems(rawCategories, q, {
+            keys: [{ name: "name", weight: 2 }, { name: "slug", weight: 1 }],
+            limit: 5,
+        });
 
         return {
             query: q,

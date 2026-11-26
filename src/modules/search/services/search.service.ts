@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma.js";
+import { fuzzySearchItems } from "@/common/utils/fuzzySearch.js";
 import { searchAggregationService } from "./searchAggregation.service.js";
 import type {
     ProductSearchServiceInput,
@@ -79,19 +80,7 @@ export class SearchService {
             where.isFeatured = query.isFeatured;
         }
 
-        // Text Search
-        if (query.q && query.q.trim().length > 0) {
-            const searchTerm = query.q.trim();
-            where.OR = [
-                { name: { contains: searchTerm, mode: "insensitive" } },
-                { description: { contains: searchTerm, mode: "insensitive" } },
-                { seoTitle: { contains: searchTerm, mode: "insensitive" } },
-                { seoDescription: { contains: searchTerm, mode: "insensitive" } },
-                { brand: { name: { contains: searchTerm, mode: "insensitive" } } },
-                { category: { name: { contains: searchTerm, mode: "insensitive" } } },
-                { variants: { some: { sku: { contains: searchTerm, mode: "insensitive" } } } },
-            ];
-        }
+        const searchQuery = query.q?.trim() ?? "";
 
         // Variant filters (Price range & stock availability)
         const variantWhere: any = {
@@ -114,8 +103,8 @@ export class SearchService {
             some: variantWhere,
         };
 
-        // 4. Query matching products
-        const rawProducts: any[] = await prisma.product.findMany({
+        // 4. Query candidate products (apply non-text filters in SQL; fuzzy/tokenized matching runs via Fuse.js)
+        let rawProducts: any[] = await prisma.product.findMany({
             where,
             include: {
                 images: {
@@ -146,8 +135,36 @@ export class SearchService {
                     select: { rating: true },
                 },
             },
-            orderBy: query.sortBy === "newest" ? { createdAt: "desc" } : { createdAt: "desc" },
+            orderBy: { createdAt: "desc" },
+            ...(searchQuery.length > 0 ? { take: 500 } : {}),
         });
+
+        if (searchQuery.length > 0) {
+            const searchableProducts = rawProducts.map((p) => ({
+                raw: p,
+                name: p.name ?? "",
+                slug: p.slug ?? "",
+                description: p.description ?? "",
+                seoTitle: p.seoTitle ?? "",
+                seoDescription: p.seoDescription ?? "",
+                brandName: p.brand?.name ?? "",
+                categoryName: p.category?.name ?? "",
+                skus: (p.variants ?? []).map((v: any) => v.sku).filter(Boolean).join(" "),
+            }));
+
+            rawProducts = fuzzySearchItems(searchableProducts, searchQuery, {
+                keys: [
+                    { name: "name", weight: 3 },
+                    { name: "brandName", weight: 2.5 },
+                    { name: "categoryName", weight: 2 },
+                    { name: "skus", weight: 2 },
+                    { name: "slug", weight: 1.5 },
+                    { name: "seoTitle", weight: 1.2 },
+                    { name: "description", weight: 1 },
+                    { name: "seoDescription", weight: 0.8 },
+                ],
+            }).map((entry) => entry.raw);
+        }
 
         // 5. Transform & compute dynamic metrics per product
         let items: SearchProductItem[] = rawProducts.map((p) => {
@@ -213,16 +230,8 @@ export class SearchService {
             items.sort((a, b) => b.averageRating - a.averageRating || b.reviewCount - a.reviewCount);
         } else if (sortBy === "popularity") {
             items.sort((a, b) => b.reviewCount - a.reviewCount);
-        } else if (sortBy === "relevance" && query.q) {
-            const lowerQ = query.q.toLowerCase();
-            items.sort((a, b) => {
-                const aName = a.name.toLowerCase();
-                const bName = b.name.toLowerCase();
-                const aExact = aName === lowerQ ? 2 : aName.startsWith(lowerQ) ? 1 : 0;
-                const bExact = bName === lowerQ ? 2 : bName.startsWith(lowerQ) ? 1 : 0;
-                return bExact - aExact;
-            });
         }
+        // When sortBy === "relevance" with a search query, fuzzySearchItems already ordered items by relevance score.
 
         // 9. Pagination
         const total = items.length;

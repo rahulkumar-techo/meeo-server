@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
+import { fuzzySearchItems } from "@/common/utils/fuzzySearch.js";
 import { invalidateAuthContext } from "@/common/utils/auth-cache.js";
 import type { Prisma, UserStatus } from "@/generated/prisma/client.js";
 import {
@@ -48,20 +49,9 @@ export class UserAdminService {
 
         const trimmedSearch = search?.trim();
 
-        // fix:expensive computations - Push risk flag and status filtering directly to SQL WHERE clause to fix in-memory pagination drift
         const where: Prisma.UserWhereInput = {
             deletedAt: null,
             ...(status ? { status } : {}),
-            ...(trimmedSearch
-                ? {
-                    OR: [
-                        { email: { contains: trimmedSearch, mode: "insensitive" } },
-                        { firstName: { contains: trimmedSearch, mode: "insensitive" } },
-                        { lastName: { contains: trimmedSearch, mode: "insensitive" } },
-                        { phone: { contains: trimmedSearch, mode: "insensitive" } },
-                    ],
-                }
-                : {}),
             ...(riskFlagOnly
                 ? {
                     OR: [
@@ -72,22 +62,56 @@ export class UserAdminService {
                 : {}),
         };
 
-        const [users, total] = await Promise.all([
-            prisma.user.findMany({
+        const include = {
+            roles: { select: { role: { select: { id: true, name: true } } } },
+            orders: {
+                where: { status: { notIn: ["CANCELLED", "EXPIRED", "REFUNDED"] } },
+                select: { id: true, status: true, grandTotal: true, createdAt: true },
+            },
+        } satisfies Prisma.UserInclude;
+
+        let users: any[];
+        let total: number;
+
+        if (trimmedSearch) {
+            const candidates = await prisma.user.findMany({
                 where,
-                skip,
-                take: limit,
+                take: 250,
                 orderBy: { [sortBy === "totalSpend" || sortBy === "totalOrders" || sortBy === "riskScore" ? "createdAt" : sortBy]: sortOrder },
-                include: {
-                    roles: { select: { role: { select: { id: true, name: true } } } },
-                    orders: {
-                        where: { status: { notIn: ["CANCELLED", "EXPIRED", "REFUNDED"] } },
-                        select: { id: true, status: true, grandTotal: true, createdAt: true },
-                    },
+                include,
+            });
+
+            const ranked = fuzzySearchItems(
+                candidates.map((u: any) => ({
+                    raw: u,
+                    email: u.email ?? "",
+                    fullName: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim(),
+                    phone: u.phone ?? "",
+                })),
+                trimmedSearch,
+                {
+                    keys: [
+                        { name: "fullName", weight: 2.5 },
+                        { name: "email", weight: 2 },
+                        { name: "phone", weight: 1.5 },
+                    ],
                 },
-            }),
-            prisma.user.count({ where }),
-        ]);
+            ).map((entry) => entry.raw);
+
+            total = ranked.length;
+            users = ranked.slice(skip, skip + limit);
+        } else {
+            [users, total] = await Promise.all([
+                prisma.user.findMany({
+                    where,
+                    skip,
+                    take: limit,
+                    orderBy: { [sortBy === "totalSpend" || sortBy === "totalOrders" || sortBy === "riskScore" ? "createdAt" : sortBy]: sortOrder },
+                    include,
+                }),
+                prisma.user.count({ where }),
+            ]);
+        }
 
         let items: CustomerSummary[] = users.map((u: any) => this.computeCustomerMetrics(u));
 

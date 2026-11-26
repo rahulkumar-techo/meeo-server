@@ -191,7 +191,7 @@ describe("Search & Discovery Unit Tests", () => {
                 },
             ] as any);
             vi.mocked(prisma.brand.findMany).mockResolvedValue([
-                { id: "b-1", name: "Nike", slug: "nike", _count: { products: 42 } },
+                { id: "b-1", name: "Nike Air", slug: "nike-air", _count: { products: 42 } },
             ] as any);
             vi.mocked(prisma.category.findMany).mockResolvedValue([
                 { id: "c-1", name: "Air Shoes", slug: "air-shoes", _count: { products: 15 } },
@@ -202,7 +202,7 @@ describe("Search & Discovery Unit Tests", () => {
             expect(suggestions.query).toBe("air");
             expect(suggestions.products).toHaveLength(1);
             expect(suggestions.products[0]!.name).toBe("Nike Air Max");
-            expect(suggestions.brands[0]!.name).toBe("Nike");
+            expect(suggestions.brands[0]!.name).toBe("Nike Air");
             expect(suggestions.categories[0]!.name).toBe("Air Shoes");
         });
 
@@ -230,7 +230,7 @@ describe("Search & Discovery Unit Tests", () => {
                 },
                 {
                     id: "p-3",
-                    name: "Track Pants",
+                    name: "Track Shoes",
                     brand: { id: "b-2", name: "Adidas", slug: "adidas" },
                     category: { id: "c-2", name: "Apparel", slug: "apparel" },
                     variants: [{ price: 60 as any, inventory: { availableQuantity: 2 } }],

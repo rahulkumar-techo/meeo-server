@@ -3,6 +3,7 @@ import { AppError } from "@/common/errors/app-error.js";
 import { cacheService } from "@/common/cache/cache.service.js";
 import { CACHE_KEYS, CACHE_TTL } from "@/common/cache/cache.keys.js";
 import { paginateWithCursor } from "@/common/utils/cursorPagination.js";
+import { buildTokenizedWhereOr, fuzzySearchItems, tokenizeSearchQuery } from "@/common/utils/fuzzySearch.js";
 import type { ProductQueryInput } from "../validations/product.validation.js";
 import type { Prisma } from "@/generated/prisma/client.js";
 
@@ -151,16 +152,23 @@ export class ProductQueryService {
             where.isFeatured = query.isFeatured;
         }
 
-        if (query.search) {
-            where.OR = [
-                { name: { contains: query.search, mode: "insensitive" } },
-                { description: { contains: query.search, mode: "insensitive" } },
-                { slug: { contains: query.search, mode: "insensitive" } },
-                { seoTitle: { contains: query.search, mode: "insensitive" } },
-            ];
-        }
+        const searchTerm = query.search?.trim() ?? "";
 
         if (query.cursor) {
+            if (searchTerm) {
+                const tokens = tokenizeSearchQuery(searchTerm);
+                where.OR = buildTokenizedWhereOr(tokens, (token) => [
+                    { name: { contains: token, mode: "insensitive" } },
+                    { description: { contains: token, mode: "insensitive" } },
+                    { slug: { contains: token, mode: "insensitive" } },
+                    { seoTitle: { contains: token, mode: "insensitive" } },
+                    { hsnCode: { contains: token, mode: "insensitive" } },
+                    { brand: { name: { contains: token, mode: "insensitive" } } },
+                    { category: { name: { contains: token, mode: "insensitive" } } },
+                    { variants: { some: { sku: { contains: token, mode: "insensitive" } } } },
+                ]) as Prisma.ProductWhereInput[];
+            }
+
             const cursorResult = await paginateWithCursor(
                 (args) =>
                     prisma.product.findMany({
@@ -198,43 +206,96 @@ export class ProductQueryService {
             };
         }
 
-        const [total, products] = await Promise.all([
-            prisma.product.count({ where }),
-            await prisma.product.findMany({
-                where, skip, take: limit,
-                orderBy: { [query.sortBy ?? "createdAt"]: query.sortOrder ?? "desc" },
+        const productListSelect = {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            status: true,
+            isFeatured: true,
+            seoTitle: true,
+            hsnCode: true,
+            createdAt: true,
+            updatedAt: true,
+            category: { select: { id: true, name: true } },
+            brand: { select: { id: true, name: true, slug: true } },
+            variants: {
                 select: {
                     id: true,
-                    name: true,
-                    slug: true,
-                    description: true,
+                    sku: true,
+                    price: true,
+                    compareAtPrice: true,
                     status: true,
-                    isFeatured: true,
-                    seoTitle: true,
-                    createdAt: true,
-                    updatedAt: true,
-                    category: { select: { id: true, name: true } },
-                    brand: { select: { id: true, name: true, slug: true } },
-                    variants: {
-                        select: {
-                            id: true, sku: true, price: true, compareAtPrice: true, status: true,
-                            images: {
-                                select: { id: true, url: true },
-                                orderBy: { sortOrder: "asc" },
-                                take: 1
-                            }
-                        },
-                        orderBy: { createdAt: "asc" },
-                        take: 1
+                    images: {
+                        select: { id: true, url: true },
+                        orderBy: { sortOrder: "asc" as const },
+                        take: 1,
+                    },
+                },
+                orderBy: { createdAt: "asc" as const },
+                take: 1,
+            },
+            _count: {
+                select: {
+                    variants: true,
+                },
+            },
+        };
 
-                    },
-                    _count: {
-                        select: {
-                            variants: true,
-                        },
-                    },
-                }
-            })
+        if (searchTerm) {
+            const candidateProducts = await prisma.product.findMany({
+                where,
+                take: 500,
+                orderBy: { [query.sortBy ?? "createdAt"]: query.sortOrder ?? "desc" },
+                select: productListSelect,
+            });
+
+            const ranked = fuzzySearchItems(
+                candidateProducts.map((p: any) => ({
+                    raw: p,
+                    name: p.name ?? "",
+                    slug: p.slug ?? "",
+                    description: p.description ?? "",
+                    seoTitle: p.seoTitle ?? "",
+                    hsnCode: p.hsnCode ?? "",
+                    brandName: p.brand?.name ?? "",
+                    categoryName: p.category?.name ?? "",
+                    skus: (p.variants ?? []).map((v: any) => v.sku).filter(Boolean).join(" "),
+                })),
+                searchTerm,
+                {
+                    keys: [
+                        { name: "name", weight: 3 },
+                        { name: "skus", weight: 2.5 },
+                        { name: "brandName", weight: 2 },
+                        { name: "categoryName", weight: 2 },
+                        { name: "slug", weight: 1.5 },
+                        { name: "hsnCode", weight: 1.5 },
+                        { name: "seoTitle", weight: 1.2 },
+                        { name: "description", weight: 1 },
+                    ],
+                },
+            ).map((entry) => entry.raw);
+
+            const total = ranked.length;
+            return {
+                items: ranked.slice(skip, skip + limit),
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit) || 1,
+            };
+        }
+
+        const [total, products] = await Promise.all([
+            prisma.product.count({ where }),
+            prisma.product.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { [query.sortBy ?? "createdAt"]: query.sortOrder ?? "desc" },
+                select: productListSelect,
+            }),
         ]);
 
         return {

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma.js";
 import { AppError } from "@/common/errors/app-error.js";
+import { fuzzySearchItems } from "@/common/utils/fuzzySearch.js";
 import type {
     AddStockInput,
     RemoveStockInput,
@@ -69,39 +70,54 @@ export class StockService {
     async listInventories(query: InventoryQueryInput) {
         const { page, limit, search, lowStockOnly } = query;
         const skip = (page - 1) * limit;
+        const searchTerm = search?.trim() ?? "";
 
-        const where: Prisma.InventoryWhereInput = {};
-
-        if (search) {
-            where.variant = {
-                is: {
-                    OR: [
-                        { sku: { contains: search, mode: "insensitive" } },
-                        { barcode: { contains: search, mode: "insensitive" } },
-                        { product: { is: { name: { contains: search, mode: "insensitive" } } } },
-                    ],
-                },
-            };
-        }
-
-        const [items, total] = await Promise.all([
-            prisma.inventory.findMany({
-                where,
-                skip,
-                take: limit,
+        const include = {
+            variant: {
                 include: {
-                    variant: {
-                        include: {
-                            product: {
-                                select: { id: true, name: true, slug: true },
-                            },
-                        },
+                    product: {
+                        select: { id: true, name: true, slug: true },
                     },
                 },
-                orderBy: { updatedAt: "desc" },
-            }),
-            prisma.inventory.count({ where }),
-        ]);
+            },
+        };
+
+        const [items, total] = searchTerm
+            ? await (async () => {
+                const candidates = await prisma.inventory.findMany({
+                    take: 300,
+                    include,
+                    orderBy: { updatedAt: "desc" },
+                });
+
+                const ranked = fuzzySearchItems(
+                    candidates.map((inv) => ({
+                        raw: inv,
+                        sku: inv.variant.sku ?? "",
+                        barcode: inv.variant.barcode ?? "",
+                        productName: inv.variant.product.name ?? "",
+                    })),
+                    searchTerm,
+                    {
+                        keys: [
+                            { name: "sku", weight: 3 },
+                            { name: "productName", weight: 2.5 },
+                            { name: "barcode", weight: 2 },
+                        ],
+                    },
+                ).map((entry) => entry.raw);
+
+                return [ranked.slice(skip, skip + limit), ranked.length] as const;
+            })()
+            : await Promise.all([
+                prisma.inventory.findMany({
+                    skip,
+                    take: limit,
+                    include,
+                    orderBy: { updatedAt: "desc" },
+                }),
+                prisma.inventory.count(),
+            ]);
 
         const formatted = items.map((inv) => {
             const isLowStock =
