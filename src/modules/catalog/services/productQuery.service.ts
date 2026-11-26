@@ -280,6 +280,7 @@ const productDetailsSelect = {
     },
     images: {
         select: {
+            id: true,
             url: true,
             thumbnailUrl: true,
             altText: true,
@@ -310,6 +311,7 @@ const productDetailsSelect = {
             },
             images: {
                 select: {
+                    id: true,
                     url: true,
                     thumbnailUrl: true,
                     altText: true,

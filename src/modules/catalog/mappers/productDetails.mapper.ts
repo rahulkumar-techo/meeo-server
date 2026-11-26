@@ -30,6 +30,7 @@ type ProductDetailsRaw = {
         logoUrl: string | null;
     } | null;
     images: {
+        id: string;
         url: string;
         thumbnailUrl: string | null;
         altText: string | null;
@@ -48,6 +49,7 @@ type ProductDetailsRaw = {
         }[];
         inventory: { availableQuantity: number } | null;
         images: {
+            id: string;
             url: string;
             thumbnailUrl: string | null;
             altText: string | null;
@@ -104,6 +106,7 @@ export function mapProductDetails(product: ProductDetailsRaw) {
             : null,
 
         images: product.images.map((img) => ({
+            id: img.id,
             url: img.url,
             thumbnailUrl: img.thumbnailUrl ?? null,
             altText: img.altText ?? null,
@@ -130,6 +133,7 @@ export function mapProductDetails(product: ProductDetailsRaw) {
             },
 
             images: variant.images.map((img) => ({
+                id: img.id,
                 url: img.url,
                 thumbnailUrl: img.thumbnailUrl ?? null,
                 altText: img.altText ?? null,
