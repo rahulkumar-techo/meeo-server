@@ -184,9 +184,14 @@ export async function buildApp(): Promise<FastifyInstance> {
         }
     });
 
-    // Prototype pollution defense & input sanitization hook
+    // Prototype pollution defense & input sanitization hook (skip raw proxy streams/buffers)
     app.addHook("preValidation", async (request) => {
-        if (request.body && typeof request.body === "object") {
+        if (
+            request.body &&
+            typeof request.body === "object" &&
+            !Buffer.isBuffer(request.body) &&
+            typeof (request.body as any).pipe !== "function"
+        ) {
             request.body = sanitizeInput(request.body);
         }
         if (request.query && typeof request.query === "object") {
