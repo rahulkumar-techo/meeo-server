@@ -58,9 +58,6 @@ export async function buildApp(): Promise<FastifyInstance> {
 
     await app.register(helmetPlugin);
 
-    // API GATEWAY
-    await apiGateway(app);
-
     await app.register(swagger, {
         openapi: {
             info: {
@@ -161,6 +158,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         },
     });
     await app.register(authPlugin);
+    await apiGateway(app);
 
     // Observability hooks: Request ID header attachment and duration measurement
     app.addHook("onRequest", async (request, reply) => {
